@@ -757,8 +757,8 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     VkViewport viewport;
     viewport.x = 0;
     viewport.y = 0;
-    viewport.width = context._swapChainSize.width;
-    viewport.height = context._swapChainSize.height;
+    viewport.width = (float)context._swapChainSize.width;
+    viewport.height = (float)context._swapChainSize.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     
@@ -1000,7 +1000,7 @@ int Vulkan::findMemoryType(VulkanContext & context, uint32_t typeFilter, VkMemor
     VkPhysicalDeviceMemoryProperties memProperties;
     vkGetPhysicalDeviceMemoryProperties(context._physicalDevice, &memProperties);
     
-    for(int i=0 ; i <  memProperties.memoryTypeCount ; i++ )
+    for(uint32_t i=0 ; i <  memProperties.memoryTypeCount ; i++ )
     {
         if((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties)==properties)
             return i;

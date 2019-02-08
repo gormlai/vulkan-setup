@@ -8,11 +8,7 @@
 #include <vector>
 #include <algorithm>
 #include <array>
-#include "CircularArray.h"
-#include "SDL_FileStream.h"
-
-#include <glm/glm.hpp>
-
+#include <functional>
 
 /*
  LICENSE - this file is public domain
@@ -48,13 +44,40 @@ namespace Vulkan
 {
     extern bool validationLayersEnabled;
     
+	template<typename PosType, typename ColorType>
     struct Vertex
     {
-        glm::vec2 _position;
-        glm::vec3 _color;
+        PosType _position;
+        ColorType _color;
         
-        static VkVertexInputBindingDescription getBindingDescription();
-        static std::array<VkVertexInputAttributeDescription,2> getAttributes();
+		VkVertexInputBindingDescription getBindingDescription()
+		{
+			VkVertexInputBindingDescription bindingDescription;
+			memset(&bindingDescription, 0, sizeof(VkVertexInputBindingDescription));
+
+			bindingDescription.binding = 0;
+			bindingDescription.stride = sizeof(Vertex);
+			bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+			return bindingDescription;
+		}
+
+		std::array<VkVertexInputAttributeDescription, 2> getAttributes()
+		{
+			std::array<VkVertexInputAttributeDescription, 2> attributes = {};
+
+			attributes[0].binding = 0;
+			attributes[0].location = 0;
+			attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
+			attributes[0].offset = offsetof(Vertex, _position);
+
+			attributes[1].binding = 0;
+			attributes[1].location = 1;
+			attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attributes[1].offset = offsetof(Vertex, _color);
+			return attributes;
+		}
+
     };
     
     enum class ShaderType
@@ -62,6 +85,12 @@ namespace Vulkan
         Vertex,
         Fragment
     };
+
+	enum class BufferType
+	{
+		Index,
+		Vertex,
+	};
     
     struct Shader
     {
@@ -83,6 +112,13 @@ namespace Vulkan
         {
         }
     };
+
+	template<typename VertexType>
+	struct Mesh
+	{
+		std::vector<VertexType> _vertices;
+		std::vector<uint16_t> _indices;
+	};
     
     struct AppInformation
     {
@@ -94,9 +130,14 @@ namespace Vulkan
         std::vector<VkSurfaceFormatKHR> _surfaceFormats;
         
         std::vector<Shader> _shaders;
+
+		std::function<int (BufferType)> _numBuffers = [](BufferType) { return 0;  };
+		std::function<void(BufferType, unsigned int, std::vector<unsigned char> &)> _createBuffer = [](BufferType, unsigned int, std::vector<unsigned char> &) {};
+
+
+		std::function <VkVertexInputBindingDescription()> _getBindingDescription = []() { return VkVertexInputBindingDescription(); };
+		std::function < std::array<VkVertexInputAttributeDescription, 2>()> _getAttributes = []() {return std::array<VkVertexInputAttributeDescription, 2>(); };
         
-        std::vector<Vertex> _vertices;
-        std::vector<uint16_t> _indices;
         AppInformation();
     };
     
@@ -184,8 +225,8 @@ namespace Vulkan
     int findMemoryType(VulkanContext & context, uint32_t typeFilter, VkMemoryPropertyFlags properties);
     bool createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc);
     bool createVertexOrIndexBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result);
-    bool createIndexBuffer(AppInformation & appInfo, VulkanContext & context);
-    bool createVertexBuffer(AppInformation & appInfo, VulkanContext & context);
+    bool createIndexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
+    bool createVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool handleVulkanSetup(AppInformation & appInfo, VulkanContext & context);
 }
 

@@ -24,33 +24,6 @@ Vulkan::Shader::Shader(const std::string & filename, ShaderType type)
 
 ///////////////////////////////////// Vulkan Vertex ///////////////////////////////////////////////////////////////////
 
-VkVertexInputBindingDescription Vulkan::Vertex::getBindingDescription()
-{
-    VkVertexInputBindingDescription bindingDescription;
-    memset(&bindingDescription, 0, sizeof(VkVertexInputBindingDescription));
-    
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(Vertex);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    
-    return bindingDescription;
-}
-
-std::array<VkVertexInputAttributeDescription,2> Vulkan::Vertex::getAttributes()
-{
-    std::array<VkVertexInputAttributeDescription, 2> attributes = {};
-    
-    attributes[0].binding = 0;
-    attributes[0].location = 0;
-    attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
-    attributes[0].offset = offsetof(Vertex, _position);
-    
-    attributes[1].binding = 0;
-    attributes[1].location = 1;
-    attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributes[1].offset = offsetof(Vertex, _color);
-    return attributes;
-}
 
 ///////////////////////////////////// Vulkan AppInformation ///////////////////////////////////////////////////////////////////
 
@@ -762,8 +735,8 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     
     // Pipeline Vertex Input State
     VkPipelineVertexInputStateCreateInfo vertexInputInfo;
-    auto vertexBindingDescription = Vertex::getBindingDescription();
-    auto vertexAttributeDescription = Vertex::getAttributes();
+	auto vertexBindingDescription = appInfo._getBindingDescription();
+	auto vertexAttributeDescription = appInfo._getAttributes();
     memset(&vertexInputInfo, 0, sizeof(VkPipelineVertexInputStateCreateInfo));
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 1;
@@ -958,7 +931,7 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
         vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffer, offsets);
         vkCmdBindIndexBuffer(commandBuffers[i], context._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);
         
-        vkCmdDrawIndexed(commandBuffers[i], (uint32_t)appInfo._indices.size(), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffers[i], 6 , 1, 0, 0, 0);
         vkCmdEndRenderPass(commandBuffers[i]);
         
         if(vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
@@ -1111,18 +1084,22 @@ bool Vulkan::createVertexOrIndexBuffer(VulkanContext & context, const void * src
     
 }
 
-bool Vulkan::createIndexBuffer(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createIndexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
 {
-    const void * data = appInfo._indices.data();
-    VkDeviceSize bufferSize = sizeof(uint16_t) * appInfo._indices.size();
+	std::vector<unsigned char> indexData;
+	appInfo._createBuffer(BufferType::Index, bufferIndex, indexData);
+	const void * data = indexData.data();
+	const VkDeviceSize bufferSize =  indexData.size();
     createVertexOrIndexBuffer(context, data, bufferSize, context._indexBuffer);
     return true;
 }
 
-bool Vulkan::createVertexBuffer(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex )
 {
-    const void * data = appInfo._vertices.data();
-    VkDeviceSize bufferSize = sizeof(Vertex) * appInfo._vertices.size();
+	std::vector<unsigned char> vertexData;
+	appInfo._createBuffer(BufferType::Index, bufferIndex, vertexData);
+	const void * data = vertexData.data();
+	const VkDeviceSize bufferSize = vertexData.size();
     createVertexOrIndexBuffer(context, data, bufferSize, context._vertexBuffer);
     return true;
 }
@@ -1235,17 +1212,24 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         return false;
     }
     
-    if(!createVertexBuffer(appInfo, context))
-    {
-        SDL_LogError(0, "Failed to create vertex buffer\n");
-        return false;
-    }
+	for (int i = 0; i < appInfo._numBuffers(BufferType::Vertex); i++)
+	{
+		if (!createVertexBuffer(appInfo, context, i))
+		{
+			SDL_LogError(0, "Failed to create vertex buffer\n");
+			return false;
+		}
+
+	}
     
-    if(!createIndexBuffer(appInfo, context))
-    {
-        SDL_LogError(0, "Failed to create index buffer\n");
-        return false;
-    }
+	for (int i = 0; i < appInfo._numBuffers(BufferType::Index); i++)
+	{
+		if (!createIndexBuffer(appInfo, context, i))
+		{
+			SDL_LogError(0, "Failed to create index buffer\n");
+			return false;
+		}
+	}
     
     if(!createCommandBuffers(appInfo, context))
     {

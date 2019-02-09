@@ -8,6 +8,7 @@ bool Vulkan::validationLayersEnabled = true;
 
 Vulkan::VulkanContext::VulkanContext()
 :_currentFrame(0)
+,_swapChain(nullptr)
 {
     
 }

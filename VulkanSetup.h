@@ -50,7 +50,7 @@ namespace Vulkan
         PosType _position;
         ColorType _color;
         
-		VkVertexInputBindingDescription getBindingDescription()
+		static VkVertexInputBindingDescription getBindingDescription()
 		{
 			VkVertexInputBindingDescription bindingDescription;
 			memset(&bindingDescription, 0, sizeof(VkVertexInputBindingDescription));
@@ -62,7 +62,7 @@ namespace Vulkan
 			return bindingDescription;
 		}
 
-		std::array<VkVertexInputAttributeDescription, 2> getAttributes()
+		static std::array<VkVertexInputAttributeDescription, 2> getAttributes()
 		{
 			std::array<VkVertexInputAttributeDescription, 2> attributes = {};
 
@@ -177,7 +177,8 @@ namespace Vulkan
         VkPipeline _pipeline;
         VkPipelineLayout _pipelineLayout;
         
-        VkDebugUtilsMessengerEXT _debugCallback;
+        VkDebugUtilsMessengerEXT _debugUtilsCallback;
+		VkDebugReportCallbackEXT _debugReportCallback;
         
         VkCommandPool _commandPool;
         std::vector<VkCommandBuffer> _commandBuffers;
@@ -195,10 +196,7 @@ namespace Vulkan
     };
     
     SDL_Window * initSDL(const std::string & appName);
-    static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-                                                              VkDebugUtilsMessageTypeFlagsEXT type,
-                                                              const VkDebugUtilsMessengerCallbackDataEXT * callbackData,
-                                                              void * userData);
+
     bool setupDebugCallback(VulkanContext & context);
     bool areValidationLayersAvailable(const std::vector<const char*> & validationLayers);
     bool loadVulkanLibrary();

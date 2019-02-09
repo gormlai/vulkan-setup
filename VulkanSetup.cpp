@@ -114,80 +114,138 @@ SDL_Window * Vulkan::initSDL(const std::string & appName)
     
 }
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL Vulkan::vulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-                                                          VkDebugUtilsMessageTypeFlagsEXT type,
-                                                          const VkDebugUtilsMessengerCallbackDataEXT * callbackData,
-                                                          void * userData)
+namespace
 {
-    
-    switch (severity)
-    {
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-            SDL_LogInfo(0, "%s\n", callbackData->pMessage);
-            break;
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-            SDL_LogWarn(0, "%s\n", callbackData->pMessage);
-            break;
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-            SDL_Log(0, "%s\n", callbackData->pMessage);
-            break;
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-            SDL_LogError(0, "%s\n", callbackData->pMessage);
-            break;
-        default:
-            SDL_Log(0, "%s\n", callbackData->pMessage);
-            break;
-    }
-    
-    return VK_TRUE;
-}
+	VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugUtilsCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+		VkDebugUtilsMessageTypeFlagsEXT type,
+		const VkDebugUtilsMessengerCallbackDataEXT * callbackData,
+		void * userData)
+	{
 
+		switch (severity)
+		{
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+			SDL_LogInfo(0, "%s\n", callbackData->pMessage);
+			break;
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+			SDL_LogWarn(0, "%s\n", callbackData->pMessage);
+			break;
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+			SDL_Log(0, "%s\n", callbackData->pMessage);
+			break;
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+			SDL_LogError(0, "%s\n", callbackData->pMessage);
+			break;
+		default:
+			SDL_Log(0, "%s\n", callbackData->pMessage);
+			break;
+		}
+
+		return VK_TRUE;
+	}
+
+	VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugReportCallback(
+		VkDebugReportFlagsEXT       flags,
+		VkDebugReportObjectTypeEXT  objectType,
+		uint64_t                    object,
+		size_t                      location,
+		int32_t                     messageCode,
+		const char*                 pLayerPrefix,
+		const char*                 pMessage,
+		void*                       pUserData) 
+	{
+		int k = 0;
+		k = 1;
+		return VK_TRUE;
+	}
+}
 
 
 bool Vulkan::setupDebugCallback(Vulkan::VulkanContext & context)
 {
     if (!validationLayersEnabled)
         return true; // everything is true about the empty set
-    
-    const char * debugFunctionCreatorName = "vkCreateDebugUtilsMessengerEXT";
-    auto callbackFunctionCreator = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(context._instance, debugFunctionCreatorName);
-    if (callbackFunctionCreator == nullptr)
-    {
+
+	// debug utils
+	{
+		const char * debugFunctionCreatorName = "vkCreateDebugUtilsMessengerEXT";
+		auto debugUtilsMessengerCreator = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(context._instance, debugFunctionCreatorName);
+		if (debugUtilsMessengerCreator == nullptr)
+		{
 #if defined(__APPLE__) // function doesn't seeem to exist with moltenvk
-        return true;
+			return true;
 #else
-        SDL_LogError(0, "Could not create function: %s\n", debugFunctionCreatorName);
-        return false;
+			SDL_LogError(0, "Could not create function: %s\n", debugFunctionCreatorName);
+			return false;
 #endif
-    }
+		}
+
+
+		VkDebugUtilsMessengerCreateInfoEXT createInfo;
+		memset(&createInfo, 0, sizeof(createInfo));
+
+		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		createInfo.messageSeverity =
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+		createInfo.messageType =
+			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+		createInfo.pNext = nullptr;
+		createInfo.flags = 0;
+		createInfo.pUserData = nullptr;
+		createInfo.pfnUserCallback = VulkanDebugUtilsCallback;
+
+
+		VkResult debugUtilsCreationResult = debugUtilsMessengerCreator(context._instance, &createInfo, nullptr, &context._debugUtilsCallback);
+		if (debugUtilsCreationResult != VK_SUCCESS)
+		{
+			SDL_LogError(0, "Failed to create callback for method %s\n", debugFunctionCreatorName);
+			// TODO: should probably destroy the callbackCreator here
+			return false;
+		}
+	}
     
-    
-    VkDebugUtilsMessengerCreateInfoEXT createInfo;
-    memset(&createInfo, 0, sizeof(createInfo));
-    
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity =
-    VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-    VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-    VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-    createInfo.messageType =
-    VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-    VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-    VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pNext = nullptr;
-    createInfo.flags = 0;
-    createInfo.pUserData = nullptr;
-    createInfo.pfnUserCallback = vulkanDebugCallback;
-    
-    
-    VkResult result = callbackFunctionCreator(context._instance, &createInfo, nullptr, &context._debugCallback);
-    if (result != VK_SUCCESS)
-    {
-        SDL_LogError(0, "Failed to create callback for method %s\n", debugFunctionCreatorName);
-        // TODO: should probably destroy the callbackCreator here
-        return false;
-    }
+	// debug report
+	{
+		const char * debugFunctionCreatorName = "vkCreateDebugReportCallbackEXT";
+		auto debugReportMessengerCreator = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(context._instance, debugFunctionCreatorName);
+		if (debugReportMessengerCreator == nullptr)
+		{
+#if defined(__APPLE__) // function doesn't seeem to exist with moltenvk
+			return true;
+#else
+			SDL_LogError(0, "Could not create function: %s\n", debugFunctionCreatorName);
+			return false;
+#endif
+		}
+
+
+		VkDebugReportCallbackCreateInfoEXT createInfo;
+		memset(&createInfo, 0, sizeof(createInfo));
+
+		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
+		createInfo.pNext = nullptr;
+		createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | //VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+			VK_DEBUG_REPORT_WARNING_BIT_EXT |
+			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+		createInfo.pUserData = nullptr;
+		createInfo.pfnCallback = &VulkanDebugReportCallback;
+
+
+		VkResult debugReportCreationResult = debugReportMessengerCreator(context._instance, &createInfo, nullptr, &context._debugReportCallback);
+		if (debugReportCreationResult != VK_SUCCESS)
+		{
+			SDL_LogError(0, "Failed to create callback for method %s\n", debugFunctionCreatorName);
+			// TODO: should probably destroy the callbackCreator here
+			return false;
+		}
+	}
+
+
     
     return true;
 }
@@ -332,8 +390,9 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCreateInfo.pApplicationInfo = &vkAppInfo;
-    instanceCreateInfo.enabledExtensionCount = instanceExtensionCount;
-    instanceCreateInfo.ppEnabledExtensionNames = &instanceExtensionNames[0];
+	requiredInstanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+    instanceCreateInfo.enabledExtensionCount = requiredInstanceExtensions.size();
+    instanceCreateInfo.ppEnabledExtensionNames = &requiredInstanceExtensions[0];
     
     if (validationLayersEnabled)
     {
@@ -732,12 +791,13 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     
     createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     createInfo.stageCount = (uint32_t)shaderStages.size();
-    createInfo.pStages = (createInfo.stageCount==0) ? nullptr : &shaderStages[0];
-    
+	createInfo.pStages = (createInfo.stageCount == 0) ? nullptr : &shaderStages[0];
+	createInfo.pStages = nullptr;
+
     // Pipeline Vertex Input State
     VkPipelineVertexInputStateCreateInfo vertexInputInfo;
-	auto vertexBindingDescription = appInfo._getBindingDescription();
-	auto vertexAttributeDescription = appInfo._getAttributes();
+	VkVertexInputBindingDescription vertexBindingDescription = appInfo._getBindingDescription();
+	std::array<VkVertexInputAttributeDescription, 2> vertexAttributeDescription = appInfo._getAttributes();
     memset(&vertexInputInfo, 0, sizeof(VkPipelineVertexInputStateCreateInfo));
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 1;
@@ -852,8 +912,28 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     createInfo.renderPass = context._renderPass;
     createInfo.subpass = 0;
     createInfo.basePipelineHandle = VK_NULL_HANDLE;
-    //        createInfo.basePipelineIndex = -1;
+    createInfo.basePipelineIndex = -1;
     
+	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo;
+	memset(&dynamicStateCreateInfo, 0, sizeof(VkPipelineDynamicStateCreateInfo));
+	dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	VkDynamicState dynamicState[] = {
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_SCISSOR
+	};
+	dynamicStateCreateInfo.dynamicStateCount = 2;
+	dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
+	createInfo.pDynamicState = &dynamicStateCreateInfo;
+
+	VkPipelineDepthStencilStateCreateInfo depthStencilState;
+	memset(&depthStencilState, 0, sizeof(VkPipelineDepthStencilStateCreateInfo));
+	depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depthStencilState.depthTestEnable = VK_TRUE;
+	depthStencilState.depthWriteEnable = VK_TRUE;
+	depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+	createInfo.pDepthStencilState = &depthStencilState;
+
+
     // TODO: missing some stuff here
     VkPipeline graphicsPipeline;
     if (vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &graphicsPipeline) != VK_SUCCESS)

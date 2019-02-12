@@ -395,7 +395,7 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
 #if !defined(__APPLE__)
 	requiredInstanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 #endif
-    instanceCreateInfo.enabledExtensionCount = requiredInstanceExtensions.size();
+    instanceCreateInfo.enabledExtensionCount = (uint32_t)requiredInstanceExtensions.size();
     instanceCreateInfo.ppEnabledExtensionNames = &requiredInstanceExtensions[0];
     
     if (validationLayersEnabled)
@@ -778,7 +778,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
         {
             case ShaderType::Vertex:
                 createInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-                break;
+                 break;
             case ShaderType::Fragment:
                 createInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
                 break;
@@ -987,7 +987,8 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
     for(unsigned int i=0 ; i < (unsigned int)commandBuffers.size() ; i++)
     {
         VkCommandBufferBeginInfo beginInfo;
-        beginInfo.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO;
+		memset(&beginInfo, 0, sizeof(VkCommandBufferBeginInfo));
+		beginInfo.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
         if(vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS)
         {

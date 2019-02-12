@@ -344,8 +344,10 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     
     if (validationLayersEnabled)
     {
+#if !defined(__APPLE__)
         requiredInstanceExtensionCount++;
         requiredInstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
     }
     
     
@@ -390,7 +392,9 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCreateInfo.pApplicationInfo = &vkAppInfo;
+#if !defined(__APPLE__)
 	requiredInstanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+#endif
     instanceCreateInfo.enabledExtensionCount = requiredInstanceExtensions.size();
     instanceCreateInfo.ppEnabledExtensionNames = &requiredInstanceExtensions[0];
     
@@ -792,7 +796,6 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     createInfo.stageCount = (uint32_t)shaderStages.size();
 	createInfo.pStages = (createInfo.stageCount == 0) ? nullptr : &shaderStages[0];
-	createInfo.pStages = nullptr;
 
     // Pipeline Vertex Input State
     VkPipelineVertexInputStateCreateInfo vertexInputInfo;

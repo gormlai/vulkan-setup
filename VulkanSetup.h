@@ -112,13 +112,6 @@ namespace Vulkan
         {
         }
     };
-
-	template<typename VertexType>
-	struct Mesh
-	{
-		std::vector<VertexType> _vertices;
-		std::vector<uint16_t> _indices;
-	};
     
     struct AppInformation
     {
@@ -149,6 +142,18 @@ namespace Vulkan
         bool fill(VkDevice device, const void * srcData, VkDeviceSize amount);
         bool copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, BufferDescriptor & src, VkDeviceSize amount);
     };
+
+	struct VulkanMesh
+	{
+		BufferDescriptor _vertexBuffer;
+		BufferDescriptor _indexBuffer;
+		unsigned int _numIndices;
+
+		VulkanMesh()
+		{
+			memset(this, 0, sizeof(VulkanMesh));
+		}
+	};
     
     struct VulkanContext
     {
@@ -187,8 +192,7 @@ namespace Vulkan
         std::vector<VkSemaphore> _imageAvailableSemaphore;
         std::vector<VkFence> _fences;
         
-        BufferDescriptor _vertexBuffer;
-        BufferDescriptor _indexBuffer;
+		std::vector<VulkanMesh> _vulkanMeshes;
         
         unsigned int _currentFrame;
         
@@ -222,7 +226,7 @@ namespace Vulkan
     bool createSemaphores(AppInformation & appInfo, VulkanContext & context);
     int findMemoryType(VulkanContext & context, uint32_t typeFilter, VkMemoryPropertyFlags properties);
     bool createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc);
-    bool createVertexOrIndexBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result);
+    bool createVertexOrIndexBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type);
     bool createIndexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool createVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool handleVulkanSetup(AppInformation & appInfo, VulkanContext & context);

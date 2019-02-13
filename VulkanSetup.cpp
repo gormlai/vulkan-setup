@@ -874,12 +874,12 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     VkPipelineColorBlendAttachmentState colorBlendAttachmentCreateInfo;
     memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));
     colorBlendAttachmentCreateInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachmentCreateInfo.blendEnable = VK_FALSE;
+    colorBlendAttachmentCreateInfo.blendEnable = VK_TRUE;
     colorBlendAttachmentCreateInfo.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
     colorBlendAttachmentCreateInfo.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
     colorBlendAttachmentCreateInfo.colorBlendOp = VK_BLEND_OP_ADD;
     colorBlendAttachmentCreateInfo.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    colorBlendAttachmentCreateInfo.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachmentCreateInfo.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
     colorBlendAttachmentCreateInfo.alphaBlendOp = VK_BLEND_OP_ADD;
     
     VkPipelineColorBlendStateCreateInfo colorBlendingCreateInfo;
@@ -889,12 +889,11 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     colorBlendingCreateInfo.logicOp = VK_LOGIC_OP_COPY;
     colorBlendingCreateInfo.attachmentCount = 1;
     colorBlendingCreateInfo.pAttachments = &colorBlendAttachmentCreateInfo;
-    colorBlendingCreateInfo.blendConstants[0] = 0.0f;
-    colorBlendingCreateInfo.blendConstants[1] = 0.0f;
-    colorBlendingCreateInfo.blendConstants[2] = 0.0f;
-    colorBlendingCreateInfo.blendConstants[3] = 0.0f;
+    colorBlendingCreateInfo.blendConstants[0] = 1.0f;
+    colorBlendingCreateInfo.blendConstants[1] = 1.0f;
+    colorBlendingCreateInfo.blendConstants[2] = 1.0f;
+    colorBlendingCreateInfo.blendConstants[3] = 1.0f;
     createInfo.pColorBlendState = &colorBlendingCreateInfo;
-    createInfo.pDynamicState = nullptr;
     
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
     memset(&pipelineLayoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateInfo));
@@ -915,7 +914,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     createInfo.renderPass = context._renderPass;
     createInfo.subpass = 0;
     createInfo.basePipelineHandle = VK_NULL_HANDLE;
-    createInfo.basePipelineIndex = -1;
+//    createInfo.basePipelineIndex = -1;
     
 	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo;
 	memset(&dynamicStateCreateInfo, 0, sizeof(VkPipelineDynamicStateCreateInfo));
@@ -926,7 +925,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 	};
 	dynamicStateCreateInfo.dynamicStateCount = 2;
 	dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
-	createInfo.pDynamicState = &dynamicStateCreateInfo;
+//	createInfo.pDynamicState = &dynamicStateCreateInfo;
 
 	VkPipelineDepthStencilStateCreateInfo depthStencilState;
 	memset(&depthStencilState, 0, sizeof(VkPipelineDepthStencilStateCreateInfo));
@@ -1004,21 +1003,32 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
         renderPassBeginInfo.renderArea.offset = {0,0};
         renderPassBeginInfo.renderArea.extent = context._swapChainSize;
         
-        VkClearValue clearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
+        VkClearValue clearColorValue{1.0f, 0.0f, 0.0f, 1.0f};
         renderPassBeginInfo.clearValueCount = 1;
         renderPassBeginInfo.pClearValues = &clearColorValue;
         
         vkCmdBeginRenderPass(commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, context._pipeline);
-        
-        VkBuffer vertexBuffer[] = {context._vertexBuffer._buffer};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffer, offsets);
-        vkCmdBindIndexBuffer(commandBuffers[i], context._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);
-        
-        vkCmdDrawIndexed(commandBuffers[i], 6 , 1, 0, 0, 0);
-        vkCmdEndRenderPass(commandBuffers[i]);
-        
+
+		for (unsigned int meshCount = 0; meshCount < context._vulkanMeshes.size(); meshCount++)
+		{
+			VkBuffer vertexBuffer[] = { context._vulkanMeshes[meshCount]._vertexBuffer._buffer };
+			VkDeviceSize offsets[] = { 0 };
+
+			VkImageSubresourceRange imageRange = {};
+			imageRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageRange.levelCount = 1;
+			imageRange.layerCount = 1;
+			VkClearColorValue clearColorValue{ 1.0f, 0.0f, 1.0f, 1.0f };
+			vkCmdClearColorImage(commandBuffers[i], context._rawImages[i], VK_IMAGE_LAYOUT_GENERAL, &clearColorValue, 1, &imageRange);
+
+			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffer, offsets);
+			vkCmdBindIndexBuffer(commandBuffers[i], context._vulkanMeshes[meshCount]._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdDrawIndexed(commandBuffers[i], context._vulkanMeshes[meshCount]._numIndices, 1, 0, 0, 0);
+
+		}
+		vkCmdEndRenderPass(commandBuffers[i]);
+
         if(vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
         {
             SDL_LogError(0,"Call to vkEndCommandBuffer failed (i=%d)\n", i);
@@ -1144,7 +1154,7 @@ bool Vulkan::createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUs
     return true;
 }
 
-bool Vulkan::createVertexOrIndexBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result)
+bool Vulkan::createVertexOrIndexBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type)
 {
     
     BufferDescriptor stagingBufferDescriptor;
@@ -1155,7 +1165,7 @@ bool Vulkan::createVertexOrIndexBuffer(VulkanContext & context, const void * src
     }
     
     BufferDescriptor vertexBufferDescriptor;
-    if(!createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBufferDescriptor))
+    if(!createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | ((type == BufferType::Vertex) ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT) , VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBufferDescriptor))
     {
         SDL_LogError(0, "Failed to crete buffer of size %d bytes\n", (int)bufferSize);
         return false;
@@ -1175,17 +1185,22 @@ bool Vulkan::createIndexBuffer(AppInformation & appInfo, VulkanContext & context
 	appInfo._createBuffer(BufferType::Index, bufferIndex, indexData);
 	const void * data = indexData.data();
 	const VkDeviceSize bufferSize =  indexData.size();
-    createVertexOrIndexBuffer(context, data, bufferSize, context._indexBuffer);
-    return true;
+	BufferDescriptor indexBuffer;
+	createVertexOrIndexBuffer(context, data, bufferSize, indexBuffer, BufferType::Index);
+	context._vulkanMeshes[bufferIndex]._indexBuffer = indexBuffer;
+	context._vulkanMeshes[bufferIndex]._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
+	return true;
 }
 
 bool Vulkan::createVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex )
 {
 	std::vector<unsigned char> vertexData;
-	appInfo._createBuffer(BufferType::Index, bufferIndex, vertexData);
+	appInfo._createBuffer(BufferType::Vertex, bufferIndex, vertexData);
 	const void * data = vertexData.data();
 	const VkDeviceSize bufferSize = vertexData.size();
-    createVertexOrIndexBuffer(context, data, bufferSize, context._vertexBuffer);
+	BufferDescriptor vertexBuffer;
+    createVertexOrIndexBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex);
+	context._vulkanMeshes[bufferIndex]._vertexBuffer = vertexBuffer;
     return true;
 }
 
@@ -1299,6 +1314,7 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
     
 	for (int i = 0; i < appInfo._numBuffers(BufferType::Vertex); i++)
 	{
+		context._vulkanMeshes.push_back(Vulkan::VulkanMesh());
 		if (!createVertexBuffer(appInfo, context, i))
 		{
 			SDL_LogError(0, "Failed to create vertex buffer\n");

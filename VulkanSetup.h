@@ -199,8 +199,6 @@ namespace Vulkan
         VulkanContext();
     };
     
-    SDL_Window * initSDL(const std::string & appName);
-
     bool setupDebugCallback(VulkanContext & context);
     bool areValidationLayersAvailable(const std::vector<const char*> & validationLayers);
     bool loadVulkanLibrary();

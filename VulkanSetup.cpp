@@ -90,30 +90,6 @@ bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, VkCommandPool commandPo
 
 ///////////////////////////////////// Vulkan Methods ///////////////////////////////////////////////////////////////////
 
-SDL_Window * Vulkan::initSDL(const std::string & appName)
-{
-    SDL_Window * window = nullptr;
-    
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS) != 0)
-        return window;
-    
-    window = SDL_CreateWindow(appName.c_str(),
-                              SDL_WINDOWPOS_CENTERED,
-                              SDL_WINDOWPOS_CENTERED,
-                              640,
-                              480,
-                              SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
-    if (window == nullptr)
-    {
-        const char * error = SDL_GetError();
-        SDL_LogError(0, "Error = %s\n", error);
-        
-    }
-    
-    return window;
-    
-}
-
 namespace
 {
 	VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugUtilsCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -1020,7 +996,7 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
 			imageRange.levelCount = 1;
 			imageRange.layerCount = 1;
 			VkClearColorValue clearColorValue{ 1.0f, 0.0f, 1.0f, 1.0f };
-			vkCmdClearColorImage(commandBuffers[i], context._rawImages[i], VK_IMAGE_LAYOUT_GENERAL, &clearColorValue, 1, &imageRange);
+//			vkCmdClearColorImage(commandBuffers[i], context._rawImages[i], VK_IMAGE_LAYOUT_GENERAL, &clearColorValue, 1, &imageRange);
 
 			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffer, offsets);
 			vkCmdBindIndexBuffer(commandBuffers[i], context._vulkanMeshes[meshCount]._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);

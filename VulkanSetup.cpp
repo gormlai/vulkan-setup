@@ -874,8 +874,8 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
     memset(&pipelineLayoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateInfo));
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 0;
-    pipelineLayoutCreateInfo.pSetLayouts = nullptr;
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts = &context._descriptorSetLayout;
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
     
@@ -924,6 +924,25 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     
     return true;
 }
+
+bool Vulkan::createDescriptorSetLayout(VulkanContext & vulkanContext)
+{
+    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
+    descriptorSetLayoutBinding.binding = 0;
+    descriptorSetLayoutBinding.descriptorCount = 1;
+    descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+    descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+    
+    VkDescriptorSetLayoutCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    createInfo.bindingCount = 1;
+    createInfo.pBindings = &descriptorSetLayoutBinding;
+    
+    VkResult creationResult = vkCreateDescriptorSetLayout(vulkanContext._device, &createInfo, nullptr, &vulkanContext._descriptorSetLayout);
+    return creationResult == VK_SUCCESS;
+}
+
 
 bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context)
 {
@@ -1263,6 +1282,11 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         return false;
     }
     
+    if(!createDescriptorSetLayout(context))
+    {
+        SDL_LogError(0, "Failed to create descriptor set layouts!");
+        return false;
+    }
     
     if (!createGraphicsPipeline(appInfo, context, shaderModules))
     {

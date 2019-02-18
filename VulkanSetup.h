@@ -10,6 +10,8 @@
 #include <array>
 #include <functional>
 
+#include <glm/glm.hpp>
+
 /*
  LICENSE - this file is public domain
  
@@ -92,6 +94,13 @@ namespace Vulkan
 		Vertex,
 	};
     
+    struct UniformBufferObject
+    {
+        glm::mat4 _model;
+        glm::mat4 _projection;
+        glm::mat4 _view;
+    };
+    
     struct Shader
     {
         std::string _filename;
@@ -147,6 +156,7 @@ namespace Vulkan
 	{
 		BufferDescriptor _vertexBuffer;
 		BufferDescriptor _indexBuffer;
+        BufferDescriptor _uniformBuffer;
 		unsigned int _numIndices;
 
 		VulkanMesh()
@@ -181,6 +191,7 @@ namespace Vulkan
         VkRenderPass _renderPass;
         VkPipeline _pipeline;
         VkPipelineLayout _pipelineLayout;
+        VkDescriptorSetLayout _descriptorSetLayout;
         
         VkDebugUtilsMessengerEXT _debugUtilsCallback;
 		VkDebugReportCallbackEXT _debugReportCallback;
@@ -213,6 +224,7 @@ namespace Vulkan
     bool createSwapChain(AppInformation & appInfo, VulkanContext & context);
     bool createColorBuffers(VulkanContext & context);
     bool createRenderPass(VulkanContext & vulkanContext);
+    bool createDescriptorSetLayout(VulkanContext & vulkanContext);
     bool createFrameBuffers(VulkanContext & vulkanContext);
     std::vector<VkShaderModule> createShaderModules(AppInformation & appInfo, VulkanContext & context);
     bool createFixedState(AppInformation & appInfo, VulkanContext & context);

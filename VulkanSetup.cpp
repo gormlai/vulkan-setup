@@ -991,12 +991,6 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
 			VkBuffer vertexBuffer[] = { context._vulkanMeshes[meshCount]._vertexBuffer._buffer };
 			VkDeviceSize offsets[] = { 0 };
 
-			VkImageSubresourceRange imageRange = {};
-			imageRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			imageRange.levelCount = 1;
-			imageRange.layerCount = 1;
-			VkClearColorValue clearColorValue{ 1.0f, 0.0f, 1.0f, 1.0f };
-//			vkCmdClearColorImage(commandBuffers[i], context._rawImages[i], VK_IMAGE_LAYOUT_GENERAL, &clearColorValue, 1, &imageRange);
 
 			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffer, offsets);
 			vkCmdBindIndexBuffer(commandBuffers[i], context._vulkanMeshes[meshCount]._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);

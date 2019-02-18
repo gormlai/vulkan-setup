@@ -92,6 +92,7 @@ namespace Vulkan
 	{
 		Index,
 		Vertex,
+        Uniform,
 	};
     
     struct UniformBufferObject
@@ -156,7 +157,8 @@ namespace Vulkan
 	{
 		BufferDescriptor _vertexBuffer;
 		BufferDescriptor _indexBuffer;
-        BufferDescriptor _uniformBuffer;
+        std::vector<BufferDescriptor> _uniformBuffers;
+        
 		unsigned int _numIndices;
 
 		VulkanMesh()
@@ -191,7 +193,10 @@ namespace Vulkan
         VkRenderPass _renderPass;
         VkPipeline _pipeline;
         VkPipelineLayout _pipelineLayout;
+        
         VkDescriptorSetLayout _descriptorSetLayout;
+        VkDescriptorPool descriptorPool;
+        std::vector<VkDescriptorSet> descriptorSets;
         
         VkDebugUtilsMessengerEXT _debugUtilsCallback;
 		VkDebugReportCallbackEXT _debugReportCallback;
@@ -236,9 +241,10 @@ namespace Vulkan
     bool createSemaphores(AppInformation & appInfo, VulkanContext & context);
     int findMemoryType(VulkanContext & context, uint32_t typeFilter, VkMemoryPropertyFlags properties);
     bool createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc);
-    bool createVertexOrIndexBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type);
+    bool createBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type);
     bool createIndexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool createVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
+    bool createUniformBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool handleVulkanSetup(AppInformation & appInfo, VulkanContext & context);
 }
 

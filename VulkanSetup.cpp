@@ -944,6 +944,7 @@ bool Vulkan::createDescriptorSetLayout(VulkanContext & vulkanContext)
 }
 
 
+
 bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context)
 {
     VkCommandPoolCreateInfo createInfo;
@@ -1143,7 +1144,7 @@ bool Vulkan::createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUs
     return true;
 }
 
-bool Vulkan::createVertexOrIndexBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type)
+bool Vulkan::createBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type)
 {
     
     BufferDescriptor stagingBufferDescriptor;
@@ -1175,7 +1176,7 @@ bool Vulkan::createIndexBuffer(AppInformation & appInfo, VulkanContext & context
 	const void * data = indexData.data();
 	const VkDeviceSize bufferSize =  indexData.size();
 	BufferDescriptor indexBuffer;
-	createVertexOrIndexBuffer(context, data, bufferSize, indexBuffer, BufferType::Index);
+	createBuffer(context, data, bufferSize, indexBuffer, BufferType::Index);
 	context._vulkanMeshes[bufferIndex]._indexBuffer = indexBuffer;
 	context._vulkanMeshes[bufferIndex]._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
 	return true;
@@ -1188,10 +1189,32 @@ bool Vulkan::createVertexBuffer(AppInformation & appInfo, VulkanContext & contex
 	const void * data = vertexData.data();
 	const VkDeviceSize bufferSize = vertexData.size();
 	BufferDescriptor vertexBuffer;
-    createVertexOrIndexBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex);
+    createBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex);
 	context._vulkanMeshes[bufferIndex]._vertexBuffer = vertexBuffer;
     return true;
 }
+
+bool Vulkan::createUniformBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
+{
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+    
+    std::vector<BufferDescriptor> & uniforms = context._vulkanMeshes[bufferIndex]._uniformBuffers;
+    uniforms.resize(context._rawImages.size());
+    
+    for (size_t i = 0; i < uniforms.size(); i++)
+    {
+        if(!createBuffer(context, bufferSize,
+                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     uniforms[i]))
+        {
+            SDL_LogError(0, "Failed to create uniform buffer (bufferIndex=%d, i=%d)\n", (int)bufferIndex, (int)i);
+            return false;
+        }
+    }
+    return true;
+}
+
 
 bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context)
 {
@@ -1315,16 +1338,20 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
 			return false;
 		}
 
+        if (!createIndexBuffer(appInfo, context, i))
+        {
+            SDL_LogError(0, "Failed to create index buffer\n");
+            return false;
+        }
+        
+        if (!createUniformBuffer(appInfo, context, i))
+        {
+            SDL_LogError(0, "Failed to create uniform buffer\n");
+            return false;
+        }
+
 	}
     
-	for (int i = 0; i < appInfo._numBuffers(BufferType::Index); i++)
-	{
-		if (!createIndexBuffer(appInfo, context, i))
-		{
-			SDL_LogError(0, "Failed to create index buffer\n");
-			return false;
-		}
-	}
     
     if(!createCommandBuffers(appInfo, context))
     {

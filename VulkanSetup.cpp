@@ -1215,6 +1215,59 @@ bool Vulkan::createUniformBuffer(AppInformation & appInfo, VulkanContext & conte
     return true;
 }
 
+bool Vulkan::createDescriptorPool(VulkanContext & context, unsigned int bufferIndex)
+{
+    VkDescriptorPoolSize poolSize = {};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = static_cast<uint32_t>(context._rawImages.size());
+    
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = static_cast<uint32_t>(context._rawImages.size());
+    
+    VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &context._vulkanMeshes[bufferIndex]._descriptorPool);
+    return creationResult == VK_SUCCESS;
+}
+
+bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
+{
+    const uint32_t size = (uint32_t)context._rawImages.size();
+    std::vector<VkDescriptorSetLayout> layouts(size, context._descriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = context._vulkanMeshes[bufferIndex]._descriptorPool;
+    allocInfo.descriptorSetCount = size;
+    allocInfo.pSetLayouts = &layouts[0];
+    
+    context._vulkanMeshes[bufferIndex]._descriptorSets.resize(size);
+    VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &context._vulkanMeshes[bufferIndex]._descriptorSets[0]);
+    if(allocationResult != VK_SUCCESS)
+        return false;
+    
+    for (size_t i = 0; i < size; i++) {
+        VkDescriptorBufferInfo bufferInfo;
+        memset(&bufferInfo, 0, sizeof(bufferInfo));
+        bufferInfo.buffer = context._vulkanMeshes[bufferIndex]._uniformBuffers[i]._buffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBufferObject);
+        
+        VkWriteDescriptorSet descriptorWrite = {};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = context._vulkanMeshes[bufferIndex]._descriptorSets[i];
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+        
+        vkUpdateDescriptorSets(context._device, 1, &descriptorWrite, 0, nullptr);
+    }
+
+    return true;
+}
+
 
 bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context)
 {
@@ -1350,9 +1403,20 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
             return false;
         }
 
+        if(!createDescriptorPool(context, i))
+        {
+            SDL_LogError(0, "Failed to create descriptor pool\n");
+            return false;
+        }
+        
+        if(!createDescriptorSet(appInfo, context, i))
+        {
+            SDL_LogError(0, "Failed to create descriptor set\n");
+            return false;
+        }
 	}
     
-    
+
     if(!createCommandBuffers(appInfo, context))
     {
         SDL_LogError(0, "Failed to create command buffers\n");

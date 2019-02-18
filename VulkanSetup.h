@@ -158,7 +158,9 @@ namespace Vulkan
 		BufferDescriptor _vertexBuffer;
 		BufferDescriptor _indexBuffer;
         std::vector<BufferDescriptor> _uniformBuffers;
-        
+        VkDescriptorPool _descriptorPool;
+        std::vector<VkDescriptorSet> _descriptorSets;
+
 		unsigned int _numIndices;
 
 		VulkanMesh()
@@ -195,8 +197,6 @@ namespace Vulkan
         VkPipelineLayout _pipelineLayout;
         
         VkDescriptorSetLayout _descriptorSetLayout;
-        VkDescriptorPool descriptorPool;
-        std::vector<VkDescriptorSet> descriptorSets;
         
         VkDebugUtilsMessengerEXT _debugUtilsCallback;
 		VkDebugReportCallbackEXT _debugReportCallback;
@@ -245,6 +245,8 @@ namespace Vulkan
     bool createIndexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool createVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool createUniformBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
+    bool createDescriptorPool(VulkanContext & context, unsigned int bufferIndex);
+    bool createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool handleVulkanSetup(AppInformation & appInfo, VulkanContext & context);
 }
 

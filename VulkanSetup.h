@@ -98,8 +98,8 @@ namespace Vulkan
     struct UniformBufferObject
     {
         glm::mat4 _model;
-        glm::mat4 _projection;
         glm::mat4 _view;
+        glm::mat4 _projection;
     };
     
     struct Shader
@@ -248,6 +248,10 @@ namespace Vulkan
     bool createDescriptorPool(VulkanContext & context, unsigned int bufferIndex);
     bool createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool handleVulkanSetup(AppInformation & appInfo, VulkanContext & context);
+    
+    void update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
+    void updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t currentImage);
+
 }
 
 #endif

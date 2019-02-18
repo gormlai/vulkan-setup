@@ -932,7 +932,7 @@ bool Vulkan::createDescriptorSetLayout(VulkanContext & vulkanContext)
     descriptorSetLayoutBinding.descriptorCount = 1;
     descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
-    descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS;
+    descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     
     VkDescriptorSetLayoutCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1014,7 +1014,16 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
 
 			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffer, offsets);
 			vkCmdBindIndexBuffer(commandBuffers[i], context._vulkanMeshes[meshCount]._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);
-			vkCmdDrawIndexed(commandBuffers[i], context._vulkanMeshes[meshCount]._numIndices, 1, 0, 0, 0);
+            vkCmdBindDescriptorSets(commandBuffers[i],
+                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    context._pipelineLayout,
+                                    0,
+                                    1,
+                                    &context._vulkanMeshes[0]._descriptorSets[i],
+                                    0,
+                                    nullptr);
+            
+            vkCmdDrawIndexed(commandBuffers[i], context._vulkanMeshes[meshCount]._numIndices, 1, 0, 0, 0);
 
 		}
 		vkCmdEndRenderPass(commandBuffers[i]);
@@ -1266,6 +1275,31 @@ bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & conte
     }
 
     return true;
+}
+
+void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t currentImage)
+{
+    UniformBufferObject ubo = {};
+    ubo._model = glm::mat4();
+    ubo._view = glm::mat4();
+    ubo._projection = glm::mat4();
+    
+    void* data = nullptr;
+    vkMapMemory(context._device,
+                context._vulkanMeshes[currentImage]._uniformBuffers[bufferIndex]._memory,
+                0,
+                sizeof(ubo),
+                0, &data);
+    
+    memcpy(data, &ubo, sizeof(ubo));
+    vkUnmapMemory(context._device, context._vulkanMeshes[currentImage]._uniformBuffers[bufferIndex]._memory);
+}
+
+void Vulkan::update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage)
+{
+    VulkanMesh & mesh = context._vulkanMeshes[currentImage];
+    for(unsigned int i=0 ; i < (unsigned int)mesh._uniformBuffers.size() ; i++)
+        updateUniforms(appInfo, context, i, currentImage);
 }
 
 

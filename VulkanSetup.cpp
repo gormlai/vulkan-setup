@@ -1,5 +1,8 @@
 #include "VulkanSetup.h"
 
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 ///////////////////////////////////// Vulkan Variable ///////////////////////////////////////////////////////////////////
 
 bool Vulkan::validationLayersEnabled = true;
@@ -212,7 +215,7 @@ bool Vulkan::setupDebugCallback(Vulkan::VulkanContext & context)
 
 		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
 		createInfo.pNext = nullptr;
-		createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_INFORMATION_BIT_EXT  | 
+		createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | /*VK_DEBUG_REPORT_INFORMATION_BIT_EXT  | */
 			VK_DEBUG_REPORT_WARNING_BIT_EXT |
 			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
 		createInfo.pUserData = nullptr;
@@ -862,7 +865,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     rasterizerCreateInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizerCreateInfo.lineWidth = 1.0f;
-    rasterizerCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+	rasterizerCreateInfo.cullMode = VK_CULL_MODE_NONE;
     rasterizerCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizerCreateInfo.depthBiasEnable = VK_FALSE;
     rasterizerCreateInfo.depthBiasConstantFactor = 0.0f;
@@ -1044,7 +1047,7 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
         renderPassBeginInfo.renderArea.offset = {0,0};
         renderPassBeginInfo.renderArea.extent = context._swapChainSize;
         
-        VkClearValue clearColorValue{1.0f, 0.0f, 1.0f, 1.0f};
+        VkClearValue clearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
         renderPassBeginInfo.clearValueCount = 1;
         renderPassBeginInfo.pClearValues = &clearColorValue;
         
@@ -1360,6 +1363,13 @@ void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, u
     ubo._view = glm::mat4();
     ubo._projection = glm::mat4();
     
+	float time = 0;
+
+	ubo._model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo._view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo._projection = glm::perspective(glm::radians(45.0f), context._swapChainSize.width / (float)context._swapChainSize.height, 0.1f, 10.0f);
+	ubo._projection[1][1] *= -1;
+
     void* data = nullptr;
     const VkResult mapMemoryResult = vkMapMemory(context._device,
                 context._vulkanMeshes[meshIndex]._uniformBuffers[bufferIndex]._memory,

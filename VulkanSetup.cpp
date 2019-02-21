@@ -42,7 +42,7 @@ bool Vulkan::BufferDescriptor::fill(VkDevice device, const void * srcData, VkDev
     void * data = nullptr;
 	const VkResult mapResult = vkMapMemory(device, _memory, 0, amount, 0, &data);
 	assert(mapResult == VK_SUCCESS);
-    if(mapResult == VK_SUCCESS)
+    if(mapResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to map vertex buffer memory\n");
         return false;
@@ -369,8 +369,8 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     memset(&vkAppInfo, 0, sizeof(vkAppInfo));
     vkAppInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     vkAppInfo.apiVersion = appInfo._descriptor._requiredVulkanVersion;
-    vkAppInfo.applicationVersion = 1;
-    vkAppInfo.engineVersion = 1;
+	vkAppInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+	vkAppInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     vkAppInfo.pApplicationName = appInfo._descriptor._appName.c_str();
     
     VkInstanceCreateInfo instanceCreateInfo;
@@ -686,7 +686,16 @@ bool Vulkan::createRenderPass(VulkanContext & vulkanContext)
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    
+
+	VkSubpassDependency dependency;
+	memset(&dependency, 0, sizeof(dependency));
+	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependency.dstSubpass = 0;
+	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependency.srcAccessMask = 0;
+	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
     
     VkRenderPassCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
@@ -695,6 +704,8 @@ bool Vulkan::createRenderPass(VulkanContext & vulkanContext)
     createInfo.pAttachments = &colorAttachment;
     createInfo.subpassCount = 1;
     createInfo.pSubpasses = &subpassDescription;
+	createInfo.dependencyCount = 1;
+	createInfo.pDependencies = &dependency;
     
     VkResult createRenderPassResult = vkCreateRenderPass(vulkanContext._device, &createInfo, nullptr, &vulkanContext._renderPass);
 	assert(createRenderPassResult == VK_SUCCESS);

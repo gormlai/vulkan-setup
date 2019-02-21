@@ -250,7 +250,7 @@ namespace Vulkan
     bool handleVulkanSetup(AppInformation & appInfo, VulkanContext & context);
     
     void update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
-    void updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t currentImage);
+    void updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex);
 
 }
 

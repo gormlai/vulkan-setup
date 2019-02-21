@@ -212,7 +212,7 @@ bool Vulkan::setupDebugCallback(Vulkan::VulkanContext & context)
 
 		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
 		createInfo.pNext = nullptr;
-		createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | //VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+		createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_INFORMATION_BIT_EXT  | 
 			VK_DEBUG_REPORT_WARNING_BIT_EXT |
 			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
 		createInfo.pUserData = nullptr;
@@ -722,12 +722,14 @@ bool Vulkan::createFrameBuffers(VulkanContext & vulkanContext)
         VkFramebufferCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
         
+		VkImageView attachments[] = { imageview };
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = vulkanContext._renderPass;
         createInfo.attachmentCount = 1;
-        createInfo.pAttachments = &imageview;
+		createInfo.pAttachments = attachments;
         createInfo.width = vulkanContext._swapChainSize.width;
         createInfo.height = vulkanContext._swapChainSize.height;
+		createInfo.layers = 1;
         
         VkFramebuffer frameBuffer;
         VkResult frameBufferCreationResult = vkCreateFramebuffer(vulkanContext._device, &createInfo, nullptr, &frameBuffer);
@@ -885,7 +887,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     VkPipelineColorBlendAttachmentState colorBlendAttachmentCreateInfo;
     memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));
     colorBlendAttachmentCreateInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachmentCreateInfo.blendEnable = VK_TRUE;
+    colorBlendAttachmentCreateInfo.blendEnable = VK_FALSE;
     colorBlendAttachmentCreateInfo.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
     colorBlendAttachmentCreateInfo.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
     colorBlendAttachmentCreateInfo.colorBlendOp = VK_BLEND_OP_ADD;
@@ -900,10 +902,10 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     colorBlendingCreateInfo.logicOp = VK_LOGIC_OP_COPY;
     colorBlendingCreateInfo.attachmentCount = 1;
     colorBlendingCreateInfo.pAttachments = &colorBlendAttachmentCreateInfo;
-    colorBlendingCreateInfo.blendConstants[0] = 1.0f;
-    colorBlendingCreateInfo.blendConstants[1] = 1.0f;
-    colorBlendingCreateInfo.blendConstants[2] = 1.0f;
-    colorBlendingCreateInfo.blendConstants[3] = 1.0f;
+    colorBlendingCreateInfo.blendConstants[0] = 0.0f;
+    colorBlendingCreateInfo.blendConstants[1] = 0.0f;
+    colorBlendingCreateInfo.blendConstants[2] = 0.0f;
+    colorBlendingCreateInfo.blendConstants[3] = 0.0f;
     createInfo.pColorBlendState = &colorBlendingCreateInfo;
     
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
@@ -915,15 +917,14 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
     
     
-    VkPipelineLayout pipelineLayout;
-	VkResult createPipelineLayoutResult = vkCreatePipelineLayout(context._device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
+	VkResult createPipelineLayoutResult = vkCreatePipelineLayout(context._device, &pipelineLayoutCreateInfo, nullptr, &context._pipelineLayout);
 	assert(createPipelineLayoutResult == VK_SUCCESS);
     if (createPipelineLayoutResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to create graphics pipeline layout\n");
         return false;
     }
-    createInfo.layout = pipelineLayout;
+	createInfo.layout = context._pipelineLayout;
     createInfo.renderPass = context._renderPass;
     createInfo.subpass = 0;
     createInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -1043,7 +1044,7 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
         renderPassBeginInfo.renderArea.offset = {0,0};
         renderPassBeginInfo.renderArea.extent = context._swapChainSize;
         
-        VkClearValue clearColorValue{1.0f, 0.0f, 0.0f, 1.0f};
+        VkClearValue clearColorValue{1.0f, 0.0f, 1.0f, 1.0f};
         renderPassBeginInfo.clearValueCount = 1;
         renderPassBeginInfo.pClearValues = &clearColorValue;
         
@@ -1059,14 +1060,14 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
 			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, &vertexBuffer[0], offsets);
 			vkCmdBindIndexBuffer(commandBuffers[i], context._vulkanMeshes[meshCount]._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);
 
-/*            vkCmdBindDescriptorSets(commandBuffers[i],
+            vkCmdBindDescriptorSets(commandBuffers[i],
                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     context._pipelineLayout,
                                     0,
                                     1,
-                                    &context._vulkanMeshes[0]._descriptorSets[i],
+                                    &context._vulkanMeshes[meshCount]._descriptorSets[i],
                                     0,
-                                    nullptr);*/
+                                    nullptr);
             
             vkCmdDrawIndexed(commandBuffers[i], context._vulkanMeshes[meshCount]._numIndices, 1, 0, 0, 0);
 
@@ -1286,61 +1287,75 @@ bool Vulkan::createUniformBuffer(AppInformation & appInfo, VulkanContext & conte
 
 bool Vulkan::createDescriptorPool(VulkanContext & context, unsigned int bufferIndex)
 {
-    VkDescriptorPoolSize poolSize = {};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = static_cast<uint32_t>(context._rawImages.size());
-    
-    VkDescriptorPoolCreateInfo poolInfo = {};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
-    poolInfo.maxSets = static_cast<uint32_t>(context._rawImages.size());
-    
-    VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &context._vulkanMeshes[bufferIndex]._descriptorPool);
-	assert(creationResult == VK_SUCCESS);
-	return creationResult == VK_SUCCESS;
+	for (unsigned int meshIndex = 0; meshIndex < (unsigned int)context._vulkanMeshes.size(); meshIndex++)
+	{
+		VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
+
+		VkDescriptorPoolSize poolSize = {};
+		poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSize.descriptorCount = static_cast<uint32_t>(context._rawImages.size());
+
+		VkDescriptorPoolCreateInfo poolInfo = {};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.poolSizeCount = 1;
+		poolInfo.pPoolSizes = &poolSize;
+		poolInfo.maxSets = static_cast<uint32_t>(context._rawImages.size());
+
+		VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &mesh._descriptorPool);
+		assert(creationResult == VK_SUCCESS);
+		return creationResult == VK_SUCCESS;
+	}
+
+	return false;
 }
 
 bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
 {
-    const uint32_t size = (uint32_t)context._rawImages.size();
-    std::vector<VkDescriptorSetLayout> layouts(size, context._descriptorSetLayout);
-    VkDescriptorSetAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = context._vulkanMeshes[bufferIndex]._descriptorPool;
-    allocInfo.descriptorSetCount = size;
-    allocInfo.pSetLayouts = &layouts[0];
-    
-    context._vulkanMeshes[bufferIndex]._descriptorSets.resize(size);
-    VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &context._vulkanMeshes[bufferIndex]._descriptorSets[0]);
-	assert(allocationResult == VK_SUCCESS);
-	if (allocationResult != VK_SUCCESS)
-        return false;
-    
-    for (size_t i = 0; i < size; i++) {
-        VkDescriptorBufferInfo bufferInfo;
-        memset(&bufferInfo, 0, sizeof(bufferInfo));
-        bufferInfo.buffer = context._vulkanMeshes[bufferIndex]._uniformBuffers[i]._buffer;
-        bufferInfo.offset = 0;
-        bufferInfo.range = sizeof(UniformBufferObject);
-        
-        VkWriteDescriptorSet descriptorWrite = {};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = context._vulkanMeshes[bufferIndex]._descriptorSets[i];
-        descriptorWrite.dstBinding = 0;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pBufferInfo = &bufferInfo;
-        
-        vkUpdateDescriptorSets(context._device, 1, &descriptorWrite, 0, nullptr);
-    }
+	for (unsigned int meshIndex = 0; meshIndex < (unsigned int)context._vulkanMeshes.size(); meshIndex++)
+	{
+		VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
+
+		const uint32_t size = (uint32_t)context._rawImages.size();
+		std::vector<VkDescriptorSetLayout> layouts(size, context._descriptorSetLayout);
+		VkDescriptorSetAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = mesh._descriptorPool;
+		allocInfo.descriptorSetCount = size;
+		allocInfo.pSetLayouts = &layouts[0];
+
+		context._vulkanMeshes[bufferIndex]._descriptorSets.resize(size);
+		VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &mesh._descriptorSets[0]);
+		assert(allocationResult == VK_SUCCESS);
+		if (allocationResult != VK_SUCCESS)
+			return false;
+
+		for (size_t i = 0; i < size; i++) {
+			VkDescriptorBufferInfo bufferInfo;
+			memset(&bufferInfo, 0, sizeof(bufferInfo));
+			bufferInfo.buffer = mesh._uniformBuffers[i]._buffer;
+			bufferInfo.offset = 0;
+			bufferInfo.range = sizeof(UniformBufferObject);
+
+			VkWriteDescriptorSet descriptorWrite = {};
+			descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrite.dstSet = mesh._descriptorSets[i];
+			descriptorWrite.dstBinding = 0;
+			descriptorWrite.dstArrayElement = 0;
+			descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrite.descriptorCount = 1;
+			descriptorWrite.pBufferInfo = &bufferInfo;
+
+			vkUpdateDescriptorSets(context._device, 1, &descriptorWrite, 0, nullptr);
+		}
+	}
+
 
     return true;
 }
 
 void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex)
 {
+	return;
     UniformBufferObject ubo = {};
     ubo._model = glm::mat4();
     ubo._view = glm::mat4();

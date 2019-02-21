@@ -1355,7 +1355,6 @@ bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & conte
 
 void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex)
 {
-	return;
     UniformBufferObject ubo = {};
     ubo._model = glm::mat4();
     ubo._view = glm::mat4();

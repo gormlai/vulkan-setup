@@ -40,7 +40,9 @@ Vulkan::AppInformation::AppInformation()
 bool Vulkan::BufferDescriptor::fill(VkDevice device, const void * srcData, VkDeviceSize amount)
 {
     void * data = nullptr;
-    if(vkMapMemory(device, _memory, 0, amount, 0, &data) != VK_SUCCESS)
+	const VkResult mapResult = vkMapMemory(device, _memory, 0, amount, 0, &data);
+	assert(mapResult == VK_SUCCESS);
+    if(mapResult == VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to map vertex buffer memory\n");
         return false;
@@ -60,30 +62,34 @@ bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, VkCommandPool commandPo
     allocInfo.commandBufferCount = 1;
     
     VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+    const VkResult allocationResult = vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+	assert(allocationResult == VK_SUCCESS);
     
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    
+    const VkResult beginCommandBufferResult = vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	assert(beginCommandBufferResult == VK_SUCCESS);
+
     VkBufferCopy copyRegion = {};
     copyRegion.srcOffset = 0; // Optional
     copyRegion.dstOffset = 0; // Optional
     copyRegion.size = amount;
     vkCmdCopyBuffer(commandBuffer, src._buffer, _buffer, 1, &copyRegion);
     
-    vkEndCommandBuffer(commandBuffer);
+	const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBuffer);
     
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
     
-    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue);
-    
+    const VkResult submitResult = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+	assert(submitResult == VK_SUCCESS);
+	const VkResult waitResult = vkQueueWaitIdle(queue);
+	assert(waitResult == VK_SUCCESS);
+
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     return true;
 }
@@ -177,6 +183,7 @@ bool Vulkan::setupDebugCallback(Vulkan::VulkanContext & context)
 
 
 		VkResult debugUtilsCreationResult = debugUtilsMessengerCreator(context._instance, &createInfo, nullptr, &context._debugUtilsCallback);
+		assert(debugUtilsCreationResult == VK_SUCCESS);
 		if (debugUtilsCreationResult != VK_SUCCESS)
 		{
 			SDL_LogError(0, "Failed to create callback for method %s\n", debugFunctionCreatorName);
@@ -213,6 +220,7 @@ bool Vulkan::setupDebugCallback(Vulkan::VulkanContext & context)
 
 
 		VkResult debugReportCreationResult = debugReportMessengerCreator(context._instance, &createInfo, nullptr, &context._debugReportCallback);
+		assert(debugReportCreationResult == VK_SUCCESS);
 		if (debugReportCreationResult != VK_SUCCESS)
 		{
 			SDL_LogError(0, "Failed to create callback for method %s\n", debugFunctionCreatorName);
@@ -231,13 +239,14 @@ bool Vulkan::areValidationLayersAvailable(const std::vector<const char*> & valid
     std::vector<VkLayerProperties> layers;
     
     unsigned int layerCount = 0;
-    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+    const VkResult enumerateResult = vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+	assert(enumerateResult == VK_SUCCESS);
     if (layerCount > 0)
     {
         
         layers.resize(layerCount);
-        vkEnumerateInstanceLayerProperties(&layerCount, &layers[0]);
-        
+		const VkResult enumerateInstanceLayerResult = vkEnumerateInstanceLayerProperties(&layerCount, &layers[0]);
+		assert(enumerateInstanceLayerResult == VK_SUCCESS);
         for (const std::string & neededLayer : validationLayers)
         {
             bool found = false;
@@ -284,13 +293,15 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     // first count the number of instance extensions
     unsigned int instanceExtensionCount = 0;
     VkResult instanceEnumerateResult = vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, nullptr);
-    if (instanceEnumerateResult != VK_SUCCESS)
+	assert(instanceEnumerateResult == VK_SUCCESS);
+	if (instanceEnumerateResult != VK_SUCCESS)
         return false;
     
     std::vector<VkExtensionProperties> instanceExtensions;
     instanceExtensions.resize(instanceExtensionCount);
     instanceEnumerateResult = vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, &instanceExtensions[0]);
-    if (instanceEnumerateResult != VK_SUCCESS)
+	assert(instanceEnumerateResult == VK_SUCCESS);
+	if (instanceEnumerateResult != VK_SUCCESS)
         return false;
     
     std::vector<const char *> instanceExtensionNames;
@@ -412,7 +423,8 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppInformation & appInfo, Vulkan::
     uint32_t deviceCount = 0;
     // first count the number of physical devices by passing in NULL as the last argument
     VkResult countResult = vkEnumeratePhysicalDevices(context._instance, &deviceCount, NULL);
-    if (countResult != VK_SUCCESS) {
+	assert(countResult == VK_SUCCESS);
+	if (countResult != VK_SUCCESS) {
         SDL_LogError(0, "vkEnumeratePhysicalDevices returned error code %d", countResult);
         return false;
     }
@@ -424,7 +436,8 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppInformation & appInfo, Vulkan::
     
     std::vector<VkPhysicalDevice> devices(deviceCount);
     VkResult enumerateResult = vkEnumeratePhysicalDevices(context._instance, &deviceCount, &devices[0]);
-    if (enumerateResult != VK_SUCCESS) {
+	assert(enumerateResult == VK_SUCCESS);
+	if (enumerateResult != VK_SUCCESS) {
         SDL_LogError(0, "vkEnumeratePhysicalDevices returned error code %d", countResult);
         return false;
     }
@@ -486,19 +499,19 @@ bool Vulkan::lookupDeviceExtensions(AppInformation &appInfo) {
                                                                                     nullptr,
                                                                                     &deviceExtensionsCount,
                                                                                     nullptr);
-    if (enumerateDeviceExtensionsResult != VK_SUCCESS)
-    {
+	assert(enumerateDeviceExtensionsResult == VK_SUCCESS);
+	if (enumerateDeviceExtensionsResult != VK_SUCCESS)
         return false;
-    }
     
     if (deviceExtensionsCount > 0)
     {
         std::vector<VkExtensionProperties> deviceExtensions(deviceExtensionsCount);
-        vkEnumerateDeviceExtensionProperties(appInfo._physicalDevices[appInfo._chosenPhysicalDevice],
+		enumerateDeviceExtensionsResult = vkEnumerateDeviceExtensionProperties(appInfo._physicalDevices[appInfo._chosenPhysicalDevice],
                                              nullptr,
                                              &deviceExtensionsCount,
                                              &deviceExtensions[0]);
-        
+		assert(enumerateDeviceExtensionsResult == VK_SUCCESS);
+
         appInfo._deviceExtensions = deviceExtensions;
     }
     return true;
@@ -530,7 +543,8 @@ bool Vulkan::createDevice(AppInformation & appInfo, VulkanContext & context)
     deviceCreateInfo.enabledExtensionCount = numExtensionNames;
     
     VkResult creationResult = vkCreateDevice(appInfo._physicalDevices[appInfo._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
-    return creationResult == VK_SUCCESS;
+	assert(creationResult == VK_SUCCESS);
+	return creationResult == VK_SUCCESS;
 }
 
 bool Vulkan::createQueue(AppInformation & appInfo, VulkanContext & context)
@@ -544,17 +558,20 @@ bool Vulkan::createSwapChain(AppInformation & appInfo, VulkanContext & context)
 {
     // get surface capabilities
     VkResult surfaceCapabilitiesResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context._physicalDevice, context._surface, &context._surfaceCapabilities);
-    if (surfaceCapabilitiesResult != VK_SUCCESS)
+	assert(surfaceCapabilitiesResult == VK_SUCCESS);
+	if (surfaceCapabilitiesResult != VK_SUCCESS)
         return false;
     
     unsigned int surfaceFormatsCount = 0;
     VkResult surfaceFormatsCountResult = vkGetPhysicalDeviceSurfaceFormatsKHR(context._physicalDevice, context._surface, &surfaceFormatsCount, nullptr);
-    if (surfaceFormatsCountResult != VK_SUCCESS || surfaceFormatsCount == 0)
+	assert(surfaceFormatsCountResult == VK_SUCCESS);
+	if (surfaceFormatsCountResult != VK_SUCCESS || surfaceFormatsCount == 0)
         return false;
     
     appInfo._surfaceFormats.resize(surfaceFormatsCount);
     VkResult surfaceFormatsResult = vkGetPhysicalDeviceSurfaceFormatsKHR(context._physicalDevice, context._surface, &surfaceFormatsCount, &appInfo._surfaceFormats[0]);
-    if (surfaceFormatsResult != VK_SUCCESS || surfaceFormatsCount == 0)
+	assert(surfaceFormatsResult == VK_SUCCESS);
+	if (surfaceFormatsResult != VK_SUCCESS || surfaceFormatsCount == 0)
         return false;
     
     VkSwapchainCreateInfoKHR swapChainCreateInfo;
@@ -593,18 +610,21 @@ bool Vulkan::createSwapChain(AppInformation & appInfo, VulkanContext & context)
     swapChainCreateInfo.oldSwapchain = context._swapChain;
     
     VkResult swapChainCreationResult = vkCreateSwapchainKHR(context._device, &swapChainCreateInfo, nullptr, &context._swapChain);
-    if (swapChainCreationResult != VK_SUCCESS)
+	assert(swapChainCreationResult == VK_SUCCESS);
+	if (swapChainCreationResult != VK_SUCCESS)
         return false;
     
     // if success check how many images will actually be in the swap chain
     unsigned int vkImageCount = 0;
     VkResult getVkImageCountFromSwapChainResult = vkGetSwapchainImagesKHR(context._device, context._swapChain, &vkImageCount, nullptr);
-    if (getVkImageCountFromSwapChainResult != VK_SUCCESS || vkImageCount == 0)
+	assert(getVkImageCountFromSwapChainResult == VK_SUCCESS);
+	if (getVkImageCountFromSwapChainResult != VK_SUCCESS || vkImageCount == 0)
         return false;
     
     context._rawImages.resize(vkImageCount);
-    vkGetSwapchainImagesKHR(context._device, context._swapChain, &vkImageCount, &context._rawImages[0]);
-    
+    VkResult getSwapChainImagesResult = vkGetSwapchainImagesKHR(context._device, context._swapChain, &vkImageCount, &context._rawImages[0]);
+	assert(getSwapChainImagesResult == VK_SUCCESS);
+
     return true;
 }
 
@@ -633,6 +653,7 @@ bool Vulkan::createColorBuffers(VulkanContext & context)
         
         VkImageView imageView;
         VkResult imageViewCreationResult = vkCreateImageView(context._device, &createInfo, nullptr, &imageView);
+		assert(imageViewCreationResult == VK_SUCCESS);
         if (imageViewCreationResult != VK_SUCCESS)
             return false;
         
@@ -676,7 +697,8 @@ bool Vulkan::createRenderPass(VulkanContext & vulkanContext)
     createInfo.pSubpasses = &subpassDescription;
     
     VkResult createRenderPassResult = vkCreateRenderPass(vulkanContext._device, &createInfo, nullptr, &vulkanContext._renderPass);
-    if (createRenderPassResult != VK_SUCCESS)
+	assert(createRenderPassResult == VK_SUCCESS);
+	if (createRenderPassResult != VK_SUCCESS)
         return false;
     
     return true;
@@ -698,7 +720,8 @@ bool Vulkan::createFrameBuffers(VulkanContext & vulkanContext)
         
         VkFramebuffer frameBuffer;
         VkResult frameBufferCreationResult = vkCreateFramebuffer(vulkanContext._device, &createInfo, nullptr, &frameBuffer);
-        if (frameBufferCreationResult != VK_SUCCESS)
+		assert(frameBufferCreationResult == VK_SUCCESS);
+		if (frameBufferCreationResult != VK_SUCCESS)
             return false;
         
         vulkanContext._frameBuffers.push_back(frameBuffer);
@@ -722,7 +745,8 @@ std::vector<VkShaderModule> Vulkan::createShaderModules(AppInformation & appInfo
         VkShaderModule module;
         VkResult result;
         result = vkCreateShaderModule(context._device, &createInfo, nullptr, &module);
-        if (result != VK_SUCCESS)
+		assert(result == VK_SUCCESS);
+		if (result != VK_SUCCESS)
         {
             SDL_LogError(0, "Failed to create shader module for file %s with error %d\n", shader._filename.c_str(), (int)result);
             return std::vector<VkShaderModule>();
@@ -881,7 +905,9 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     
     
     VkPipelineLayout pipelineLayout;
-    if (vkCreatePipelineLayout(context._device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+	VkResult createPipelineLayoutResult = vkCreatePipelineLayout(context._device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
+	assert(createPipelineLayoutResult == VK_SUCCESS);
+    if (createPipelineLayoutResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to create graphics pipeline layout\n");
         return false;
@@ -914,14 +940,14 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 
     // TODO: missing some stuff here
     VkPipeline graphicsPipeline;
-    if (vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &graphicsPipeline) != VK_SUCCESS)
+	const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &graphicsPipeline);
+	assert(createGraphicsPipelineResult == VK_SUCCESS);
+	if (createGraphicsPipelineResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to create vulkan graphics pipeline\n");
         return false;
     }
     context._pipeline = graphicsPipeline;
-    
-    
     return true;
 }
 
@@ -940,7 +966,8 @@ bool Vulkan::createDescriptorSetLayout(VulkanContext & vulkanContext)
     createInfo.pBindings = &descriptorSetLayoutBinding;
     
     VkResult creationResult = vkCreateDescriptorSetLayout(vulkanContext._device, &createInfo, nullptr, &vulkanContext._descriptorSetLayout);
-    return creationResult == VK_SUCCESS;
+	assert(creationResult == VK_SUCCESS);
+	return creationResult == VK_SUCCESS;
 }
 
 
@@ -953,7 +980,9 @@ bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context
     createInfo.queueFamilyIndex = appInfo._chosenPhysicalDevice;
     createInfo.flags = 0;
     VkCommandPool commandPool;
-    if(vkCreateCommandPool(context._device, &createInfo, nullptr, &commandPool) != VK_SUCCESS)
+	const VkResult createCommandPoolResult = vkCreateCommandPool(context._device, &createInfo, nullptr, &commandPool);
+	assert(createCommandPoolResult == VK_SUCCESS);
+	if (createCommandPoolResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to create command pool\n");
         return false;
@@ -972,7 +1001,9 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
     commandBufferAllocateInfo.commandPool = context._commandPool;
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     commandBufferAllocateInfo.commandBufferCount = (unsigned int)commandBuffers.size();
-    if(vkAllocateCommandBuffers(context._device, &commandBufferAllocateInfo, &commandBuffers[0]) != VK_SUCCESS)
+	const VkResult allocateCommandBuffersResult = vkAllocateCommandBuffers(context._device, &commandBufferAllocateInfo, &commandBuffers[0]);
+	assert(allocateCommandBuffersResult == VK_SUCCESS);
+	if (allocateCommandBuffersResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to create VkCommandbufferAllocateInfo\n");
         return false;
@@ -985,7 +1016,9 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
 		memset(&beginInfo, 0, sizeof(VkCommandBufferBeginInfo));
 		beginInfo.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-        if(vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS)
+		const VkResult beginCommandBufferResult = vkBeginCommandBuffer(commandBuffers[i], &beginInfo);
+		assert(beginCommandBufferResult == VK_SUCCESS);
+        if(beginCommandBufferResult != VK_SUCCESS)
         {
             SDL_LogError(0, "call to vkBeginCommandBuffer failed\n");
             return false;
@@ -1012,8 +1045,9 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
 			VkDeviceSize offsets[] = { 0 };
 
 
-			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffer, offsets);
+			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, &vertexBuffer[0], offsets);
 			vkCmdBindIndexBuffer(commandBuffers[i], context._vulkanMeshes[meshCount]._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);
+
 /*            vkCmdBindDescriptorSets(commandBuffers[i],
                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     context._pipelineLayout,
@@ -1028,7 +1062,9 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
 		}
 		vkCmdEndRenderPass(commandBuffers[i]);
 
-        if(vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
+		const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBuffers[i]);
+		assert(endCommandBufferResult == VK_SUCCESS);
+        if(endCommandBufferResult != VK_SUCCESS)
         {
             SDL_LogError(0,"Call to vkEndCommandBuffer failed (i=%d)\n", i);
             return false;
@@ -1050,7 +1086,9 @@ std::vector<VkFence> Vulkan::createFences(VulkanContext & context)
         createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         createInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         
-        if(vkCreateFence(context._device, &createInfo, nullptr, &fences[i]) != VK_SUCCESS)
+		const VkResult createFenceResult = vkCreateFence(context._device, &createInfo, nullptr, &fences[i]);
+		assert(createFenceResult == VK_SUCCESS);
+        if(createFenceResult != VK_SUCCESS)
         {
             SDL_LogError(0, "Failed to create fences (%d)\n", i);
             return std::vector<VkFence>();
@@ -1069,7 +1107,9 @@ std::vector<VkSemaphore> Vulkan::createSemaphores(VulkanContext & context)
         memset(&createInfo, 0, sizeof(VkSemaphoreCreateInfo));
         createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         
-        if(vkCreateSemaphore(context._device, &createInfo, nullptr, &semaphores[i]) != VK_SUCCESS)
+		const VkResult createSemaphoreResult = vkCreateSemaphore(context._device, &createInfo, nullptr, &semaphores[i]);
+		assert(createSemaphoreResult == VK_SUCCESS);
+        if(createSemaphoreResult != VK_SUCCESS)
         {
             SDL_LogError(0, "Failed to create semaphore (%d)\n", i);
             return std::vector<VkSemaphore>();
@@ -1114,7 +1154,9 @@ bool Vulkan::createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUs
     createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     
     VkBuffer vertexBuffer;
-    if(vkCreateBuffer(context._device, &createInfo, nullptr, &vertexBuffer) != VK_SUCCESS)
+	const VkResult createBufferResult = vkCreateBuffer(context._device, &createInfo, nullptr, &vertexBuffer);
+	assert(createBufferResult == VK_SUCCESS);
+    if(createBufferResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to create vertex buffer\n");
         return false;
@@ -1136,13 +1178,17 @@ bool Vulkan::createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUs
     allocInfo.memoryTypeIndex = (uint32_t)memType;
     
     VkDeviceMemory vertexBufferMemory;
-    if(vkAllocateMemory(context._device, &allocInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS)
+	const VkResult allocateMemoryResult = vkAllocateMemory(context._device, &allocInfo, nullptr, &vertexBufferMemory);
+	assert(allocateMemoryResult == VK_SUCCESS);
+	if (allocateMemoryResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to allocate memory necessary for the vertex buffer\n");
         return false;
     }
     
-    if(vkBindBufferMemory(context._device, vertexBuffer, vertexBufferMemory, 0) != VK_SUCCESS)
+	const VkResult bindBufferResult = vkBindBufferMemory(context._device, vertexBuffer, vertexBufferMemory, 0);
+	assert(bindBufferResult == VK_SUCCESS);
+	if (bindBufferResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to bind vertex buffer memory\n");
         return false;
@@ -1185,7 +1231,9 @@ bool Vulkan::createIndexBuffer(AppInformation & appInfo, VulkanContext & context
 	const void * data = indexData.data();
 	const VkDeviceSize bufferSize =  indexData.size();
 	BufferDescriptor indexBuffer;
-	createBuffer(context, data, bufferSize, indexBuffer, BufferType::Index);
+	if (!createBuffer(context, data, bufferSize, indexBuffer, BufferType::Index))
+		return false;
+
 	context._vulkanMeshes[bufferIndex]._indexBuffer = indexBuffer;
 	context._vulkanMeshes[bufferIndex]._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
 	return true;
@@ -1198,7 +1246,8 @@ bool Vulkan::createVertexBuffer(AppInformation & appInfo, VulkanContext & contex
 	const void * data = vertexData.data();
 	const VkDeviceSize bufferSize = vertexData.size();
 	BufferDescriptor vertexBuffer;
-    createBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex);
+	if (!createBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex))
+		return false;
 	context._vulkanMeshes[bufferIndex]._vertexBuffer = vertexBuffer;
     return true;
 }
@@ -1237,7 +1286,8 @@ bool Vulkan::createDescriptorPool(VulkanContext & context, unsigned int bufferIn
     poolInfo.maxSets = static_cast<uint32_t>(context._rawImages.size());
     
     VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &context._vulkanMeshes[bufferIndex]._descriptorPool);
-    return creationResult == VK_SUCCESS;
+	assert(creationResult == VK_SUCCESS);
+	return creationResult == VK_SUCCESS;
 }
 
 bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
@@ -1252,7 +1302,8 @@ bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & conte
     
     context._vulkanMeshes[bufferIndex]._descriptorSets.resize(size);
     VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &context._vulkanMeshes[bufferIndex]._descriptorSets[0]);
-    if(allocationResult != VK_SUCCESS)
+	assert(allocationResult == VK_SUCCESS);
+	if (allocationResult != VK_SUCCESS)
         return false;
     
     for (size_t i = 0; i < size; i++) {
@@ -1285,11 +1336,12 @@ void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, u
     ubo._projection = glm::mat4();
     
     void* data = nullptr;
-    vkMapMemory(context._device,
+    const VkResult mapMemoryResult = vkMapMemory(context._device,
                 context._vulkanMeshes[meshIndex]._uniformBuffers[bufferIndex]._memory,
                 0,
                 sizeof(ubo),
                 0, &data);
+	assert(mapMemoryResult == VK_SUCCESS);
     
     memcpy(data, &ubo, sizeof(ubo));
     vkUnmapMemory(context._device, context._vulkanMeshes[meshIndex]._uniformBuffers[bufferIndex]._memory);

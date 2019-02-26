@@ -148,15 +148,14 @@ bool Vulkan::setupDebugCallback(Vulkan::VulkanContext & context)
 		auto debugUtilsMessengerCreator = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(context._instance, debugFunctionCreatorName);
 		if (debugUtilsMessengerCreator == nullptr)
 		{
-#if defined(__APPLE__) // function doesn't seeem to exist with moltenvk
-			return true;
-#else
-			SDL_LogError(0, "Could not create function: %s\n", debugFunctionCreatorName);
-			return false;
+#if !defined(__APPLE__) // function doesn't seeem to exist with moltenvk
+            SDL_LogError(0, "Could not create function: %s\n", debugFunctionCreatorName);
+            return false;
 #endif
 		}
 
 
+#if !defined(__APPLE__) // function doesn't seeem to exist with moltenvk
 		VkDebugUtilsMessengerCreateInfoEXT createInfo;
 		memset(&createInfo, 0, sizeof(createInfo));
 
@@ -183,6 +182,7 @@ bool Vulkan::setupDebugCallback(Vulkan::VulkanContext & context)
 			// TODO: should probably destroy the callbackCreator here
 			return false;
 		}
+#endif
 	}
     
 	// debug report
@@ -378,10 +378,9 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     {
         static const std::vector<const char*> validationLayers = {
 #if defined(__APPLE__)
-            "MoltenVK"
-#else
-            "VK_LAYER_LUNARG_standard_validation"
+           "MoltenVK",
 #endif
+            "VK_LAYER_LUNARG_standard_validation"
         };
         if (areValidationLayersAvailable(validationLayers))
         {

@@ -56,6 +56,10 @@ namespace Vulkan
         PosType _position;
         ColorType _color;
         
+        Vertex(const PosType & position, const ColorType & color)
+        :_position(position)
+        ,_color(color) {}
+        
 		static VkVertexInputBindingDescription getBindingDescription()
 		{
 			VkVertexInputBindingDescription bindingDescription;

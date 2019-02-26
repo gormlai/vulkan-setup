@@ -148,8 +148,11 @@ namespace Vulkan
 		std::function <VkVertexInputBindingDescription()> _getBindingDescription = []() { return VkVertexInputBindingDescription(); };
 		std::function < std::array<VkVertexInputAttributeDescription, 2>()> _getAttributes = []() {return std::array<VkVertexInputAttributeDescription, 2>(); };
         
-        typedef std::function <bool(float)> UpdateFunction; // returns true, if the code should continue. Return false, to request termination
-        UpdateFunction _updateFunction = [](float d) { return true; };
+        typedef std::function <bool(float, float)> UpdateFunction; // returns true, if the code should continue. Return false, to request termination
+        UpdateFunction _updateFunction = [](float, float) { return true; };
+        
+        typedef std::function<glm::mat4 (const void*, float, float)> UpdateModelMatrix;
+        UpdateModelMatrix _updateModelMatrix = [](const void*, float, float) { return glm::mat4(); };
         
         AppInformation();
     };

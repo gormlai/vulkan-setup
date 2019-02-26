@@ -1367,21 +1367,17 @@ bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & conte
 
 void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex)
 {
-    UniformBufferObject ubo = {};
-    ubo._model = glm::mat4();
-    ubo._view = glm::mat4();
-    ubo._projection = glm::mat4();
+    VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
     
-	float time = 0;
+    UniformBufferObject ubo = mesh._transformation;
 
-	ubo._model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	ubo._view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	ubo._projection = glm::perspective(glm::radians(45.0f), context._swapChainSize.width / (float)context._swapChainSize.height, 0.1f, 10.0f);
 	ubo._projection[1][1] *= -1;
 
     void* data = nullptr;
     const VkResult mapMemoryResult = vkMapMemory(context._device,
-                context._vulkanMeshes[meshIndex]._uniformBuffers[bufferIndex]._memory,
+                mesh._uniformBuffers[bufferIndex]._memory,
                 0,
                 sizeof(ubo),
                 0, &data);
@@ -1393,15 +1389,19 @@ void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, u
 
 bool Vulkan::update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage)
 {
-    static uint32_t lastTime = SDL_GetTicks();
+    static uint32_t firstTime = SDL_GetTicks();
+    static uint32_t lastTime = firstTime;
     const uint32_t currentTime = SDL_GetTicks();
     const uint32_t deltaMs = currentTime - lastTime;
+    const uint32_t timePassedMs = currentTime - firstTime;
     const float deltaS = float(deltaMs) / 1000.0f;
+    const float timePassedS = float(timePassedMs) / 1000.0f;
     
-    const bool updateResult = appInfo._updateFunction(deltaS);
+    const bool updateResult = appInfo._updateFunction(timePassedS, deltaS);
 	for(unsigned int meshIndex = 0 ; meshIndex < context._vulkanMeshes.size() ; meshIndex++)
 	{
 		VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
+        mesh._transformation._model = appInfo._updateModelMatrix(mesh._userData, timePassedS, deltaS);
 		for (unsigned int i = 0; i < (unsigned int)mesh._uniformBuffers.size(); i++)
 			updateUniforms(appInfo, context, i, meshIndex);
 	}

@@ -60,6 +60,12 @@ namespace Vulkan
         :_position(position)
         ,_color(color) {}
         
+        Vertex(const Vertex & src)
+        :_position(src._position)
+        ,_color(src._color) {}
+        
+        Vertex() {}
+  
 		static VkVertexInputBindingDescription getBindingDescription()
 		{
 			VkVertexInputBindingDescription bindingDescription;

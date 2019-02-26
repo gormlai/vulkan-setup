@@ -78,12 +78,12 @@ namespace Vulkan
 
 			attributes[0].binding = 0;
 			attributes[0].location = 0;
-			attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
+			attributes[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			attributes[0].offset = offsetof(Vertex, _position);
 
 			attributes[1].binding = 0;
 			attributes[1].location = 1;
-			attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			attributes[1].offset = offsetof(Vertex, _color);
 			return attributes;
 		}

@@ -1381,14 +1381,22 @@ void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, u
     vkUnmapMemory(context._device, context._vulkanMeshes[meshIndex]._uniformBuffers[bufferIndex]._memory);
 }
 
-void Vulkan::update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage)
+bool Vulkan::update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage)
 {
+    static uint32_t lastTime = SDL_GetTicks();
+    const uint32_t currentTime = SDL_GetTicks();
+    const uint32_t deltaMs = currentTime - lastTime;
+    const float deltaS = float(deltaMs) / 1000.0f;
+    
+    const bool updateResult = appInfo._updateFunction(deltaS);
 	for(unsigned int meshIndex = 0 ; meshIndex < context._vulkanMeshes.size() ; meshIndex++)
 	{
 		VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
 		for (unsigned int i = 0; i < (unsigned int)mesh._uniformBuffers.size(); i++)
 			updateUniforms(appInfo, context, i, meshIndex);
 	}
+    
+    return updateResult;
 }
 
 

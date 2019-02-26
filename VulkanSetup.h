@@ -137,9 +137,11 @@ namespace Vulkan
 		std::function<int (BufferType)> _numBuffers = [](BufferType) { return 0;  };
 		std::function<void(BufferType, unsigned int, std::vector<unsigned char> &)> _createBuffer = [](BufferType, unsigned int, std::vector<unsigned char> &) {};
 
-
 		std::function <VkVertexInputBindingDescription()> _getBindingDescription = []() { return VkVertexInputBindingDescription(); };
 		std::function < std::array<VkVertexInputAttributeDescription, 2>()> _getAttributes = []() {return std::array<VkVertexInputAttributeDescription, 2>(); };
+        
+        typedef std::function <bool(float)> UpdateFunction; // returns true, if the code should continue. Return false, to request termination
+        UpdateFunction _updateFunction = [](float d) { return true; };
         
         AppInformation();
     };
@@ -249,7 +251,7 @@ namespace Vulkan
     bool createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool handleVulkanSetup(AppInformation & appInfo, VulkanContext & context);
     
-    void update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
+    bool update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
     void updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex);
 
 }

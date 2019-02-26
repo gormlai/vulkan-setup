@@ -82,7 +82,8 @@ bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, VkCommandPool commandPo
     vkCmdCopyBuffer(commandBuffer, src._buffer, _buffer, 1, &copyRegion);
     
 	const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBuffer);
-    
+    assert(endCommandBufferResult == VK_SUCCESS);
+
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
@@ -1238,32 +1239,40 @@ bool Vulkan::createBuffer(VulkanContext & context, const void * srcData, VkDevic
     
 }
 
-bool Vulkan::createIndexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
+bool Vulkan::createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int meshIndex)
 {
-	std::vector<unsigned char> indexData;
-	appInfo._createBuffer(BufferType::Index, bufferIndex, indexData);
-	const void * data = indexData.data();
-	const VkDeviceSize bufferSize =  indexData.size();
-	BufferDescriptor indexBuffer;
-	if (!createBuffer(context, data, bufferSize, indexBuffer, BufferType::Index))
-		return false;
+    std::vector<unsigned char> indexData;
+    std::vector<unsigned char> vertexData;
+    void * userData = nullptr;
+    BufferDescriptor indexBuffer;
+    BufferDescriptor vertexBuffer;
 
-	context._vulkanMeshes[bufferIndex]._indexBuffer = indexBuffer;
-	context._vulkanMeshes[bufferIndex]._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
-	return true;
-}
-
-bool Vulkan::createVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex )
-{
-	std::vector<unsigned char> vertexData;
-	appInfo._createBuffer(BufferType::Vertex, bufferIndex, vertexData);
-	const void * data = vertexData.data();
-	const VkDeviceSize bufferSize = vertexData.size();
-	BufferDescriptor vertexBuffer;
-	if (!createBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex))
-		return false;
-	context._vulkanMeshes[bufferIndex]._vertexBuffer = vertexBuffer;
+    appInfo._createMesh(meshIndex, indexData, vertexData, &userData);
+    
+    {
+        // index buffer
+        const void * data = indexData.data();
+        const VkDeviceSize bufferSize =  indexData.size();
+        if (!createBuffer(context, data, bufferSize, indexBuffer, BufferType::Index))
+            return false;
+    }
+    
+    {
+        // vertex buffer
+        const void * data = vertexData.data();
+        const VkDeviceSize bufferSize = vertexData.size();
+        if (!createBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex))
+            return false;
+    }
+    
+    VulkanMesh & vulkanMesh = context._vulkanMeshes[meshIndex];
+    vulkanMesh._indexBuffer = indexBuffer;
+    vulkanMesh._vertexBuffer = vertexBuffer;
+    vulkanMesh._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
+    vulkanMesh._userData = userData;
+    
     return true;
+
 }
 
 bool Vulkan::createUniformBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
@@ -1305,10 +1314,11 @@ bool Vulkan::createDescriptorPool(VulkanContext & context, unsigned int bufferIn
 
 		VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &mesh._descriptorPool);
 		assert(creationResult == VK_SUCCESS);
-		return creationResult == VK_SUCCESS;
+        if(creationResult != VK_SUCCESS)
+            return false;
 	}
 
-	return false;
+	return true;
 }
 
 bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
@@ -1513,21 +1523,15 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         return false;
     }
     
-	for (int i = 0; i < appInfo._numBuffers(BufferType::Vertex); i++)
+	for (int i = 0; i < appInfo._numMeshes(); i++)
 	{
 		context._vulkanMeshes.push_back(Vulkan::VulkanMesh());
-		if (!createVertexBuffer(appInfo, context, i))
+		if (!createIndexAndVertexBuffer(appInfo, context, i))
 		{
-			SDL_LogError(0, "Failed to create vertex buffer\n");
+			SDL_LogError(0, "Failed to create index and vertex buffer\n");
 			return false;
 		}
 
-        if (!createIndexBuffer(appInfo, context, i))
-        {
-            SDL_LogError(0, "Failed to create index buffer\n");
-            return false;
-        }
-        
         if (!createUniformBuffer(appInfo, context, i))
         {
             SDL_LogError(0, "Failed to create uniform buffer\n");

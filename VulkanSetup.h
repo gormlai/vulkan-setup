@@ -11,6 +11,10 @@
 #include <functional>
 
 #include <glm/glm.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 
 /*
  LICENSE - this file is public domain
@@ -134,8 +138,12 @@ namespace Vulkan
         
         std::vector<Shader> _shaders;
 
-		std::function<int (BufferType)> _numBuffers = [](BufferType) { return 0;  };
-		std::function<void(BufferType, unsigned int, std::vector<unsigned char> &)> _createBuffer = [](BufferType, unsigned int, std::vector<unsigned char> &) {};
+		std::function<int (void)> _numMeshes = []() { return 0;  };
+        std::function<void(unsigned int, std::vector<unsigned char> &, std::vector<unsigned char> &, void **)> _createMesh =
+            [](unsigned int meshIndex,
+               std::vector<unsigned char> &indexData,
+               std::vector<unsigned char> & vertexData,
+               void ** userData) {};
 
 		std::function <VkVertexInputBindingDescription()> _getBindingDescription = []() { return VkVertexInputBindingDescription(); };
 		std::function < std::array<VkVertexInputAttributeDescription, 2>()> _getAttributes = []() {return std::array<VkVertexInputAttributeDescription, 2>(); };
@@ -154,7 +162,7 @@ namespace Vulkan
         bool fill(VkDevice device, const void * srcData, VkDeviceSize amount);
         bool copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, BufferDescriptor & src, VkDeviceSize amount);
     };
-
+    
 	struct VulkanMesh
 	{
 		BufferDescriptor _vertexBuffer;
@@ -164,7 +172,9 @@ namespace Vulkan
         std::vector<VkDescriptorSet> _descriptorSets;
 
 		unsigned int _numIndices;
-
+        UniformBufferObject _transformation;
+        void * _userData;
+        
 		VulkanMesh()
 		{
 			memset(this, 0, sizeof(VulkanMesh));
@@ -244,9 +254,8 @@ namespace Vulkan
     int findMemoryType(VulkanContext & context, uint32_t typeFilter, VkMemoryPropertyFlags properties);
     bool createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc);
     bool createBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type);
-    bool createIndexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
-    bool createVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
-    bool createUniformBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
+    bool createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int meshIndex);
+    bool createUniformBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int meshIndex);
     bool createDescriptorPool(VulkanContext & context, unsigned int bufferIndex);
     bool createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
     bool handleVulkanSetup(AppInformation & appInfo, VulkanContext & context);

@@ -1371,9 +1371,8 @@ void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, u
     
     UniformBufferObject ubo = mesh._transformation;
 
-	ubo._view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo._view = glm::lookAt(glm::vec3(0.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	ubo._projection = glm::perspective(glm::radians(45.0f), context._swapChainSize.width / (float)context._swapChainSize.height, 0.1f, 10.0f);
-	ubo._projection[1][1] *= -1;
 
     void* data = nullptr;
     const VkResult mapMemoryResult = vkMapMemory(context._device,

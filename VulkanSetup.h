@@ -11,9 +11,10 @@
 #include <functional>
 
 #include <glm/glm.hpp>
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/transform.hpp>
 
 
 /*
@@ -114,6 +115,8 @@ namespace Vulkan
         glm::mat4 _model;
         glm::mat4 _view;
         glm::mat4 _projection;
+        glm::vec4 _lights[16];
+        int _numLights;
     };
     
     struct Shader

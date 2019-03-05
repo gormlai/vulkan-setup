@@ -1,3 +1,4 @@
+
 #include "VulkanSetup.h"
 
 #define GLM_FORCE_RADIANS
@@ -952,8 +953,6 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 	depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 	createInfo.pDepthStencilState = &depthStencilState;
 
-
-    // TODO: missing some stuff here
     VkPipeline graphicsPipeline;
 	const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &graphicsPipeline);
 	assert(createGraphicsPipelineResult == VK_SUCCESS);
@@ -1373,6 +1372,10 @@ void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, u
 
 	ubo._view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	ubo._projection = glm::perspective(glm::radians(45.0f), context._swapChainSize.width / (float)context._swapChainSize.height, 0.1f, 10.0f);
+    
+    // set lights
+    ubo._lights[0] = glm::vec4{0,0,0,0};
+    ubo._numLights = 1;
 
     void* data = nullptr;
     const VkResult mapMemoryResult = vkMapMemory(context._device,

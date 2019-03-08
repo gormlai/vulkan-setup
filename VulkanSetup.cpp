@@ -1247,6 +1247,8 @@ bool Vulkan::createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext 
     BufferDescriptor vertexBuffer;
 
     appInfo._createMesh(meshIndex, indexData, vertexData, &userData);
+    if(indexData.empty() || vertexData.empty())
+        return false;
     
     {
         // index buffer

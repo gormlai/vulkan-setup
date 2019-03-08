@@ -223,6 +223,7 @@ namespace Vulkan
         VkRenderPass _renderPass;
         VkPipeline _pipeline;
         VkPipelineLayout _pipelineLayout;
+		VkPipelineCache _pipelineCache;
         
         VkDescriptorSetLayout _descriptorSetLayout;
         
@@ -261,7 +262,8 @@ namespace Vulkan
     bool createFrameBuffers(VulkanContext & vulkanContext);
     std::vector<VkShaderModule> createShaderModules(AppInformation & appInfo, VulkanContext & context);
     bool createFixedState(AppInformation & appInfo, VulkanContext & context);
-    bool createGraphicsPipeline(AppInformation & appInfo, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules);
+	bool createPipelineCache(AppInformation & appInfo, VulkanContext & context);
+	bool createGraphicsPipeline(AppInformation & appInfo, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules);
     bool createCommandPool(AppInformation & appInfo, VulkanContext & context);
     bool createCommandBuffers(AppInformation & appInfo, VulkanContext & context);
     std::vector<VkFence> createFences(VulkanContext & context);

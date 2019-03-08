@@ -13,6 +13,7 @@ bool Vulkan::validationLayersEnabled = true;
 Vulkan::VulkanContext::VulkanContext()
 :_currentFrame(0)
 ,_swapChain(nullptr)
+,_pipelineCache(VK_NULL_HANDLE)
 {
     
 }
@@ -781,6 +782,22 @@ bool Vulkan::createFixedState(AppInformation & appInfo, VulkanContext & context)
     return true;
 }
 
+bool Vulkan::createPipelineCache(AppInformation & appInfo, VulkanContext & context)
+{
+	if (context._pipelineCache != VK_NULL_HANDLE)
+	{
+		VkPipelineCacheCreateInfo createInfo;
+		memset(&createInfo, 0, sizeof(createInfo));
+
+		createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		VkResult creationResult = vkCreatePipelineCache(context._device, &createInfo, VK_NULL_HANDLE, &context._pipelineCache);
+		return creationResult == VK_SUCCESS;
+	}
+	else
+		return false;
+}
+
+
 bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules)
 {
     const std::vector<Shader> & shaders = appInfo._shaders;
@@ -954,7 +971,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 	createInfo.pDepthStencilState = &depthStencilState;
 
     VkPipeline graphicsPipeline;
-	const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &graphicsPipeline);
+	const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, context._pipelineCache, 1, &createInfo, nullptr, &graphicsPipeline);
 	assert(createGraphicsPipelineResult == VK_SUCCESS);
 	if (createGraphicsPipelineResult != VK_SUCCESS)
     {
@@ -1508,6 +1525,11 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         SDL_LogError(0, "Failed to create descriptor set layouts!");
         return false;
     }
+
+	if (!createPipelineCache(appInfo, context))
+	{
+		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
+	}
     
     if (!createGraphicsPipeline(appInfo, context, shaderModules))
     {

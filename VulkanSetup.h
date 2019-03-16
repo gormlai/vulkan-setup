@@ -229,6 +229,7 @@ namespace Vulkan
         
         VkDebugUtilsMessengerEXT _debugUtilsCallback;
 		VkDebugReportCallbackEXT _debugReportCallback;
+		VkAllocationCallbacks * _allocator;
         
         VkCommandPool _commandPool;
         std::vector<VkCommandBuffer> _commandBuffers;

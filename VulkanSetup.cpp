@@ -784,12 +784,15 @@ bool Vulkan::createFixedState(AppInformation & appInfo, VulkanContext & context)
 
 bool Vulkan::createPipelineCache(AppInformation & appInfo, VulkanContext & context)
 {
-	if (context._pipelineCache != VK_NULL_HANDLE)
+	if (context._pipelineCache == VK_NULL_HANDLE)
 	{
 		VkPipelineCacheCreateInfo createInfo;
-		memset(&createInfo, 0, sizeof(createInfo));
-
 		createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		createInfo.flags = 0;
+		createInfo.initialDataSize = 0;
+		createInfo.pInitialData = nullptr;
+		createInfo.pNext = nullptr;
+
 		VkResult creationResult = vkCreatePipelineCache(context._device, &createInfo, VK_NULL_HANDLE, &context._pipelineCache);
 		return creationResult == VK_SUCCESS;
 	}
@@ -1526,12 +1529,12 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         return false;
     }
 
-	/*
+	
 	if (!createPipelineCache(appInfo, context))
 	{
 		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
 	}
-	*/
+	
     
     if (!createGraphicsPipeline(appInfo, context, shaderModules))
     {

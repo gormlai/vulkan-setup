@@ -971,7 +971,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 	createInfo.pDepthStencilState = &depthStencilState;
 
     VkPipeline graphicsPipeline;
-	const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, context._pipelineCache, 1, &createInfo, nullptr, &graphicsPipeline);
+	const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &graphicsPipeline);
 	assert(createGraphicsPipelineResult == VK_SUCCESS);
 	if (createGraphicsPipelineResult != VK_SUCCESS)
     {
@@ -1526,10 +1526,12 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         return false;
     }
 
+	/*
 	if (!createPipelineCache(appInfo, context))
 	{
 		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
 	}
+	*/
     
     if (!createGraphicsPipeline(appInfo, context, shaderModules))
     {

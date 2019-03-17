@@ -14,6 +14,7 @@ Vulkan::VulkanContext::VulkanContext()
 :_currentFrame(0)
 ,_swapChain(nullptr)
 ,_pipelineCache(VK_NULL_HANDLE)
+,_allocator(nullptr)
 {
     
 }
@@ -1006,7 +1007,7 @@ bool Vulkan::createDescriptorSetLayout(VulkanContext & vulkanContext)
 
 
 
-bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context, VkCommandPool * result)
 {
     VkCommandPoolCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkCommandPoolCreateInfo));
@@ -1021,11 +1022,11 @@ bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context
         SDL_LogError(0, "Failed to create command pool\n");
         return false;
     }
-    context._commandPool = commandPool;
+    *result = commandPool;
     return true;
 }
 
-bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & context, std::vector<VkCommandBuffer> * result)
 {
     std::vector<VkCommandBuffer> commandBuffers(context._frameBuffers.size());
     
@@ -1043,35 +1044,44 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
         return false;
     }
     
-    // do a basic recording of the command buffers
-    for(unsigned int i=0 ; i < (unsigned int)commandBuffers.size() ; i++)
-    {
-        VkCommandBufferBeginInfo beginInfo;
+    *result = commandBuffers;
+    
+    return true;
+}
+
+bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContext & context)
+{
+	std::vector<VkCommandBuffer> & commandBuffers = context._commandBuffers;
+
+	// do a basic recording of the command buffers
+	for (unsigned int i = 0; i < (unsigned int)commandBuffers.size(); i++)
+	{
+		VkCommandBufferBeginInfo beginInfo;
 		memset(&beginInfo, 0, sizeof(VkCommandBufferBeginInfo));
 		beginInfo.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 		const VkResult beginCommandBufferResult = vkBeginCommandBuffer(commandBuffers[i], &beginInfo);
 		assert(beginCommandBufferResult == VK_SUCCESS);
-        if(beginCommandBufferResult != VK_SUCCESS)
-        {
-            SDL_LogError(0, "call to vkBeginCommandBuffer failed\n");
-            return false;
-        }
-        
-        VkRenderPassBeginInfo renderPassBeginInfo;
-        memset(&renderPassBeginInfo, 0, sizeof(VkRenderPassBeginInfo));
-        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassBeginInfo.renderPass = context._renderPass;
-        renderPassBeginInfo.framebuffer = context._frameBuffers[i];
-        renderPassBeginInfo.renderArea.offset = {0,0};
-        renderPassBeginInfo.renderArea.extent = context._swapChainSize;
-        
-        VkClearValue clearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
-        renderPassBeginInfo.clearValueCount = 1;
-        renderPassBeginInfo.pClearValues = &clearColorValue;
-        
-        vkCmdBeginRenderPass(commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, context._pipeline);
+		if (beginCommandBufferResult != VK_SUCCESS)
+		{
+			SDL_LogError(0, "call to vkBeginCommandBuffer failed\n");
+			return false;
+		}
+
+		VkRenderPassBeginInfo renderPassBeginInfo;
+		memset(&renderPassBeginInfo, 0, sizeof(VkRenderPassBeginInfo));
+		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassBeginInfo.renderPass = context._renderPass;
+		renderPassBeginInfo.framebuffer = context._frameBuffers[i];
+		renderPassBeginInfo.renderArea.offset = { 0,0 };
+		renderPassBeginInfo.renderArea.extent = context._swapChainSize;
+
+		VkClearValue clearColorValue{ 0.0f, 0.0f, 0.0f, 1.0f };
+		renderPassBeginInfo.clearValueCount = 1;
+		renderPassBeginInfo.pClearValues = &clearColorValue;
+
+		vkCmdBeginRenderPass(commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, context._pipeline);
 
 		for (unsigned int meshCount = 0; meshCount < context._vulkanMeshes.size(); meshCount++)
 		{
@@ -1082,33 +1092,32 @@ bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & cont
 			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, &vertexBuffer[0], offsets);
 			vkCmdBindIndexBuffer(commandBuffers[i], context._vulkanMeshes[meshCount]._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);
 
-            vkCmdBindDescriptorSets(commandBuffers[i],
-                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    context._pipelineLayout,
-                                    0,
-                                    1,
-                                    &context._vulkanMeshes[meshCount]._descriptorSets[i],
-                                    0,
-                                    nullptr);
-            
-            vkCmdDrawIndexed(commandBuffers[i], context._vulkanMeshes[meshCount]._numIndices, 1, 0, 0, 0);
+			vkCmdBindDescriptorSets(commandBuffers[i],
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				context._pipelineLayout,
+				0,
+				1,
+				&context._vulkanMeshes[meshCount]._descriptorSets[i],
+				0,
+				nullptr);
+
+			vkCmdDrawIndexed(commandBuffers[i], context._vulkanMeshes[meshCount]._numIndices, 1, 0, 0, 0);
 
 		}
 		vkCmdEndRenderPass(commandBuffers[i]);
 
 		const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBuffers[i]);
 		assert(endCommandBufferResult == VK_SUCCESS);
-        if(endCommandBufferResult != VK_SUCCESS)
-        {
-            SDL_LogError(0,"Call to vkEndCommandBuffer failed (i=%d)\n", i);
-            return false;
-        }
-    }
-    
-    context._commandBuffers = commandBuffers;
-    
-    return true;
+		if (endCommandBufferResult != VK_SUCCESS)
+		{
+			SDL_LogError(0, "Call to vkEndCommandBuffer failed (i=%d)\n", i);
+			return false;
+		}
+	}
+
+	return true;
 }
+
 
 std::vector<VkFence> Vulkan::createFences(VulkanContext & context)
 {
@@ -1547,13 +1556,33 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         SDL_LogError(0, "Failed to create frame buffers\n");
         return false;
     }
-    
-    if(!createCommandPool(appInfo, context))
+
+	// create standard command pool
+    if(!createCommandPool(appInfo, context, &context._commandPool))
     {
-        SDL_LogError(0, "Failed to create command pool\n");
+        SDL_LogError(0, "Failed to create standard command pool\n");
         return false;
     }
-    
+
+	// create adhoc command pool
+	if (!createCommandPool(appInfo, context, &context._adhocCommandPool))
+	{
+		SDL_LogError(0, "Failed to create adhoc command pool\n");
+		return false;
+	}
+
+	if (!createCommandBuffers(appInfo, context, &context._commandBuffers))
+	{
+		SDL_LogError(0, "Failed to create standard command buffers\n");
+		return false;
+	}
+
+	if (!createCommandBuffers(appInfo, context, &context._adhocCommandBuffers))
+	{
+		SDL_LogError(0, "Failed to create adhoc command buffers\n");
+		return false;
+	}
+
 	for (int i = 0; i < appInfo._numMeshes(); i++)
 	{
 		context._vulkanMeshes.push_back(Vulkan::VulkanMesh());
@@ -1582,8 +1611,7 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         }
 	}
     
-
-    if(!createCommandBuffers(appInfo, context))
+    if(!recordStandardCommandBuffers(appInfo, context))
     {
         SDL_LogError(0, "Failed to create command buffers\n");
         return false;

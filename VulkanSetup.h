@@ -233,7 +233,10 @@ namespace Vulkan
         
         VkCommandPool _commandPool;
         std::vector<VkCommandBuffer> _commandBuffers;
-        
+
+		VkCommandPool _adhocCommandPool;
+		std::vector<VkCommandBuffer> _adhocCommandBuffers;
+
         std::vector<VkSemaphore> _renderFinishedSemaphore;
         std::vector<VkSemaphore> _imageAvailableSemaphore;
         std::vector<VkFence> _fences;
@@ -265,9 +268,10 @@ namespace Vulkan
     bool createFixedState(AppInformation & appInfo, VulkanContext & context);
 	bool createPipelineCache(AppInformation & appInfo, VulkanContext & context);
 	bool createGraphicsPipeline(AppInformation & appInfo, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules);
-    bool createCommandPool(AppInformation & appInfo, VulkanContext & context);
-    bool createCommandBuffers(AppInformation & appInfo, VulkanContext & context);
-    std::vector<VkFence> createFences(VulkanContext & context);
+    bool createCommandPool(AppInformation & appInfo, VulkanContext & context, VkCommandPool * result);
+    bool createCommandBuffers(AppInformation & appInfo, VulkanContext & context, std::vector<VkCommandBuffer> * result);
+	bool recordStandardCommandBuffers(AppInformation & appInfo, VulkanContext & context);
+	std::vector<VkFence> createFences(VulkanContext & context);
     std::vector<VkSemaphore> createSemaphores(VulkanContext & context);
     bool createSemaphores(AppInformation & appInfo, VulkanContext & context);
     int findMemoryType(VulkanContext & context, uint32_t typeFilter, VkMemoryPropertyFlags properties);

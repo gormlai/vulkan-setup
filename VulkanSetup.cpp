@@ -669,7 +669,7 @@ bool Vulkan::createColorBuffers(VulkanContext & context)
     return true;
 }
 
-bool Vulkan::createRenderPass(VulkanContext & vulkanContext)
+bool Vulkan::createRenderPass(VulkanContext & vulkanContext, VkRenderPass * result, bool clearColorBuffer)
 {
     VkAttachmentReference colorAttachmentReference;
     memset(&colorAttachmentReference, 0, sizeof(colorAttachmentReference));
@@ -686,7 +686,7 @@ bool Vulkan::createRenderPass(VulkanContext & vulkanContext)
     memset(&colorAttachmentReference, 0, sizeof(colorAttachmentReference));
     colorAttachment.format = vulkanContext._surfaceFormat.format;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.loadOp = clearColorBuffer ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -713,10 +713,13 @@ bool Vulkan::createRenderPass(VulkanContext & vulkanContext)
 	createInfo.dependencyCount = 1;
 	createInfo.pDependencies = &dependency;
     
-    VkResult createRenderPassResult = vkCreateRenderPass(vulkanContext._device, &createInfo, nullptr, &vulkanContext._renderPass);
+	VkRenderPass renderPass;
+    VkResult createRenderPassResult = vkCreateRenderPass(vulkanContext._device, &createInfo, nullptr, &renderPass);
 	assert(createRenderPassResult == VK_SUCCESS);
 	if (createRenderPassResult != VK_SUCCESS)
         return false;
+
+	*result = renderPass;
     
     return true;
 }
@@ -1026,14 +1029,14 @@ bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context
     return true;
 }
 
-bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & context, std::vector<VkCommandBuffer> * result)
+bool Vulkan::createCommandBuffers(AppInformation & appInfo, VulkanContext & context, VkCommandPool commandPool, std::vector<VkCommandBuffer> * result)
 {
     std::vector<VkCommandBuffer> commandBuffers(context._frameBuffers.size());
     
     VkCommandBufferAllocateInfo commandBufferAllocateInfo;
     memset(&commandBufferAllocateInfo, 0, sizeof(VkCommandBufferAllocateInfo));
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.commandPool = context._commandPool;
+    commandBufferAllocateInfo.commandPool = commandPool;
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     commandBufferAllocateInfo.commandBufferCount = (unsigned int)commandBuffers.size();
 	const VkResult allocateCommandBuffersResult = vkAllocateCommandBuffers(context._device, &commandBufferAllocateInfo, &commandBuffers[0]);
@@ -1513,12 +1516,18 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         return false;
     }
     
-    if (!createRenderPass(context))
+    if (!createRenderPass(context, &context._renderPass, true))
     {
-        SDL_LogError(0, "Failed to create render pass\n");
+        SDL_LogError(0, "Failed to create standard render pass\n");
         return false;
     }
-    
+
+	if (!createRenderPass(context, &context._adhocRenderPass, true))
+	{
+		SDL_LogError(0, "Failed to create adhoc render pass\n");
+		return false;
+	}
+
     std::vector<VkShaderModule> shaderModules = createShaderModules(appInfo, context);
     if (shaderModules.empty() || shaderModules.size() != appInfo._shaders.size())
     {
@@ -1571,13 +1580,13 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
 		return false;
 	}
 
-	if (!createCommandBuffers(appInfo, context, &context._commandBuffers))
+	if (!createCommandBuffers(appInfo, context, context._commandPool, &context._commandBuffers))
 	{
 		SDL_LogError(0, "Failed to create standard command buffers\n");
 		return false;
 	}
 
-	if (!createCommandBuffers(appInfo, context, &context._adhocCommandBuffers))
+	if (!createCommandBuffers(appInfo, context, context._adhocCommandPool, &context._adhocCommandBuffers))
 	{
 		SDL_LogError(0, "Failed to create adhoc command buffers\n");
 		return false;

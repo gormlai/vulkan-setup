@@ -221,7 +221,8 @@ namespace Vulkan
         std::vector<VkFramebuffer> _frameBuffers;
         
         VkRenderPass _renderPass;
-        VkPipeline _pipeline;
+		VkRenderPass _adhocRenderPass;
+		VkPipeline _pipeline;
         VkPipelineLayout _pipelineLayout;
 		VkPipelineCache _pipelineCache;
         
@@ -261,7 +262,7 @@ namespace Vulkan
     bool createQueue(AppInformation & appInfo, VulkanContext & context);
     bool createSwapChain(AppInformation & appInfo, VulkanContext & context);
     bool createColorBuffers(VulkanContext & context);
-    bool createRenderPass(VulkanContext & vulkanContext);
+    bool createRenderPass(VulkanContext & vulkanContext, VkRenderPass * result, bool clearColorBuffer);
     bool createDescriptorSetLayout(VulkanContext & vulkanContext);
     bool createFrameBuffers(VulkanContext & vulkanContext);
     std::vector<VkShaderModule> createShaderModules(AppInformation & appInfo, VulkanContext & context);
@@ -269,7 +270,7 @@ namespace Vulkan
 	bool createPipelineCache(AppInformation & appInfo, VulkanContext & context);
 	bool createGraphicsPipeline(AppInformation & appInfo, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules);
     bool createCommandPool(AppInformation & appInfo, VulkanContext & context, VkCommandPool * result);
-    bool createCommandBuffers(AppInformation & appInfo, VulkanContext & context, std::vector<VkCommandBuffer> * result);
+    bool createCommandBuffers(AppInformation & appInfo, VulkanContext & context, VkCommandPool commandPool, std::vector<VkCommandBuffer> * result);
 	bool recordStandardCommandBuffers(AppInformation & appInfo, VulkanContext & context);
 	std::vector<VkFence> createFences(VulkanContext & context);
     std::vector<VkSemaphore> createSemaphores(VulkanContext & context);

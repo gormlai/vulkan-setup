@@ -589,7 +589,7 @@ bool Vulkan::createSwapChain(AppInformation & appInfo, VulkanContext & context)
         return false;
     
 #if defined(__APPLE__)
-    SDL_GetWindowSize(appInfo._window, &width, &height);
+    SDL_GL_GetDrawableSize(appInfo._window, &width, &height);
 #else
     SDL_Vulkan_GetDrawableSize(appInfo._window, &width, &height);
 #endif
@@ -1522,7 +1522,7 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         return false;
     }
 
-	if (!createRenderPass(context, &context._adhocRenderPass, true))
+	if (!createRenderPass(context, &context._adhocRenderPass, false))
 	{
 		SDL_LogError(0, "Failed to create adhoc render pass\n");
 		return false;

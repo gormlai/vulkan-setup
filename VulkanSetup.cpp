@@ -1079,7 +1079,8 @@ bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContex
 		renderPassBeginInfo.renderArea.offset = { 0,0 };
 		renderPassBeginInfo.renderArea.extent = context._swapChainSize;
 
-		VkClearValue clearColorValue{ 0.0f, 0.0f, 0.0f, 1.0f };
+		const glm::vec4 bgColor = appInfo._backgroundClearColor();
+		VkClearValue clearColorValue{ bgColor[0], bgColor[1], bgColor[2], bgColor[3] };
 		renderPassBeginInfo.clearValueCount = 1;
 		renderPassBeginInfo.pClearValues = &clearColorValue;
 
@@ -1404,8 +1405,9 @@ void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, u
     
     UniformBufferObject ubo = mesh._transformation;
 
-	ubo._view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	ubo._projection = glm::perspective(glm::radians(45.0f), context._swapChainSize.width / (float)context._swapChainSize.height, 0.1f, 10.0f);
+	const VulkanCamera & cam = context.getCamera();
+	ubo._view = glm::lookAt(cam._position, cam._lookat, cam._up);
+	ubo._projection = glm::perspective(glm::radians(45.0f), context._swapChainSize.width / (float)context._swapChainSize.height, 0.1f, 1000.0f);
     
     // set lights
     ubo._lights[0] = glm::vec4{0,0,0,0};
@@ -1433,6 +1435,12 @@ bool Vulkan::update(AppInformation & appInfo, VulkanContext & context, uint32_t 
     const float deltaS = float(deltaMs) / 1000.0f;
     const float timePassedS = float(timePassedMs) / 1000.0f;
     
+
+	// update camera position
+	glm::vec3 pos, lookat, up;
+	appInfo._cameraUpdateFunction(pos, lookat, up);
+	context._camera = VulkanCamera(pos, lookat, up);
+
     const bool updateResult = appInfo._updateFunction(timePassedS, deltaS);
 	for(unsigned int meshIndex = 0 ; meshIndex < context._vulkanMeshes.size() ; meshIndex++)
 	{

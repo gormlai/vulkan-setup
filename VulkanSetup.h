@@ -15,7 +15,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
-
+#include <glm/gtx/rotate_vector.hpp>
 
 /*
  LICENSE - this file is public domain
@@ -50,7 +50,7 @@
 namespace Vulkan
 {
     extern bool validationLayersEnabled;
-    
+
 	template<typename PosType, typename ColorType>
     struct Vertex
     {
@@ -151,6 +151,7 @@ namespace Vulkan
         
         std::vector<Shader> _shaders;
 
+		std::function<glm::vec4 (void)> _backgroundClearColor = []() { return glm::vec4{ 0,0,0,1 }; };
 		std::function<int (void)> _numMeshes = []() { return 0;  };
         std::function<void(unsigned int, std::vector<unsigned char> &, std::vector<unsigned char> &, void **)> _createMesh =
             [](unsigned int meshIndex,
@@ -163,6 +164,9 @@ namespace Vulkan
         
         typedef std::function <bool(float, float)> UpdateFunction; // returns true, if the code should continue. Return false, to request termination
         UpdateFunction _updateFunction = [](float, float) { return true; };
+
+		typedef std::function<void(glm::vec3 &, glm::vec3 &, glm::vec3 &)> CameraUpdateFunction;
+		CameraUpdateFunction _cameraUpdateFunction = [](glm::vec3 & pos, glm::vec3 & lookat, glm::vec3 & up) { pos = glm::vec3{ 0,0,0}; lookat = glm::vec3{ 0,0,-1 }; up = glm::vec3{ 0,1,0 }; };
         
         typedef std::function<glm::mat4 (const void*, float, float)> UpdateModelMatrix;
         UpdateModelMatrix _updateModelMatrix = [](const void*, float, float) { return glm::mat4(); };
@@ -197,6 +201,19 @@ namespace Vulkan
 		}
 	};
     
+	struct VulkanCamera
+	{
+		VulkanCamera() { }
+		VulkanCamera(const glm::vec3 & pos, const glm::vec3 & lookat, const glm::vec3 & up)
+			:_position(pos)
+			, _lookat(lookat)
+			, _up(up) {}
+
+		glm::vec3 _position;
+		glm::vec3 _lookat;
+		glm::vec3 _up;
+	};
+
     struct VulkanContext
     {
         VkInstance _instance;
@@ -247,6 +264,13 @@ namespace Vulkan
         unsigned int _currentFrame;
         
         VulkanContext();
+
+		const VulkanCamera & getCamera() { return _camera;  }
+
+	private:
+		friend bool update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
+		VulkanCamera _camera;
+
     };
     
     bool setupDebugCallback(VulkanContext & context);

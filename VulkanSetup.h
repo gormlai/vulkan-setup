@@ -232,9 +232,15 @@ namespace Vulkan
         VkExtent2D _swapChainSize;
         VkSwapchainKHR _swapChain;
         
+		// for colour buffer
         std::vector<VkImage> _rawImages;
         std::vector<VkImageView> _colorBuffers;
-        
+
+		// for depth buffer
+		std::vector<VkImage> _depthImages;
+		std::vector<VkImageView> _depthBuffers;
+		std::vector<VkDeviceMemory> _depthMemory;
+
         std::vector<VkFramebuffer> _frameBuffers;
         
         VkRenderPass _renderPass;
@@ -286,6 +292,7 @@ namespace Vulkan
     bool createQueue(AppInformation & appInfo, VulkanContext & context);
     bool createSwapChain(AppInformation & appInfo, VulkanContext & context);
     bool createColorBuffers(VulkanContext & context);
+	bool createDepthBuffers(AppInformation & appInfo, VulkanContext & context);
     bool createRenderPass(VulkanContext & vulkanContext, VkRenderPass * result, bool clearColorBuffer);
     bool createDescriptorSetLayout(VulkanContext & vulkanContext);
     bool createFrameBuffers(VulkanContext & vulkanContext);
@@ -294,12 +301,10 @@ namespace Vulkan
 	bool createPipelineCache(AppInformation & appInfo, VulkanContext & context);
 	bool createGraphicsPipeline(AppInformation & appInfo, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules);
     bool createCommandPool(AppInformation & appInfo, VulkanContext & context, VkCommandPool * result);
-    bool createCommandBuffers(AppInformation & appInfo, VulkanContext & context, VkCommandPool commandPool, std::vector<VkCommandBuffer> * result);
 	bool recordStandardCommandBuffers(AppInformation & appInfo, VulkanContext & context);
 	std::vector<VkFence> createFences(VulkanContext & context);
     std::vector<VkSemaphore> createSemaphores(VulkanContext & context);
     bool createSemaphores(AppInformation & appInfo, VulkanContext & context);
-    int findMemoryType(VulkanContext & context, uint32_t typeFilter, VkMemoryPropertyFlags properties);
     bool createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc);
     bool createBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type);
     bool createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int meshIndex);

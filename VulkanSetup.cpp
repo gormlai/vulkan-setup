@@ -677,9 +677,10 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     {
         static const std::vector<const char*> validationLayers = {
 #if defined(__APPLE__)
-           "MoltenVK",
-#endif
+           "MoltenVK"
+#else
             "VK_LAYER_LUNARG_standard_validation"
+#endif
         };
         if (areValidationLayersAvailable(validationLayers))
         {
@@ -1010,7 +1011,8 @@ bool Vulkan::createRenderPass(VulkanContext & vulkanContext, VkRenderPass * resu
     subpassDescription.colorAttachmentCount = 1;
     subpassDescription.pColorAttachments = &colorAttachmentReference;
 	subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
-    
+//    subpassDescription.pDepthStencilAttachment = nullptr;
+
     VkAttachmentDescription colorAttachment;
     memset(&colorAttachment, 0, sizeof(colorAttachment));
     colorAttachment.format = vulkanContext._surfaceFormat.format;
@@ -1050,7 +1052,7 @@ bool Vulkan::createRenderPass(VulkanContext & vulkanContext, VkRenderPass * resu
     memset(&createInfo, 0, sizeof(createInfo));
 	VkAttachmentDescription attachmentDescriptions[] = { colorAttachment, depthAttachment };
     createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	createInfo.attachmentCount = sizeof(attachmentDescriptions) / sizeof(VkAttachmentDescription);
+    createInfo.attachmentCount = sizeof(attachmentDescriptions) / sizeof(VkAttachmentDescription);
 	createInfo.pAttachments = &attachmentDescriptions[0];
     createInfo.subpassCount = 1;
     createInfo.pSubpasses = &subpassDescription;
@@ -1079,7 +1081,7 @@ bool Vulkan::createFrameBuffers(VulkanContext & vulkanContext)
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = vulkanContext._renderPass;
         createInfo.attachmentCount = 2;
-		createInfo.pAttachments = attachments;
+		createInfo.pAttachments = &attachments[0];
         createInfo.width = vulkanContext._swapChainSize.width;
         createInfo.height = vulkanContext._swapChainSize.height;
 		createInfo.layers = 1;
@@ -1262,7 +1264,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 	depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS;
 	depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
 	depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
-	createInfo.pDepthStencilState = &depthStencilCreateInfo;
+//	createInfo.pDepthStencilState = &depthStencilCreateInfo;
     
     VkPipelineColorBlendAttachmentState colorBlendAttachmentCreateInfo;
     memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));

@@ -192,7 +192,7 @@ namespace
 		beginInfo.pNext = NULL;
 
 		const VkResult beginCommandResult = vkBeginCommandBuffer(commandBuffer, &beginInfo);
-		if (beginCommandResult == VK_SUCCESS)
+		if (beginCommandResult != VK_SUCCESS)
 			return false;
 
 		VkImageMemoryBarrier barrier;
@@ -1077,7 +1077,7 @@ bool Vulkan::createFrameBuffers(VulkanContext & vulkanContext)
         VkFramebufferCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
         
-		VkImageView attachments[] = { vulkanContext._colorBuffers[i], vulkanContext._depthBuffers[i] };
+		VkImageView attachments[] = { vulkanContext._colorBuffers[i], vulkanContext._depthBuffers[0] };
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = vulkanContext._renderPass;
         createInfo.attachmentCount = 2;
@@ -1264,7 +1264,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 	depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS;
 	depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
 	depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
-//	createInfo.pDepthStencilState = &depthStencilCreateInfo;
+	createInfo.pDepthStencilState = &depthStencilCreateInfo;
     
     VkPipelineColorBlendAttachmentState colorBlendAttachmentCreateInfo;
     memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));

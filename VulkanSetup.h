@@ -297,7 +297,6 @@ namespace Vulkan
     bool createDescriptorSetLayout(VulkanContext & vulkanContext);
     bool createFrameBuffers(VulkanContext & vulkanContext);
     std::vector<VkShaderModule> createShaderModules(AppInformation & appInfo, VulkanContext & context);
-    bool createFixedState(AppInformation & appInfo, VulkanContext & context);
 	bool createPipelineCache(AppInformation & appInfo, VulkanContext & context);
 	bool createGraphicsPipeline(AppInformation & appInfo, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules);
     bool createCommandPool(AppInformation & appInfo, VulkanContext & context, VkCommandPool * result);

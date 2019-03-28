@@ -1076,7 +1076,7 @@ bool Vulkan::createFrameBuffers(VulkanContext & vulkanContext)
         VkFramebufferCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
         
-		VkImageView attachments[] = { vulkanContext._colorBuffers[i], vulkanContext._depthBuffers[0] };
+		VkImageView attachments[] = { vulkanContext._colorBuffers[i], vulkanContext._depthBuffers[i] };
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = vulkanContext._renderPass;
         createInfo.attachmentCount = 2;
@@ -1124,11 +1124,6 @@ std::vector<VkShaderModule> Vulkan::createShaderModules(AppInformation & appInfo
     
     // now that all modules have been created, create the pipeline
     return shaderModules;
-}
-
-bool Vulkan::createFixedState(AppInformation & appInfo, VulkanContext & context)
-{
-    return true;
 }
 
 bool Vulkan::createPipelineCache(AppInformation & appInfo, VulkanContext & context)
@@ -1233,10 +1228,10 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     rasterizerCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizerCreateInfo.depthClampEnable = VK_FALSE;
     rasterizerCreateInfo.rasterizerDiscardEnable = VK_FALSE;
-    rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizerCreateInfo.lineWidth = 1.0f;
     rasterizerCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizerCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizerCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizerCreateInfo.depthBiasEnable = VK_FALSE;
     rasterizerCreateInfo.depthBiasConstantFactor = 0.0f;
     rasterizerCreateInfo.depthBiasClamp = 0.0f;
@@ -1851,12 +1846,6 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
     if (shaderModules.empty() || shaderModules.size() != appInfo._shaders.size())
     {
         SDL_LogError(0, "Failed to create shader modules\n");
-        return false;
-    }
-    
-    if (!createFixedState(appInfo, context))
-    {
-        SDL_LogError(0, "Failed to create fixed state!");
         return false;
     }
     

@@ -1011,7 +1011,6 @@ bool Vulkan::createRenderPass(VulkanContext & vulkanContext, VkRenderPass * resu
     subpassDescription.colorAttachmentCount = 1;
     subpassDescription.pColorAttachments = &colorAttachmentReference;
 	subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
-//    subpassDescription.pDepthStencilAttachment = nullptr;
 
     VkAttachmentDescription colorAttachment;
     memset(&colorAttachment, 0, sizeof(colorAttachment));
@@ -1322,14 +1321,6 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 	dynamicStateCreateInfo.dynamicStateCount = 2;
 	dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
 //	createInfo.pDynamicState = &dynamicStateCreateInfo;
-
-	VkPipelineDepthStencilStateCreateInfo depthStencilState;
-	memset(&depthStencilState, 0, sizeof(VkPipelineDepthStencilStateCreateInfo));
-	depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-	depthStencilState.depthTestEnable = VK_TRUE;
-	depthStencilState.depthWriteEnable = VK_TRUE;
-	depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-	createInfo.pDepthStencilState = &depthStencilState;
 
     VkPipeline graphicsPipeline;
 	const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &graphicsPipeline);

@@ -1377,6 +1377,16 @@ bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContex
 	// do a basic recording of the command buffers
 	for (unsigned int i = 0; i < (unsigned int)commandBuffers.size(); i++)
 	{
+		VkCommandBufferResetFlags resetFlags = VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT;
+		const VkResult resetCommandBufferResult = vkResetCommandBuffer(commandBuffers[i], resetFlags);
+		assert(resetCommandBufferResult == VK_SUCCESS);
+		if (resetCommandBufferResult != VK_SUCCESS)
+		{
+			SDL_LogError(0, "call to vkResetCommandBuffer failed, i=%d\n", i);
+			return false;
+		}
+
+
 		VkCommandBufferBeginInfo beginInfo;
 		memset(&beginInfo, 0, sizeof(VkCommandBufferBeginInfo));
 		beginInfo.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO;
@@ -1385,7 +1395,7 @@ bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContex
 		assert(beginCommandBufferResult == VK_SUCCESS);
 		if (beginCommandBufferResult != VK_SUCCESS)
 		{
-			SDL_LogError(0, "call to vkBeginCommandBuffer failed\n");
+			SDL_LogError(0, "call to vkBeginCommandBuffer failed, i=%d\n", i);
 			return false;
 		}
 
@@ -1577,15 +1587,11 @@ bool Vulkan::createBuffer(VulkanContext & context, const void * srcData, VkDevic
     
 }
 
-bool Vulkan::createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int meshIndex)
+bool Vulkan::createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData, unsigned int meshIndex)
 {
-    std::vector<unsigned char> indexData;
-    std::vector<unsigned char> vertexData;
-    void * userData = nullptr;
     BufferDescriptor indexBuffer;
     BufferDescriptor vertexBuffer;
 
-    appInfo._createMesh(meshIndex, indexData, vertexData, &userData);
     if(indexData.empty() || vertexData.empty())
         return false;
     
@@ -1759,6 +1765,44 @@ bool Vulkan::update(AppInformation & appInfo, VulkanContext & context, uint32_t 
     return updateResult;
 }
 
+void Vulkan::clearMeshes(AppInformation & appInfo, VulkanContext & context)
+{
+	context._vulkanMeshes.clear();
+	recordStandardCommandBuffers(appInfo, context);
+}
+
+bool Vulkan::addMesh(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData)
+{
+	context._vulkanMeshes.push_back(Vulkan::VulkanMesh());
+	const unsigned int index = context._vulkanMeshes.size() - 1;
+	if (!createIndexAndVertexBuffer(appInfo, context, vertexData, indexData, userData, index))
+	{
+		SDL_LogError(0, "Failed to create index and vertex buffer\n");
+		return false;
+	}
+
+	if (!createUniformBuffer(appInfo, context, index))
+	{
+		SDL_LogError(0, "Failed to create uniform buffer\n");
+		return false;
+	}
+
+	if (!createDescriptorPool(context, index))
+	{
+		SDL_LogError(0, "Failed to create descriptor pool\n");
+		return false;
+	}
+
+	if (!createDescriptorSet(appInfo, context, index))
+	{
+		SDL_LogError(0, "Failed to create descriptor set\n");
+		return false;
+	}
+
+	recordStandardCommandBuffers(appInfo, context);
+
+}
+
 
 bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context)
 {
@@ -1904,35 +1948,6 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
 	{
 		SDL_LogError(0, "Failed to create adhoc command buffers\n");
 		return false;
-	}
-
-
-	for (int i = 0; i < appInfo._numMeshes(); i++)
-	{
-		context._vulkanMeshes.push_back(Vulkan::VulkanMesh());
-		if (!createIndexAndVertexBuffer(appInfo, context, i))
-		{
-			SDL_LogError(0, "Failed to create index and vertex buffer\n");
-			return false;
-		}
-
-        if (!createUniformBuffer(appInfo, context, i))
-        {
-            SDL_LogError(0, "Failed to create uniform buffer\n");
-            return false;
-        }
-
-        if(!createDescriptorPool(context, i))
-        {
-            SDL_LogError(0, "Failed to create descriptor pool\n");
-            return false;
-        }
-        
-        if(!createDescriptorSet(appInfo, context, i))
-        {
-            SDL_LogError(0, "Failed to create descriptor set\n");
-            return false;
-        }
 	}
     
     if(!recordStandardCommandBuffers(appInfo, context))

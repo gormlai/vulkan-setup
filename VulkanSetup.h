@@ -152,12 +152,6 @@ namespace Vulkan
         std::vector<Shader> _shaders;
 
 		std::function<glm::vec4 (void)> _backgroundClearColor = []() { return glm::vec4{ 0,0,0,1 }; };
-		std::function<int (void)> _numMeshes = []() { return 0;  };
-        std::function<void(unsigned int, std::vector<unsigned char> &, std::vector<unsigned char> &, void **)> _createMesh =
-            [](unsigned int meshIndex,
-               std::vector<unsigned char> &indexData,
-               std::vector<unsigned char> & vertexData,
-               void ** userData) {};
 
 		std::function <VkVertexInputBindingDescription()> _getBindingDescription = []() { return VkVertexInputBindingDescription(); };
 		std::function < std::array<VkVertexInputAttributeDescription, 2>()> _getAttributes = []() {return std::array<VkVertexInputAttributeDescription, 2>(); };
@@ -278,7 +272,10 @@ namespace Vulkan
 		VulkanCamera _camera;
 
     };
-    
+
+	void clearMeshes(AppInformation & appInfo, VulkanContext & context);
+	bool addMesh(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData);
+
     bool setupDebugCallback(VulkanContext & context);
     bool areValidationLayersAvailable(const std::vector<const char*> & validationLayers);
     bool loadVulkanLibrary();
@@ -306,7 +303,7 @@ namespace Vulkan
     bool createSemaphores(AppInformation & appInfo, VulkanContext & context);
     bool createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc);
     bool createBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type);
-    bool createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int meshIndex);
+    bool createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void *userData, unsigned int meshIndex);
     bool createUniformBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int meshIndex);
     bool createDescriptorPool(VulkanContext & context, unsigned int bufferIndex);
     bool createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
@@ -314,6 +311,8 @@ namespace Vulkan
     
     bool update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
     void updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex);
+
+
 
 }
 

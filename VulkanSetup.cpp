@@ -1228,7 +1228,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     rasterizerCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizerCreateInfo.depthClampEnable = VK_FALSE;
     rasterizerCreateInfo.rasterizerDiscardEnable = VK_FALSE;
-	rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_LINE;
     rasterizerCreateInfo.lineWidth = 1.0f;
     rasterizerCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizerCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;

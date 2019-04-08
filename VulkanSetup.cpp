@@ -1801,6 +1801,7 @@ bool Vulkan::addMesh(AppInformation & appInfo, VulkanContext & context, std::vec
 
 	recordStandardCommandBuffers(appInfo, context);
 
+    return true;
 }
 
 

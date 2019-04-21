@@ -232,7 +232,7 @@ namespace Vulkan
 
 		// for depth buffer
 		std::vector<VkImage> _depthImages;
-		std::vector<VkImageView> _depthBuffers;
+		std::vector<VkImageView> _depthImageViews;
 		std::vector<VkDeviceMemory> _depthMemory;
 
         std::vector<VkFramebuffer> _frameBuffers;
@@ -311,7 +311,8 @@ namespace Vulkan
     
     bool update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
     void updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex);
-
+	bool recreateSwapChain(AppInformation & appInfo, VulkanContext & context);
+	bool cleanupSwapChain(AppInformation & appInfo, VulkanContext & context);
 
 
 }

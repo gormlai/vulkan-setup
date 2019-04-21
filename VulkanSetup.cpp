@@ -921,10 +921,10 @@ bool Vulkan::createDepthBuffers(AppInformation & appInfo, VulkanContext & contex
 	constexpr VkImageTiling requiredTiling = VK_IMAGE_TILING_OPTIMAL;
 
 	VkFormat depthFormat = findDepthFormat(context, requiredTiling);
-	context._depthBuffers.resize(context._rawImages.size());
+	context._depthImageViews.resize(context._rawImages.size());
 	context._depthImages.resize(context._rawImages.size());
 	context._depthMemory.resize(context._rawImages.size());
-	for (unsigned int i = 0; i < (unsigned int)context._depthBuffers.size(); i++)
+	for (unsigned int i = 0; i < (unsigned int)context._depthImageViews.size(); i++)
 	{
 		VkImage depthImage;
 		VkImageView depthImageView;
@@ -950,7 +950,7 @@ bool Vulkan::createDepthBuffers(AppInformation & appInfo, VulkanContext & contex
 
 		context._depthImages[i] = depthImage;
 		context._depthMemory[i] = depthImageMemory;
-		context._depthBuffers[i] = depthImageView;
+		context._depthImageViews[i] = depthImageView;
 
 	}
 
@@ -1076,7 +1076,7 @@ bool Vulkan::createFrameBuffers(VulkanContext & vulkanContext)
         VkFramebufferCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
         
-		VkImageView attachments[] = { vulkanContext._colorBuffers[i], vulkanContext._depthBuffers[i] };
+		VkImageView attachments[] = { vulkanContext._colorBuffers[i], vulkanContext._depthImageViews[i] };
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = vulkanContext._renderPass;
         createInfo.attachmentCount = 2;
@@ -1774,7 +1774,7 @@ void Vulkan::clearMeshes(AppInformation & appInfo, VulkanContext & context)
 bool Vulkan::addMesh(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData)
 {
 	context._vulkanMeshes.push_back(Vulkan::VulkanMesh());
-	const unsigned int index = context._vulkanMeshes.size() - 1;
+	const unsigned int index = unsigned int(context._vulkanMeshes.size() - 1);
 	if (!createIndexAndVertexBuffer(appInfo, context, vertexData, indexData, userData, index))
 	{
 		SDL_LogError(0, "Failed to create index and vertex buffer\n");
@@ -1964,4 +1964,54 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
     }
     
     return true;
+}
+
+
+bool Vulkan::recreateSwapChain(AppInformation & appInfo, VulkanContext & context)
+{
+	vkDeviceWaitIdle(context._device);
+	cleanupSwapChain(appInfo, context);
+
+
+	return true;
+}
+
+bool Vulkan::cleanupSwapChain(AppInformation & appInfo, VulkanContext & context)
+{
+	VkDevice device = context._device;
+
+	for (auto depthImageView : context._depthImageViews)
+		vkDestroyImageView(device, depthImageView, nullptr);
+	context._depthImageViews.clear();
+
+	for (auto depthImage : context._depthImages)
+		vkDestroyImage(device, depthImage, nullptr);
+	context._depthImages.clear();
+
+	for (auto depthMemory : context._depthMemory)
+		vkFreeMemory(device, depthMemory, nullptr);
+	context._depthMemory.clear();
+
+	for (auto frameBuffer : context._frameBuffers)
+		vkDestroyFramebuffer(device, frameBuffer, nullptr);
+	context._frameBuffers.clear();
+
+	vkFreeCommandBuffers(device, context._commandPool, (uint32_t)context._commandBuffers.size(), &context._commandBuffers[0]);
+
+	vkDestroyPipeline(device, context._pipeline, nullptr);
+	vkDestroyPipelineLayout(device, context._pipelineLayout, nullptr);
+	vkDestroyRenderPass(device, context._renderPass, nullptr);
+
+	for (auto imageView : context._colorBuffers)
+		vkDestroyImageView(device, imageView, nullptr);
+	context._colorBuffers.clear();
+
+	for (auto image : context._rawImages)
+		vkDestroyImage(device, image, nullptr);
+	context._rawImages.clear();
+
+	vkDestroySwapchainKHR(device, context._swapChain, nullptr);
+
+
+	return true;
 }

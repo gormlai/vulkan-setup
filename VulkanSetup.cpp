@@ -1774,7 +1774,7 @@ void Vulkan::clearMeshes(AppInformation & appInfo, VulkanContext & context)
 bool Vulkan::addMesh(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData)
 {
 	context._vulkanMeshes.push_back(Vulkan::VulkanMesh());
-	const unsigned int index = unsigned int(context._vulkanMeshes.size() - 1);
+	const unsigned int index = (unsigned int)(context._vulkanMeshes.size() - 1);
 	if (!createIndexAndVertexBuffer(appInfo, context, vertexData, indexData, userData, index))
 	{
 		SDL_LogError(0, "Failed to create index and vertex buffer\n");

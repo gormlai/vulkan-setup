@@ -311,6 +311,7 @@ namespace Vulkan
     
     bool update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
     void updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex);
+	bool createSwapChainDependents(AppInformation & appInfo, VulkanContext & context);
 	bool recreateSwapChain(AppInformation & appInfo, VulkanContext & context);
 	bool cleanupSwapChain(AppInformation & appInfo, VulkanContext & context);
 

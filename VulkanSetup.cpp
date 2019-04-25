@@ -426,6 +426,7 @@ namespace
 	{
 		int k = 0;
 		k = 1;
+		SDL_LogError(0, "VulkanDebugReportCallback : %s - %s\n", pLayerPrefix, pMessage);
 		return VK_TRUE;
 	}
 }
@@ -1141,7 +1142,7 @@ bool Vulkan::createPipelineCache(AppInformation & appInfo, VulkanContext & conte
 		return creationResult == VK_SUCCESS;
 	}
 	else
-		return false;
+		return true;
 }
 
 
@@ -1966,12 +1967,100 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
     return true;
 }
 
+bool Vulkan::createSwapChainDependents(AppInformation & appInfo, VulkanContext & context)
+{
+	if (!createSwapChain(appInfo, context))
+	{
+		SDL_LogError(0, "Failed to create and setup swap chain!");
+		return false;
+	}
+
+	if (!createColorBuffers(context))
+	{
+		SDL_LogError(0, "Failed to create color buffers\n");
+		return false;
+	}
+
+	if (!createRenderPass(context, &context._renderPass, true))
+	{
+		SDL_LogError(0, "Failed to create standard render pass\n");
+		return false;
+	}
+
+	if (!createRenderPass(context, &context._adhocRenderPass, false))
+	{
+		SDL_LogError(0, "Failed to create adhoc render pass\n");
+		return false;
+	}
+
+	std::vector<VkShaderModule> shaderModules = createShaderModules(appInfo, context);
+	if (shaderModules.empty() || shaderModules.size() != appInfo._shaders.size())
+	{
+		SDL_LogError(0, "Failed to create shader modules\n");
+		return false;
+	}
+
+	if (!createDescriptorSetLayout(context))
+	{
+		SDL_LogError(0, "Failed to create descriptor set layouts!");
+		return false;
+	}
+
+
+	if (!createPipelineCache(appInfo, context))
+	{
+		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
+	}
+
+
+	if (!createGraphicsPipeline(appInfo, context, shaderModules))
+	{
+		SDL_LogError(0, "Failed to create graphics pipeline\n");
+		return false;
+	}
+
+	if (!createDepthBuffers(appInfo, context))
+	{
+		SDL_LogError(0, "Failed to create depth buffers\n");
+		return false;
+	}
+
+	if (!createFrameBuffers(context))
+	{
+		SDL_LogError(0, "Failed to create frame buffers\n");
+		return false;
+	}
+
+	if (!createCommandBuffers(appInfo, context, context._commandPool, (unsigned int)context._rawImages.size(), &context._commandBuffers))
+	{
+		SDL_LogError(0, "Failed to create standard command buffers\n");
+		return false;
+	}
+
+	if (!createCommandBuffers(appInfo, context, context._adhocCommandPool, (unsigned int)context._rawImages.size(), &context._adhocCommandBuffers))
+	{
+		SDL_LogError(0, "Failed to create adhoc command buffers\n");
+		return false;
+	}
+
+	if (!recordStandardCommandBuffers(appInfo, context))
+	{
+		SDL_LogError(0, "Failed to create command buffers\n");
+		return false;
+	}
+
+	return true;
+}
 
 bool Vulkan::recreateSwapChain(AppInformation & appInfo, VulkanContext & context)
 {
 	vkDeviceWaitIdle(context._device);
-	cleanupSwapChain(appInfo, context);
 
+	if (!cleanupSwapChain(appInfo, context))
+		return false;
+
+	if (!createSwapChainDependents(appInfo, context))
+		return false;
 
 	return true;
 }
@@ -2006,11 +2095,13 @@ bool Vulkan::cleanupSwapChain(AppInformation & appInfo, VulkanContext & context)
 		vkDestroyImageView(device, imageView, nullptr);
 	context._colorBuffers.clear();
 
-	for (auto image : context._rawImages)
-		vkDestroyImage(device, image, nullptr);
+/*	for (auto image : context._rawImages)
+		vkDestroyImage(device, image, nullptr);*/
 	context._rawImages.clear();
 
 	vkDestroySwapchainKHR(device, context._swapChain, nullptr);
+	context._swapChain = VK_NULL_HANDLE;
+
 
 
 	return true;

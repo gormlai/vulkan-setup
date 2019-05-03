@@ -1202,12 +1202,12 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     // viewport
     VkViewport viewport;
     viewport.x = 0;
-    viewport.y = 0;
+    viewport.y = (float)context._swapChainSize.height;
     viewport.width = (float)context._swapChainSize.width;
-    viewport.height = (float)context._swapChainSize.height;
+    viewport.height =-(float)context._swapChainSize.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    
+
     // scissor
     VkRect2D scissor;
     scissor.offset = { 0,0 };
@@ -1232,7 +1232,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 	rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_LINE;
     rasterizerCreateInfo.lineWidth = 1.0f;
     rasterizerCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizerCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizerCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizerCreateInfo.depthBiasEnable = VK_FALSE;
     rasterizerCreateInfo.depthBiasConstantFactor = 0.0f;
     rasterizerCreateInfo.depthBiasClamp = 0.0f;
@@ -1314,8 +1314,9 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 			VK_DYNAMIC_STATE_VIEWPORT,
 			VK_DYNAMIC_STATE_SCISSOR
 	};
-	dynamicStateCreateInfo.dynamicStateCount = 2;
-	dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
+	dynamicStateCreateInfo.dynamicStateCount = 0;
+	dynamicStateCreateInfo.pDynamicStates = nullptr;
+//	dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
 //	createInfo.pDynamicState = &dynamicStateCreateInfo;
 
     VkPipeline graphicsPipeline;
@@ -1721,6 +1722,9 @@ void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, u
 	const VulkanCamera & cam = context.getCamera();
 	ubo._view = glm::lookAt(cam._position, cam._lookat, cam._up);
 	ubo._projection = glm::perspective(glm::radians(45.0f), context._swapChainSize.width / (float)context._swapChainSize.height, 0.1f, 1000.0f);
+
+	glm::mat4 concatMat = ubo._projection * ubo._view * ubo._model;
+	glm::vec3 result = concatMat * glm::vec4{0,0,0, 1};
     
     // set lights
     ubo._lights[0] = glm::vec4{0,0,0,0};

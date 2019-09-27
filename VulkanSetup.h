@@ -236,6 +236,7 @@ namespace Vulkan
 		std::vector<VkDeviceMemory> _depthMemory;
 
         std::vector<VkFramebuffer> _frameBuffers;
+		std::vector<VkShaderModule> _shaderModules;
         
         VkRenderPass _renderPass;
 		VkRenderPass _adhocRenderPass;
@@ -255,8 +256,8 @@ namespace Vulkan
 		VkCommandPool _adhocCommandPool;
 		std::vector<VkCommandBuffer> _adhocCommandBuffers;
 
-        std::vector<VkSemaphore> _renderFinishedSemaphore;
-        std::vector<VkSemaphore> _imageAvailableSemaphore;
+        std::vector<VkSemaphore> _renderFinishedSemaphores;
+        std::vector<VkSemaphore> _imageAvailableSemaphores;
         std::vector<VkFence> _fences;
         
 		std::vector<VulkanMesh> _vulkanMeshes;
@@ -273,8 +274,11 @@ namespace Vulkan
 
     };
 
+	bool resetCommandBuffers(VulkanContext& context, std::vector<VkCommandBuffer>& commandBuffers);
 	void clearMeshes(AppInformation & appInfo, VulkanContext & context);
 	bool addMesh(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData);
+	void destroyMesh(VulkanContext & context, VulkanMesh & mesh);
+	void destroyBufferDescriptor(VulkanContext & context, BufferDescriptor & descriptor);
 
     bool setupDebugCallback(VulkanContext & context);
     bool areValidationLayersAvailable(const std::vector<const char*> & validationLayers);

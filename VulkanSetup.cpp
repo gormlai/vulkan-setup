@@ -296,8 +296,10 @@ Vulkan::VulkanContext::VulkanContext()
 ,_swapChain(nullptr)
 ,_pipelineCache(VK_NULL_HANDLE)
 ,_allocator(nullptr)
+,_debugReportCallback(VK_NULL_HANDLE)
+,_debugUtilsCallback(VK_NULL_HANDLE)
 {
-    
+
 }
 
 ///////////////////////////////////// Vulkan Shader ///////////////////////////////////////////////////////////////////
@@ -506,7 +508,6 @@ bool Vulkan::setupDebugCallback(Vulkan::VulkanContext & context)
 			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
 		createInfo.pUserData = nullptr;
 		createInfo.pfnCallback = &VulkanDebugReportCallback;
-
 
 		VkResult debugReportCreationResult = debugReportMessengerCreator(context._instance, &createInfo, nullptr, &context._debugReportCallback);
 		assert(debugReportCreationResult == VK_SUCCESS);
@@ -1212,10 +1213,10 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     // viewport
     VkViewport viewport;
     viewport.x = 0;
-	viewport.y = (float)0;
-	//viewport.y = (float)context._swapChainSize.height;
+//	viewport.y = (float)0;
+	viewport.y = (float)context._swapChainSize.height;
     viewport.width = (float)context._swapChainSize.width;
-    viewport.height =(float)context._swapChainSize.height;
+    viewport.height = - (float)context._swapChainSize.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -1382,22 +1383,15 @@ bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context
     return true;
 }
 
-
-bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::resetCommandBuffers(VulkanContext & context, std::vector<VkCommandBuffer>& commandBuffers)
 {
-	std::vector<VkCommandBuffer> & commandBuffers = context._commandBuffers;
-
-	// do a basic recording of the command buffers
 	for (unsigned int i = 0; i < (unsigned int)commandBuffers.size(); i++)
 	{
-		if(!context._fences.empty())
+		if (!context._fences.empty())
 		{
 			const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, std::numeric_limits<uint64_t>::max());
 			assert(waitForFencesResult == VK_SUCCESS);
-//			const VkResult resetFencesResult = vkResetFences(context._device, 1, &context._fences[i]);
-//			assert(resetFencesResult == VK_SUCCESS);
 		}
-
 
 		VkCommandBufferResetFlags resetFlags = VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT;
 		const VkResult resetCommandBufferResult = vkResetCommandBuffer(commandBuffers[i], resetFlags);
@@ -1407,8 +1401,23 @@ bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContex
 			SDL_LogError(0, "call to vkResetCommandBuffer failed, i=%d\n", i);
 			return false;
 		}
+	}
+	return true;
 
 
+}
+
+
+bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContext & context)
+{
+	std::vector<VkCommandBuffer> & commandBuffers = context._commandBuffers;
+
+	if(!resetCommandBuffers(context, commandBuffers))
+		return false;
+
+	// do a basic recording of the command buffers
+	for (unsigned int i = 0; i < (unsigned int)commandBuffers.size(); i++)
+	{
 		VkCommandBufferBeginInfo beginInfo;
 		memset(&beginInfo, 0, sizeof(VkCommandBufferBeginInfo));
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1520,13 +1529,13 @@ std::vector<VkSemaphore> Vulkan::createSemaphores(VulkanContext & context)
 
 bool Vulkan::createSemaphores(AppInformation & appInfo, VulkanContext & context)
 {
-    context._imageAvailableSemaphore = createSemaphores(context);
-    context._renderFinishedSemaphore = createSemaphores(context);
+    context._imageAvailableSemaphores = createSemaphores(context);
+    context._renderFinishedSemaphores = createSemaphores(context);
     context._fences = createFences(context);
     
-    return context._imageAvailableSemaphore.size() == context._renderFinishedSemaphore.size()
-    && context._imageAvailableSemaphore.size() == context._fences.size()
-    && !context._imageAvailableSemaphore.empty();
+    return context._imageAvailableSemaphores.size() == context._renderFinishedSemaphores.size()
+    && context._imageAvailableSemaphores.size() == context._fences.size()
+    && !context._imageAvailableSemaphores.empty();
 }
 
 bool Vulkan::createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc)
@@ -1605,6 +1614,7 @@ bool Vulkan::createBuffer(VulkanContext & context, const void * srcData, VkDevic
     vertexBufferDescriptor.copyFrom(context._device, context._commandPool, context._graphicsQueue, stagingBufferDescriptor, bufferSize);
     
     result = vertexBufferDescriptor;
+	destroyBufferDescriptor(context, stagingBufferDescriptor);
     return true;
     
 }
@@ -1666,69 +1676,62 @@ bool Vulkan::createUniformBuffer(AppInformation & appInfo, VulkanContext & conte
 
 bool Vulkan::createDescriptorPool(VulkanContext & context, unsigned int bufferIndex)
 {
-	for (unsigned int meshIndex = 0; meshIndex < (unsigned int)context._vulkanMeshes.size(); meshIndex++)
-	{
-		VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
+	VulkanMesh& mesh = context._vulkanMeshes[bufferIndex];
 
-		VkDescriptorPoolSize poolSize = {};
-		poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		poolSize.descriptorCount = static_cast<uint32_t>(context._rawImages.size());
+	VkDescriptorPoolSize poolSize = {};
+	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSize.descriptorCount = static_cast<uint32_t>(context._rawImages.size());
 
-		VkDescriptorPoolCreateInfo poolInfo = {};
-		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.poolSizeCount = 1;
-		poolInfo.pPoolSizes = &poolSize;
-		poolInfo.maxSets = static_cast<uint32_t>(context._rawImages.size());
+	VkDescriptorPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = 1;
+	poolInfo.pPoolSizes = &poolSize;
+	poolInfo.maxSets = static_cast<uint32_t>(context._rawImages.size());
 
-		VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &mesh._descriptorPool);
-		assert(creationResult == VK_SUCCESS);
-        if(creationResult != VK_SUCCESS)
-            return false;
-	}
+	VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &mesh._descriptorPool);
+	assert(creationResult == VK_SUCCESS);
+	if (creationResult != VK_SUCCESS)
+		return false;
 
 	return true;
 }
 
 bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
 {
-	for (unsigned int meshIndex = 0; meshIndex < (unsigned int)context._vulkanMeshes.size(); meshIndex++)
-	{
-		VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
+	VulkanMesh& mesh = context._vulkanMeshes[bufferIndex];
 
-		const uint32_t size = (uint32_t)context._rawImages.size();
-		std::vector<VkDescriptorSetLayout> layouts(size, context._descriptorSetLayout);
-		VkDescriptorSetAllocateInfo allocInfo = {};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = mesh._descriptorPool;
-		allocInfo.descriptorSetCount = size;
-		allocInfo.pSetLayouts = &layouts[0];
+	const uint32_t size = (uint32_t)context._rawImages.size();
+	std::vector<VkDescriptorSetLayout> layouts(size, context._descriptorSetLayout);
+	VkDescriptorSetAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool = mesh._descriptorPool;
+	allocInfo.descriptorSetCount = size;
+	allocInfo.pSetLayouts = &layouts[0];
 
-		context._vulkanMeshes[bufferIndex]._descriptorSets.resize(size);
-		VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &mesh._descriptorSets[0]);
-		assert(allocationResult == VK_SUCCESS);
-		if (allocationResult != VK_SUCCESS)
-			return false;
+	context._vulkanMeshes[bufferIndex]._descriptorSets.resize(size);
+	VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &mesh._descriptorSets[0]);
+	assert(allocationResult == VK_SUCCESS);
+	if (allocationResult != VK_SUCCESS)
+		return false;
 
-		for (size_t i = 0; i < size; i++) {
-			VkDescriptorBufferInfo bufferInfo;
-			memset(&bufferInfo, 0, sizeof(bufferInfo));
-			bufferInfo.buffer = mesh._uniformBuffers[i]._buffer;
-			bufferInfo.offset = 0;
-			bufferInfo.range = sizeof(UniformBufferObject);
+	for (size_t i = 0; i < size; i++) {
+		VkDescriptorBufferInfo bufferInfo;
+		memset(&bufferInfo, 0, sizeof(bufferInfo));
+		bufferInfo.buffer = mesh._uniformBuffers[i]._buffer;
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(UniformBufferObject);
 
-			VkWriteDescriptorSet descriptorWrite = {};
-			descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrite.dstSet = mesh._descriptorSets[i];
-			descriptorWrite.dstBinding = 0;
-			descriptorWrite.dstArrayElement = 0;
-			descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			descriptorWrite.descriptorCount = 1;
-			descriptorWrite.pBufferInfo = &bufferInfo;
+		VkWriteDescriptorSet descriptorWrite = {};
+		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet = mesh._descriptorSets[i];
+		descriptorWrite.dstBinding = 0;
+		descriptorWrite.dstArrayElement = 0;
+		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pBufferInfo = &bufferInfo;
 
-			vkUpdateDescriptorSets(context._device, 1, &descriptorWrite, 0, nullptr);
-		}
+		vkUpdateDescriptorSets(context._device, 1, &descriptorWrite, 0, nullptr);
 	}
-
 
     return true;
 }
@@ -1790,10 +1793,36 @@ bool Vulkan::update(AppInformation & appInfo, VulkanContext & context, uint32_t 
     return updateResult;
 }
 
+void Vulkan::destroyMesh(VulkanContext & context, VulkanMesh& mesh)
+{
+	destroyBufferDescriptor(context, mesh._vertexBuffer);
+	destroyBufferDescriptor(context, mesh._indexBuffer);
+	for(auto uniformBuffer : mesh._uniformBuffers)
+		destroyBufferDescriptor(context, uniformBuffer);
+	mesh._uniformBuffers.clear();
+
+	vkDestroyDescriptorPool(context._device, mesh._descriptorPool, VK_NULL_HANDLE);
+	mesh._descriptorPool = VK_NULL_HANDLE;
+
+	mesh._descriptorSets.clear();
+
+}
+
+void Vulkan::destroyBufferDescriptor(VulkanContext & context, BufferDescriptor& descriptor)
+{
+	vkFreeMemory(context._device, descriptor._memory, VK_NULL_HANDLE);
+	vkDestroyBuffer(context._device, descriptor._buffer, VK_NULL_HANDLE);
+}
+
+
 void Vulkan::clearMeshes(AppInformation & appInfo, VulkanContext & context)
 {
+	resetCommandBuffers(context, context._commandBuffers);
+	for(auto mesh : context._vulkanMeshes)
+		destroyMesh(context, mesh);
+
 	context._vulkanMeshes.clear();
-	recordStandardCommandBuffers(appInfo, context);
+//	recordStandardCommandBuffers(appInfo, context);
 }
 
 bool Vulkan::addMesh(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData)
@@ -1918,6 +1947,7 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         SDL_LogError(0, "Failed to create shader modules\n");
         return false;
     }
+	context._shaderModules = shaderModules;
     
     if(!createDescriptorSetLayout(context))
     {
@@ -2023,6 +2053,7 @@ bool Vulkan::createSwapChainDependents(AppInformation & appInfo, VulkanContext &
 		SDL_LogError(0, "Failed to create shader modules\n");
 		return false;
 	}
+	context._shaderModules = shaderModules;
 
 	if (!createDescriptorSetLayout(context))
 	{
@@ -2119,10 +2150,17 @@ bool Vulkan::cleanupSwapChain(AppInformation & appInfo, VulkanContext & context)
 	context._frameBuffers.clear();
 
 	vkFreeCommandBuffers(device, context._commandPool, (uint32_t)context._commandBuffers.size(), &context._commandBuffers[0]);
+	vkDestroyCommandPool(device, context._commandPool, VK_NULL_HANDLE);
+	context._commandBuffers.clear();
+	vkDestroyRenderPass(device, context._renderPass, VK_NULL_HANDLE);
+	context._renderPass = VK_NULL_HANDLE;
 
 	vkDestroyPipeline(device, context._pipeline, nullptr);
+	context._pipeline = VK_NULL_HANDLE;
 	vkDestroyPipelineLayout(device, context._pipelineLayout, nullptr);
-	vkDestroyRenderPass(device, context._renderPass, nullptr);
+	context._pipelineLayout = VK_NULL_HANDLE;
+	vkDestroyPipelineCache(device, context._pipelineCache, VK_NULL_HANDLE);
+	context._pipelineCache = VK_NULL_HANDLE;
 
 	for (auto imageView : context._colorBuffers)
 		vkDestroyImageView(device, imageView, nullptr);
@@ -2131,6 +2169,9 @@ bool Vulkan::cleanupSwapChain(AppInformation & appInfo, VulkanContext & context)
 /*	for (auto image : context._rawImages)
 		vkDestroyImage(device, image, nullptr);*/
 	context._rawImages.clear();
+
+	vkDestroyDescriptorSetLayout(device, context._descriptorSetLayout, VK_NULL_HANDLE);
+	context._descriptorSetLayout = VK_NULL_HANDLE;
 
 	vkDestroySwapchainKHR(device, context._swapChain, nullptr);
 	context._swapChain = VK_NULL_HANDLE;

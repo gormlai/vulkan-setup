@@ -779,6 +779,9 @@ bool Vulkan::choosePhysicalDevice(AppInformation &appInfo, VulkanContext & vulka
     vulkanContext._physicalDevice = appInfo._physicalDevices[currentPhysicalDevice];
     SDL_LogInfo(0, "Chosen Vulkan Physical Device = %s. Driver version = %d\n", currentPhysicalProperties.deviceName, currentPhysicalProperties.driverVersion);
     
+	// get the device features, so we can check against them later on
+	vkGetPhysicalDeviceFeatures(vulkanContext._physicalDevice, &vulkanContext._physicalDeviceFeatures);
+
     return true;
 }
 
@@ -822,7 +825,7 @@ bool Vulkan::createDevice(AppInformation & appInfo, VulkanContext & context)
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceCreateInfo.queueCreateInfoCount = 1;
     deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
-    deviceCreateInfo.pEnabledFeatures = nullptr;
+    deviceCreateInfo.pEnabledFeatures = &context._physicalDeviceFeatures;
     
     static const char * deviceExtensionNames[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -862,6 +865,13 @@ bool Vulkan::createSwapChain(AppInformation & appInfo, VulkanContext & context)
 	assert(surfaceFormatsResult == VK_SUCCESS);
 	if (surfaceFormatsResult != VK_SUCCESS || surfaceFormatsCount == 0)
         return false;
+
+	// check if present support for interface
+	VkBool32 presentSupported = false;
+	VkResult surfaceSupportedResult = vkGetPhysicalDeviceSurfaceSupportKHR(context._physicalDevice, 0, context._surface, &presentSupported);
+	assert(surfaceSupportedResult == VK_SUCCESS);
+	if(!presentSupported)
+		return false;
     
     VkSwapchainCreateInfoKHR swapChainCreateInfo;
     memset(&swapChainCreateInfo, 0, sizeof(swapChainCreateInfo));
@@ -1202,9 +1212,10 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     // viewport
     VkViewport viewport;
     viewport.x = 0;
-    viewport.y = (float)context._swapChainSize.height;
+	viewport.y = (float)0;
+	//viewport.y = (float)context._swapChainSize.height;
     viewport.width = (float)context._swapChainSize.width;
-    viewport.height =-(float)context._swapChainSize.height;
+    viewport.height =(float)context._swapChainSize.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -1229,8 +1240,8 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     rasterizerCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizerCreateInfo.depthClampEnable = VK_FALSE;
     rasterizerCreateInfo.rasterizerDiscardEnable = VK_FALSE;
-	rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_LINE;
-    rasterizerCreateInfo.lineWidth = 1.0f;
+	rasterizerCreateInfo.polygonMode = context._physicalDeviceFeatures.fillModeNonSolid ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+	rasterizerCreateInfo.lineWidth = 1.0f;
     rasterizerCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizerCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizerCreateInfo.depthBiasEnable = VK_FALSE;
@@ -1264,7 +1275,7 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
     VkPipelineColorBlendAttachmentState colorBlendAttachmentCreateInfo;
     memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));
     colorBlendAttachmentCreateInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachmentCreateInfo.blendEnable = VK_FALSE;
+    colorBlendAttachmentCreateInfo.blendEnable = VK_TRUE;
     colorBlendAttachmentCreateInfo.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
     colorBlendAttachmentCreateInfo.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
     colorBlendAttachmentCreateInfo.colorBlendOp = VK_BLEND_OP_ADD;
@@ -1358,7 +1369,7 @@ bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context
     memset(&createInfo, 0, sizeof(VkCommandPoolCreateInfo));
     createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     createInfo.queueFamilyIndex = appInfo._chosenPhysicalDevice;
-    createInfo.flags = 0;
+    createInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     VkCommandPool commandPool;
 	const VkResult createCommandPoolResult = vkCreateCommandPool(context._device, &createInfo, nullptr, &commandPool);
 	assert(createCommandPoolResult == VK_SUCCESS);
@@ -1379,6 +1390,15 @@ bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContex
 	// do a basic recording of the command buffers
 	for (unsigned int i = 0; i < (unsigned int)commandBuffers.size(); i++)
 	{
+		if(!context._fences.empty())
+		{
+			const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, std::numeric_limits<uint64_t>::max());
+			assert(waitForFencesResult == VK_SUCCESS);
+//			const VkResult resetFencesResult = vkResetFences(context._device, 1, &context._fences[i]);
+//			assert(resetFencesResult == VK_SUCCESS);
+		}
+
+
 		VkCommandBufferResetFlags resetFlags = VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT;
 		const VkResult resetCommandBufferResult = vkResetCommandBuffer(commandBuffers[i], resetFlags);
 		assert(resetCommandBufferResult == VK_SUCCESS);
@@ -1391,7 +1411,7 @@ bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContex
 
 		VkCommandBufferBeginInfo beginInfo;
 		memset(&beginInfo, 0, sizeof(VkCommandBufferBeginInfo));
-		beginInfo.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 		const VkResult beginCommandBufferResult = vkBeginCommandBuffer(commandBuffers[i], &beginInfo);
 		assert(beginCommandBufferResult == VK_SUCCESS);
@@ -2072,6 +2092,15 @@ bool Vulkan::recreateSwapChain(AppInformation & appInfo, VulkanContext & context
 bool Vulkan::cleanupSwapChain(AppInformation & appInfo, VulkanContext & context)
 {
 	VkDevice device = context._device;
+
+	for (unsigned int i = 0; i < (unsigned int)context._commandBuffers.size(); i++)
+	{
+		if (!context._fences.empty())
+		{
+			const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, std::numeric_limits<uint64_t>::max());
+			assert(waitForFencesResult == VK_SUCCESS);
+		}
+	}
 
 	for (auto depthImageView : context._depthImageViews)
 		vkDestroyImageView(device, depthImageView, nullptr);

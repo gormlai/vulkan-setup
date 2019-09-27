@@ -214,7 +214,7 @@ namespace Vulkan
         VkPhysicalDevice _physicalDevice;
         VkDevice _device;
         VkPhysicalDeviceProperties _deviceProperties;
-        VkPhysicalDeviceFeatures _deviceFeatures;
+        VkPhysicalDeviceFeatures _physicalDeviceFeatures;
         
         VkQueue _presentQueue;
         VkQueue _graphicsQueue;

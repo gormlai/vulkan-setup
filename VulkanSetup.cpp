@@ -812,32 +812,43 @@ bool Vulkan::lookupDeviceExtensions(AppInformation &appInfo) {
 
 bool Vulkan::createDevice(AppInformation & appInfo, VulkanContext & context)
 {
-    VkDeviceQueueCreateInfo deviceQueueCreateInfo;
-    VkDeviceCreateInfo deviceCreateInfo;
-    memset(&deviceQueueCreateInfo, 0, sizeof(deviceQueueCreateInfo));
-    memset(&deviceCreateInfo, 0, sizeof(deviceCreateInfo));
+  uint32_t pQueueFamilyCount = 0;
+  vkGetPhysicalDeviceQueueFamilyProperties(appInfo._physicalDevices[appInfo._chosenPhysicalDevice], &pQueueFamilyCount, NULL);
+  assert(pQueueFamilyCount != 0);
+  if(pQueueFamilyCount == 0)
+    return false;
+
+  std::vector<VkQueueFamilyProperties> queueProperties(pQueueFamilyCount);
+  vkGetPhysicalDeviceQueueFamilyProperties(appInfo._physicalDevices[appInfo._chosenPhysicalDevice], &pQueueFamilyCount, &queueProperties[0]);
+  
+  
+  
+  VkDeviceQueueCreateInfo deviceQueueCreateInfo;
+  VkDeviceCreateInfo deviceCreateInfo;
+  memset(&deviceQueueCreateInfo, 0, sizeof(deviceQueueCreateInfo));
+  memset(&deviceCreateInfo, 0, sizeof(deviceCreateInfo));
+  
+  deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  deviceQueueCreateInfo.queueFamilyIndex = appInfo._chosenPhysicalDevice;
+  deviceQueueCreateInfo.queueCount = 1;
+  static constexpr float fQueuePriority = 1.0f;
+  deviceQueueCreateInfo.pQueuePriorities = &fQueuePriority;
+  
+  deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceCreateInfo.queueCreateInfoCount = 1;
+  deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
+  deviceCreateInfo.pEnabledFeatures = &context._physicalDeviceFeatures;
     
-    deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    deviceQueueCreateInfo.queueFamilyIndex = appInfo._chosenPhysicalDevice;
-    deviceQueueCreateInfo.queueCount = 1;
-    static constexpr float fQueuePriority = 1.0f;
-    deviceQueueCreateInfo.pQueuePriorities = &fQueuePriority;
-    
-    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.queueCreateInfoCount = 1;
-    deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
-    deviceCreateInfo.pEnabledFeatures = &context._physicalDeviceFeatures;
-    
-    static const char * deviceExtensionNames[] = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    };
-    static const unsigned int numExtensionNames = sizeof(deviceExtensionNames) / sizeof(const char*);
-    deviceCreateInfo.ppEnabledExtensionNames = &deviceExtensionNames[0];
-    deviceCreateInfo.enabledExtensionCount = numExtensionNames;
-    
-    VkResult creationResult = vkCreateDevice(appInfo._physicalDevices[appInfo._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
-	assert(creationResult == VK_SUCCESS);
-	return creationResult == VK_SUCCESS;
+  static const char * deviceExtensionNames[] = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  };
+  static const unsigned int numExtensionNames = sizeof(deviceExtensionNames) / sizeof(const char*);
+  deviceCreateInfo.ppEnabledExtensionNames = &deviceExtensionNames[0];
+  deviceCreateInfo.enabledExtensionCount = numExtensionNames;
+  
+  VkResult creationResult = vkCreateDevice(appInfo._physicalDevices[appInfo._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
+  assert(creationResult == VK_SUCCESS);
+  return creationResult == VK_SUCCESS;
 }
 
 bool Vulkan::createQueue(AppInformation & appInfo, VulkanContext & context)

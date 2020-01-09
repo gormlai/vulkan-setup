@@ -1168,8 +1168,9 @@ bool Vulkan::createPipelineCache(AppDescriptor & appDesc, VulkanContext & contex
 }
 
 
-bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules)
+bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, VulkanContext & context)
 {
+    const std::vector<VkShaderModule> & shaderModules = context._shaderModules;
     const std::vector<Shader> & shaders = appDesc._shaders;
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
     for (unsigned int i = 0; i < (unsigned int)shaders.size() ; i++)
@@ -1952,13 +1953,16 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, VulkanContext & context)
 		return false;
 	}
 
-    std::vector<VkShaderModule> shaderModules = createShaderModules(appDesc, context);
-    if (shaderModules.empty() || shaderModules.size() != appDesc._shaders.size())
+    if(!appDesc._shaders.empty())
     {
-        SDL_LogError(0, "Failed to create shader modules\n");
-        return false;
+        std::vector<VkShaderModule> shaderModules = createShaderModules(appDesc, context);
+        if (shaderModules.empty() || shaderModules.size() != appDesc._shaders.size())
+        {
+            SDL_LogError(0, "Failed to create shader modules\n");
+            return false;
+        }
+        context._shaderModules = shaderModules;
     }
-	context._shaderModules = shaderModules;
     
     if(!createDescriptorSetLayout(context))
     {
@@ -1973,7 +1977,7 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, VulkanContext & context)
 	}
 	
     
-    if (!createGraphicsPipeline(appDesc, context, shaderModules))
+    if (!createGraphicsPipeline(appDesc, context))
     {
         SDL_LogError(0, "Failed to create graphics pipeline\n");
         return false;
@@ -2058,13 +2062,17 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, VulkanContext & 
 		return false;
 	}
 
-	std::vector<VkShaderModule> shaderModules = createShaderModules(appDesc, context);
-	if (shaderModules.empty() || shaderModules.size() != appDesc._shaders.size())
-	{
-		SDL_LogError(0, "Failed to create shader modules\n");
-		return false;
-	}
-	context._shaderModules = shaderModules;
+    if(!appDesc._shaders.empty())
+    {
+        std::vector<VkShaderModule> shaderModules = createShaderModules(appDesc, context);
+        if (shaderModules.empty() || shaderModules.size() != appDesc._shaders.size())
+        {
+            SDL_LogError(0, "Failed to create shader modules\n");
+            return false;
+        }
+        context._shaderModules = shaderModules;
+    }
+
 
 	if (!createDescriptorSetLayout(context))
 	{
@@ -2079,7 +2087,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, VulkanContext & 
 	}
 
 
-	if (!createGraphicsPipeline(appDesc, context, shaderModules))
+	if (!createGraphicsPipeline(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create graphics pipeline\n");
 		return false;

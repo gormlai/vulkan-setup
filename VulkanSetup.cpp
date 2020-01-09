@@ -13,7 +13,7 @@ bool Vulkan::validationLayersEnabled = true;
 
 namespace
 {
-	bool createCommandBuffers(Vulkan::AppInformation & appInfo, Vulkan::VulkanContext & context, VkCommandPool commandPool, unsigned int numBuffers, std::vector<VkCommandBuffer> * result)
+	bool createCommandBuffers(Vulkan::AppDescriptor & appDesc, Vulkan::VulkanContext & context, VkCommandPool commandPool, unsigned int numBuffers, std::vector<VkCommandBuffer> * result)
 	{
 		std::vector<VkCommandBuffer> commandBuffers(numBuffers);
 
@@ -177,10 +177,10 @@ namespace
 		return true;
 	}
 
-	bool transitionImageLayout(Vulkan::AppInformation & appInfo, Vulkan::VulkanContext & context, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
+	bool transitionImageLayout(Vulkan::AppDescriptor & appDesc, Vulkan::VulkanContext & context, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
 	{
 		std::vector<VkCommandBuffer> commandBuffers;
-		if (!createCommandBuffers(appInfo, context, context._commandPool, 1, &commandBuffers))
+		if (!createCommandBuffers(appDesc, context, context._commandPool, 1, &commandBuffers))
 			return false;
 
 		VkCommandBuffer & commandBuffer = commandBuffers[0];
@@ -315,9 +315,9 @@ Vulkan::Shader::Shader(const std::string & filename, ShaderType type)
 ///////////////////////////////////// Vulkan Vertex ///////////////////////////////////////////////////////////////////
 
 
-///////////////////////////////////// Vulkan AppInformation ///////////////////////////////////////////////////////////////////
+///////////////////////////////////// Vulkan AppDescriptor ///////////////////////////////////////////////////////////////////
 
-Vulkan::AppInformation::AppInformation()
+Vulkan::AppDescriptor::AppDescriptor()
 :_window(nullptr)
 , _chosenPhysicalDevice(0)
 {
@@ -577,7 +577,7 @@ bool Vulkan::loadVulkanFunctions() {
     return procAddr != nullptr;
 }
 
-bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appInfo, Vulkan::VulkanContext & context)
+bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDesc, Vulkan::VulkanContext & context)
 {
     
     // first count the number of instance extensions
@@ -605,7 +605,7 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     
     
     unsigned int requiredInstanceExtensionCount = 0;
-    if (!SDL_Vulkan_GetInstanceExtensions(appInfo._window, &requiredInstanceExtensionCount, nullptr))
+    if (!SDL_Vulkan_GetInstanceExtensions(appDesc._window, &requiredInstanceExtensionCount, nullptr))
     {
         SDL_LogError(0, "Failed to get number of extensions");
         return false;
@@ -613,7 +613,7 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     
     std::vector<const char*> requiredInstanceExtensions;
     requiredInstanceExtensions.resize(requiredInstanceExtensionCount);
-    if (!SDL_Vulkan_GetInstanceExtensions(appInfo._window, &requiredInstanceExtensionCount, &requiredInstanceExtensions[0]))
+    if (!SDL_Vulkan_GetInstanceExtensions(appDesc._window, &requiredInstanceExtensionCount, &requiredInstanceExtensions[0]))
     {
         SDL_LogError(0, "Failed to acquire possible extensions error");
         return false;
@@ -658,10 +658,10 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppInformation & appI
     VkApplicationInfo vkAppInfo;
     memset(&vkAppInfo, 0, sizeof(vkAppInfo));
     vkAppInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    vkAppInfo.apiVersion = appInfo._descriptor._requiredVulkanVersion;
+    vkAppInfo.apiVersion = appDesc._requiredVulkanVersion;
 	vkAppInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 	vkAppInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    vkAppInfo.pApplicationName = appInfo._descriptor._appName.c_str();
+    vkAppInfo.pApplicationName = appDesc._appName.c_str();
     
     VkInstanceCreateInfo instanceCreateInfo;
     memset(&instanceCreateInfo, 0, sizeof(instanceCreateInfo));
@@ -708,7 +708,7 @@ bool Vulkan::createVulkanSurface(SDL_Window * window, Vulkan::VulkanContext & co
     return true;
 }
 
-bool Vulkan::enumeratePhysicalDevices(Vulkan::AppInformation & appInfo, Vulkan::VulkanContext & context)
+bool Vulkan::enumeratePhysicalDevices(Vulkan::AppDescriptor & appDesc, Vulkan::VulkanContext & context)
 {
     uint32_t deviceCount = 0;
     // first count the number of physical devices by passing in NULL as the last argument
@@ -737,7 +737,7 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppInformation & appInfo, Vulkan::
         VkPhysicalDevice device = devices[deviceIndex];
         vkGetPhysicalDeviceProperties(device, &context._deviceProperties);
         
-        if (context._deviceProperties.apiVersion < appInfo._descriptor._requiredVulkanVersion)
+        if (context._deviceProperties.apiVersion < appDesc._requiredVulkanVersion)
             continue;
         
         break;
@@ -746,20 +746,20 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppInformation & appInfo, Vulkan::
     if (deviceIndex == deviceCount)
         return false;
     
-    appInfo._physicalDevices = devices;
+    appDesc._physicalDevices = devices;
     return true;
 }
 
 // prioritise discrete over integrated
-bool Vulkan::choosePhysicalDevice(AppInformation &appInfo, VulkanContext & vulkanContext) {
+bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, VulkanContext & vulkanContext) {
     bool foundDevice = false;
     unsigned int currentPhysicalDevice = 0;
     VkPhysicalDeviceProperties currentPhysicalProperties;
-    vkGetPhysicalDeviceProperties(appInfo._physicalDevices[currentPhysicalDevice], &currentPhysicalProperties);
-    for (unsigned int i = 0; i < (unsigned int)appInfo._physicalDevices.size(); i++)
+    vkGetPhysicalDeviceProperties(appDesc._physicalDevices[currentPhysicalDevice], &currentPhysicalProperties);
+    for (unsigned int i = 0; i < (unsigned int)appDesc._physicalDevices.size(); i++)
     {
         VkPhysicalDeviceProperties physicalProperties;
-        vkGetPhysicalDeviceProperties(appInfo._physicalDevices[i], &physicalProperties);
+        vkGetPhysicalDeviceProperties(appDesc._physicalDevices[i], &physicalProperties);
         if (!foundDevice)
         {
             currentPhysicalDevice = i;
@@ -776,8 +776,8 @@ bool Vulkan::choosePhysicalDevice(AppInformation &appInfo, VulkanContext & vulka
     if (!foundDevice)
         return false;
     
-    appInfo._chosenPhysicalDevice = currentPhysicalDevice;
-    vulkanContext._physicalDevice = appInfo._physicalDevices[currentPhysicalDevice];
+    appDesc._chosenPhysicalDevice = currentPhysicalDevice;
+    vulkanContext._physicalDevice = appDesc._physicalDevices[currentPhysicalDevice];
     SDL_LogInfo(0, "Chosen Vulkan Physical Device = %s. Driver version = %d\n", currentPhysicalProperties.deviceName, currentPhysicalProperties.driverVersion);
     
 	// get the device features, so we can check against them later on
@@ -786,9 +786,9 @@ bool Vulkan::choosePhysicalDevice(AppInformation &appInfo, VulkanContext & vulka
     return true;
 }
 
-bool Vulkan::lookupDeviceExtensions(AppInformation &appInfo) {
+bool Vulkan::lookupDeviceExtensions(AppDescriptor &appDesc) {
     uint32_t deviceExtensionsCount = 0;
-    VkResult enumerateDeviceExtensionsResult = vkEnumerateDeviceExtensionProperties(appInfo._physicalDevices[appInfo._chosenPhysicalDevice],
+    VkResult enumerateDeviceExtensionsResult = vkEnumerateDeviceExtensionProperties(appDesc._physicalDevices[appDesc._chosenPhysicalDevice],
                                                                                     nullptr,
                                                                                     &deviceExtensionsCount,
                                                                                     nullptr);
@@ -799,27 +799,27 @@ bool Vulkan::lookupDeviceExtensions(AppInformation &appInfo) {
     if (deviceExtensionsCount > 0)
     {
         std::vector<VkExtensionProperties> deviceExtensions(deviceExtensionsCount);
-		enumerateDeviceExtensionsResult = vkEnumerateDeviceExtensionProperties(appInfo._physicalDevices[appInfo._chosenPhysicalDevice],
+		enumerateDeviceExtensionsResult = vkEnumerateDeviceExtensionProperties(appDesc._physicalDevices[appDesc._chosenPhysicalDevice],
                                              nullptr,
                                              &deviceExtensionsCount,
                                              &deviceExtensions[0]);
 		assert(enumerateDeviceExtensionsResult == VK_SUCCESS);
 
-        appInfo._deviceExtensions = deviceExtensions;
+        appDesc._deviceExtensions = deviceExtensions;
     }
     return true;
 }
 
-bool Vulkan::createDevice(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createDevice(AppDescriptor & appDesc, VulkanContext & context)
 {
   uint32_t pQueueFamilyCount = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(appInfo._physicalDevices[appInfo._chosenPhysicalDevice], &pQueueFamilyCount, NULL);
+  vkGetPhysicalDeviceQueueFamilyProperties(appDesc._physicalDevices[appDesc._chosenPhysicalDevice], &pQueueFamilyCount, NULL);
   assert(pQueueFamilyCount != 0);
   if(pQueueFamilyCount == 0)
     return false;
 
   std::vector<VkQueueFamilyProperties> queueProperties(pQueueFamilyCount);
-  vkGetPhysicalDeviceQueueFamilyProperties(appInfo._physicalDevices[appInfo._chosenPhysicalDevice], &pQueueFamilyCount, &queueProperties[0]);
+  vkGetPhysicalDeviceQueueFamilyProperties(appDesc._physicalDevices[appDesc._chosenPhysicalDevice], &pQueueFamilyCount, &queueProperties[0]);
   
   
   
@@ -829,7 +829,7 @@ bool Vulkan::createDevice(AppInformation & appInfo, VulkanContext & context)
   memset(&deviceCreateInfo, 0, sizeof(deviceCreateInfo));
   
   deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  deviceQueueCreateInfo.queueFamilyIndex = appInfo._chosenPhysicalDevice;
+  deviceQueueCreateInfo.queueFamilyIndex = appDesc._chosenPhysicalDevice;
   deviceQueueCreateInfo.queueCount = 1;
   static constexpr float fQueuePriority = 1.0f;
   deviceQueueCreateInfo.pQueuePriorities = &fQueuePriority;
@@ -846,19 +846,19 @@ bool Vulkan::createDevice(AppInformation & appInfo, VulkanContext & context)
   deviceCreateInfo.ppEnabledExtensionNames = &deviceExtensionNames[0];
   deviceCreateInfo.enabledExtensionCount = numExtensionNames;
   
-  VkResult creationResult = vkCreateDevice(appInfo._physicalDevices[appInfo._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
+  VkResult creationResult = vkCreateDevice(appDesc._physicalDevices[appDesc._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
   assert(creationResult == VK_SUCCESS);
   return creationResult == VK_SUCCESS;
 }
 
-bool Vulkan::createQueue(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createQueue(AppDescriptor & appDesc, VulkanContext & context)
 {
-    vkGetDeviceQueue(context._device, appInfo._chosenPhysicalDevice, 0, &context._graphicsQueue);
-    vkGetDeviceQueue(context._device, appInfo._chosenPhysicalDevice, 0, &context._presentQueue);
+    vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._graphicsQueue);
+    vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._presentQueue);
     return true;
 }
 
-bool Vulkan::createSwapChain(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createSwapChain(AppDescriptor & appDesc, VulkanContext & context)
 {
     // get surface capabilities
     VkResult surfaceCapabilitiesResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context._physicalDevice, context._surface, &context._surfaceCapabilities);
@@ -872,8 +872,8 @@ bool Vulkan::createSwapChain(AppInformation & appInfo, VulkanContext & context)
 	if (surfaceFormatsCountResult != VK_SUCCESS || surfaceFormatsCount == 0)
         return false;
     
-    appInfo._surfaceFormats.resize(surfaceFormatsCount);
-    VkResult surfaceFormatsResult = vkGetPhysicalDeviceSurfaceFormatsKHR(context._physicalDevice, context._surface, &surfaceFormatsCount, &appInfo._surfaceFormats[0]);
+    appDesc._surfaceFormats.resize(surfaceFormatsCount);
+    VkResult surfaceFormatsResult = vkGetPhysicalDeviceSurfaceFormatsKHR(context._physicalDevice, context._surface, &surfaceFormatsCount, &appDesc._surfaceFormats[0]);
 	assert(surfaceFormatsResult == VK_SUCCESS);
 	if (surfaceFormatsResult != VK_SUCCESS || surfaceFormatsCount == 0)
         return false;
@@ -894,14 +894,14 @@ bool Vulkan::createSwapChain(AppInformation & appInfo, VulkanContext & context)
         return false;
     
 #if defined(__APPLE__)
-    SDL_GL_GetDrawableSize(appInfo._window, &width, &height);
+    SDL_GL_GetDrawableSize(appDesc._window, &width, &height);
 #else
-    SDL_Vulkan_GetDrawableSize(appInfo._window, &width, &height);
+    SDL_Vulkan_GetDrawableSize(appDesc._window, &width, &height);
 #endif
     if (width <= 0 || height <= 0)
         return false;
     
-    context._surfaceFormat = appInfo._surfaceFormats[0];
+    context._surfaceFormat = appDesc._surfaceFormats[0];
     context._swapChainSize.width = width;
     context._swapChainSize.height = height;
     
@@ -939,7 +939,7 @@ bool Vulkan::createSwapChain(AppInformation & appInfo, VulkanContext & context)
     return true;
 }
 
-bool Vulkan::createDepthBuffers(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, VulkanContext & context)
 {
 	constexpr VkImageTiling requiredTiling = VK_IMAGE_TILING_OPTIMAL;
 
@@ -968,7 +968,7 @@ bool Vulkan::createDepthBuffers(AppInformation & appInfo, VulkanContext & contex
 		if(!createImageView(context, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, depthImageView))
 			continue;
 
-		if (!transitionImageLayout(appInfo, context, depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
+		if (!transitionImageLayout(appDesc, context, depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
 			continue;
 
 		context._depthImages[i] = depthImage;
@@ -1120,10 +1120,10 @@ bool Vulkan::createFrameBuffers(VulkanContext & vulkanContext)
     return true;
 }
 
-std::vector<VkShaderModule> Vulkan::createShaderModules(AppInformation & appInfo, VulkanContext & context)
+std::vector<VkShaderModule> Vulkan::createShaderModules(AppDescriptor & appDesc, VulkanContext & context)
 {
     std::vector<VkShaderModule> shaderModules;
-    for (Shader & shader : appInfo._shaders)
+    for (Shader & shader : appDesc._shaders)
     {
         VkShaderModuleCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
@@ -1149,7 +1149,7 @@ std::vector<VkShaderModule> Vulkan::createShaderModules(AppInformation & appInfo
     return shaderModules;
 }
 
-bool Vulkan::createPipelineCache(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createPipelineCache(AppDescriptor & appDesc, VulkanContext & context)
 {
 	if (context._pipelineCache == VK_NULL_HANDLE)
 	{
@@ -1168,9 +1168,9 @@ bool Vulkan::createPipelineCache(AppInformation & appInfo, VulkanContext & conte
 }
 
 
-bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules)
+bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules)
 {
-    const std::vector<Shader> & shaders = appInfo._shaders;
+    const std::vector<Shader> & shaders = appDesc._shaders;
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
     for (unsigned int i = 0; i < (unsigned int)shaders.size() ; i++)
     {
@@ -1203,8 +1203,8 @@ bool Vulkan::createGraphicsPipeline(AppInformation & appInfo, VulkanContext & co
 
     // Pipeline Vertex Input State
     VkPipelineVertexInputStateCreateInfo vertexInputInfo;
-	VkVertexInputBindingDescription vertexBindingDescription = appInfo._getBindingDescription();
-	std::array<VkVertexInputAttributeDescription, 2> vertexAttributeDescription = appInfo._getAttributes();
+	VkVertexInputBindingDescription vertexBindingDescription = appDesc._getBindingDescription();
+	std::array<VkVertexInputAttributeDescription, 2> vertexAttributeDescription = appDesc._getAttributes();
     memset(&vertexInputInfo, 0, sizeof(VkPipelineVertexInputStateCreateInfo));
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 1;
@@ -1375,12 +1375,12 @@ bool Vulkan::createDescriptorSetLayout(VulkanContext & vulkanContext)
 
 
 
-bool Vulkan::createCommandPool(AppInformation & appInfo, VulkanContext & context, VkCommandPool * result)
+bool Vulkan::createCommandPool(AppDescriptor & appDesc, VulkanContext & context, VkCommandPool * result)
 {
     VkCommandPoolCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkCommandPoolCreateInfo));
     createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    createInfo.queueFamilyIndex = appInfo._chosenPhysicalDevice;
+    createInfo.queueFamilyIndex = appDesc._chosenPhysicalDevice;
     createInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     VkCommandPool commandPool;
 	const VkResult createCommandPoolResult = vkCreateCommandPool(context._device, &createInfo, nullptr, &commandPool);
@@ -1419,7 +1419,7 @@ bool Vulkan::resetCommandBuffers(VulkanContext & context, std::vector<VkCommandB
 }
 
 
-bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::recordStandardCommandBuffers(AppDescriptor & appDesc, VulkanContext & context)
 {
 	std::vector<VkCommandBuffer> & commandBuffers = context._commandBuffers;
 
@@ -1449,7 +1449,7 @@ bool Vulkan::recordStandardCommandBuffers(AppInformation & appInfo, VulkanContex
 		renderPassBeginInfo.renderArea.offset = { 0,0 };
 		renderPassBeginInfo.renderArea.extent = context._swapChainSize;
 
-		const glm::vec4 bgColor = appInfo._backgroundClearColor();
+		const glm::vec4 bgColor = appDesc._backgroundClearColor();
 		VkClearValue clearColorValue[2];
 		clearColorValue[0].color = VkClearColorValue{ bgColor[0], bgColor[1], bgColor[2], bgColor[3] };
 		clearColorValue[1].depthStencil = VkClearDepthStencilValue{ 1.0f, 0 };
@@ -1538,7 +1538,7 @@ std::vector<VkSemaphore> Vulkan::createSemaphores(VulkanContext & context)
     return semaphores;
 }
 
-bool Vulkan::createSemaphores(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createSemaphores(AppDescriptor & appDesc, VulkanContext & context)
 {
     context._imageAvailableSemaphores = createSemaphores(context);
     context._renderFinishedSemaphores = createSemaphores(context);
@@ -1630,7 +1630,7 @@ bool Vulkan::createBuffer(VulkanContext & context, const void * srcData, VkDevic
     
 }
 
-bool Vulkan::createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData, unsigned int meshIndex)
+bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData, unsigned int meshIndex)
 {
     BufferDescriptor indexBuffer;
     BufferDescriptor vertexBuffer;
@@ -1664,7 +1664,7 @@ bool Vulkan::createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext 
 
 }
 
-bool Vulkan::createUniformBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
+bool Vulkan::createUniformBuffer(AppDescriptor & appDesc, VulkanContext & context, unsigned int bufferIndex)
 {
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
     
@@ -1707,7 +1707,7 @@ bool Vulkan::createDescriptorPool(VulkanContext & context, unsigned int bufferIn
 	return true;
 }
 
-bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex)
+bool Vulkan::createDescriptorSet(AppDescriptor & appDesc, VulkanContext & context, unsigned int bufferIndex)
 {
 	VulkanMesh& mesh = context._vulkanMeshes[bufferIndex];
 
@@ -1747,7 +1747,7 @@ bool Vulkan::createDescriptorSet(AppInformation & appInfo, VulkanContext & conte
     return true;
 }
 
-void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex)
+void Vulkan::updateUniforms(AppDescriptor & appDesc, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex)
 {
     VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
     
@@ -1776,7 +1776,7 @@ void Vulkan::updateUniforms(AppInformation & appInfo, VulkanContext & context, u
     vkUnmapMemory(context._device, context._vulkanMeshes[meshIndex]._uniformBuffers[bufferIndex]._memory);
 }
 
-bool Vulkan::update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage)
+bool Vulkan::update(AppDescriptor & appDesc, VulkanContext & context, uint32_t currentImage)
 {
     static uint32_t firstTime = SDL_GetTicks();
     static uint32_t lastTime = firstTime;
@@ -1789,16 +1789,16 @@ bool Vulkan::update(AppInformation & appInfo, VulkanContext & context, uint32_t 
 
 	// update camera position
 	glm::vec3 pos, lookat, up;
-	appInfo._cameraUpdateFunction(pos, lookat, up);
+	appDesc._cameraUpdateFunction(pos, lookat, up);
 	context._camera = VulkanCamera(pos, lookat, up);
 
-    const bool updateResult = appInfo._updateFunction(timePassedS, deltaS);
+    const bool updateResult = appDesc._updateFunction(timePassedS, deltaS);
 	for(unsigned int meshIndex = 0 ; meshIndex < context._vulkanMeshes.size() ; meshIndex++)
 	{
 		VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
-        mesh._transformation._model = appInfo._updateModelMatrix(mesh._userData, timePassedS, deltaS);
+        mesh._transformation._model = appDesc._updateModelMatrix(mesh._userData, timePassedS, deltaS);
 		for (unsigned int i = 0; i < (unsigned int)mesh._uniformBuffers.size(); i++)
-			updateUniforms(appInfo, context, i, meshIndex);
+			updateUniforms(appDesc, context, i, meshIndex);
 	}
     
     return updateResult;
@@ -1826,27 +1826,27 @@ void Vulkan::destroyBufferDescriptor(VulkanContext & context, BufferDescriptor& 
 }
 
 
-void Vulkan::clearMeshes(AppInformation & appInfo, VulkanContext & context)
+void Vulkan::clearMeshes(AppDescriptor & appDesc, VulkanContext & context)
 {
 	resetCommandBuffers(context, context._commandBuffers);
 	for(auto mesh : context._vulkanMeshes)
 		destroyMesh(context, mesh);
 
 	context._vulkanMeshes.clear();
-//	recordStandardCommandBuffers(appInfo, context);
+//	recordStandardCommandBuffers(appDesc, context);
 }
 
-bool Vulkan::addMesh(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData)
+bool Vulkan::addMesh(AppDescriptor & appDesc, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData)
 {
 	context._vulkanMeshes.push_back(Vulkan::VulkanMesh());
 	const unsigned int index = (unsigned int)(context._vulkanMeshes.size() - 1);
-	if (!createIndexAndVertexBuffer(appInfo, context, vertexData, indexData, userData, index))
+	if (!createIndexAndVertexBuffer(appDesc, context, vertexData, indexData, userData, index))
 	{
 		SDL_LogError(0, "Failed to create index and vertex buffer\n");
 		return false;
 	}
 
-	if (!createUniformBuffer(appInfo, context, index))
+	if (!createUniformBuffer(appDesc, context, index))
 	{
 		SDL_LogError(0, "Failed to create uniform buffer\n");
 		return false;
@@ -1858,19 +1858,19 @@ bool Vulkan::addMesh(AppInformation & appInfo, VulkanContext & context, std::vec
 		return false;
 	}
 
-	if (!createDescriptorSet(appInfo, context, index))
+	if (!createDescriptorSet(appDesc, context, index))
 	{
 		SDL_LogError(0, "Failed to create descriptor set\n");
 		return false;
 	}
 
-	recordStandardCommandBuffers(appInfo, context);
+	recordStandardCommandBuffers(appDesc, context);
 
     return true;
 }
 
 
-bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, VulkanContext & context)
 {
     if (!loadVulkanLibrary()) {
         SDL_LogError(0, "Failed to load vulkan library");
@@ -1882,7 +1882,7 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         return false;
     }
     
-    if (!createInstanceAndLoadExtensions(appInfo, context)) {
+    if (!createInstanceAndLoadExtensions(appDesc, context)) {
         SDL_LogError(0, "Failed to create instance and load extensions");
         return false;
     }
@@ -1893,42 +1893,42 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
         return false;
     }
     
-    if (!createVulkanSurface(appInfo._window, context)) {
+    if (!createVulkanSurface(appDesc._window, context)) {
         SDL_LogError(0, "Failed to create vulkan surface");
         return false;
     }
     
-    if (!enumeratePhysicalDevices(appInfo, context)) {
+    if (!enumeratePhysicalDevices(appDesc, context)) {
         SDL_LogError(0, "Failed to enumerate and choose device");
         return false;
     }
     
     // choose a gpu
-    if (!choosePhysicalDevice(appInfo, context)) {
+    if (!choosePhysicalDevice(appDesc, context)) {
         SDL_LogError(0, "Failed to choose appropriate physical device");
         return false;
     }
     
     // load extensions
-    if (!lookupDeviceExtensions(appInfo))
+    if (!lookupDeviceExtensions(appDesc))
     {
         SDL_LogError(0, "Failed to enumerate device extensions!");
         return false;
     }
     
-    if (!createDevice(appInfo, context))
+    if (!createDevice(appDesc, context))
     {
         SDL_LogError(0, "Failed to create device!");
         return false;
     }
     
-    if (!createQueue(appInfo, context))
+    if (!createQueue(appDesc, context))
     {
         SDL_LogError(0, "Failed to create queue!");
         return false;
     }
     
-    if (!createSwapChain(appInfo, context))
+    if (!createSwapChain(appDesc, context))
     {
         SDL_LogError(0, "Failed to create and setup swap chain!");
         return false;
@@ -1952,8 +1952,8 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
 		return false;
 	}
 
-    std::vector<VkShaderModule> shaderModules = createShaderModules(appInfo, context);
-    if (shaderModules.empty() || shaderModules.size() != appInfo._shaders.size())
+    std::vector<VkShaderModule> shaderModules = createShaderModules(appDesc, context);
+    if (shaderModules.empty() || shaderModules.size() != appDesc._shaders.size())
     {
         SDL_LogError(0, "Failed to create shader modules\n");
         return false;
@@ -1967,33 +1967,33 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
     }
 
 	
-	if (!createPipelineCache(appInfo, context))
+	if (!createPipelineCache(appDesc, context))
 	{
 		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
 	}
 	
     
-    if (!createGraphicsPipeline(appInfo, context, shaderModules))
+    if (!createGraphicsPipeline(appDesc, context, shaderModules))
     {
         SDL_LogError(0, "Failed to create graphics pipeline\n");
         return false;
     }
 
 	// create standard command pool
-    if(!createCommandPool(appInfo, context, &context._commandPool))
+    if(!createCommandPool(appDesc, context, &context._commandPool))
     {
         SDL_LogError(0, "Failed to create standard command pool\n");
         return false;
     }
 
 	// create adhoc command pool
-	if (!createCommandPool(appInfo, context, &context._adhocCommandPool))
+	if (!createCommandPool(appDesc, context, &context._adhocCommandPool))
 	{
 		SDL_LogError(0, "Failed to create adhoc command pool\n");
 		return false;
 	}
 
-	if (!createDepthBuffers(appInfo, context))
+	if (!createDepthBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");
 		return false;
@@ -2005,25 +2005,25 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
 		return false;
 	}
 
-	if (!createCommandBuffers(appInfo, context, context._commandPool, (unsigned int)context._rawImages.size(), &context._commandBuffers))
+	if (!createCommandBuffers(appDesc, context, context._commandPool, (unsigned int)context._rawImages.size(), &context._commandBuffers))
 	{
 		SDL_LogError(0, "Failed to create standard command buffers\n");
 		return false;
 	}
 
-	if (!createCommandBuffers(appInfo, context, context._adhocCommandPool, (unsigned int)context._rawImages.size(), &context._adhocCommandBuffers))
+	if (!createCommandBuffers(appDesc, context, context._adhocCommandPool, (unsigned int)context._rawImages.size(), &context._adhocCommandBuffers))
 	{
 		SDL_LogError(0, "Failed to create adhoc command buffers\n");
 		return false;
 	}
     
-    if(!recordStandardCommandBuffers(appInfo, context))
+    if(!recordStandardCommandBuffers(appDesc, context))
     {
         SDL_LogError(0, "Failed to create command buffers\n");
         return false;
     }
     
-    if(!createSemaphores(appInfo, context))
+    if(!createSemaphores(appDesc, context))
     {
         SDL_LogError(0, "Failed to create semaphores\n");
         return false;
@@ -2032,9 +2032,9 @@ bool Vulkan::handleVulkanSetup(AppInformation & appInfo, VulkanContext & context
     return true;
 }
 
-bool Vulkan::createSwapChainDependents(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, VulkanContext & context)
 {
-	if (!createSwapChain(appInfo, context))
+	if (!createSwapChain(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create and setup swap chain!");
 		return false;
@@ -2058,8 +2058,8 @@ bool Vulkan::createSwapChainDependents(AppInformation & appInfo, VulkanContext &
 		return false;
 	}
 
-	std::vector<VkShaderModule> shaderModules = createShaderModules(appInfo, context);
-	if (shaderModules.empty() || shaderModules.size() != appInfo._shaders.size())
+	std::vector<VkShaderModule> shaderModules = createShaderModules(appDesc, context);
+	if (shaderModules.empty() || shaderModules.size() != appDesc._shaders.size())
 	{
 		SDL_LogError(0, "Failed to create shader modules\n");
 		return false;
@@ -2073,19 +2073,19 @@ bool Vulkan::createSwapChainDependents(AppInformation & appInfo, VulkanContext &
 	}
 
 
-	if (!createPipelineCache(appInfo, context))
+	if (!createPipelineCache(appDesc, context))
 	{
 		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
 	}
 
 
-	if (!createGraphicsPipeline(appInfo, context, shaderModules))
+	if (!createGraphicsPipeline(appDesc, context, shaderModules))
 	{
 		SDL_LogError(0, "Failed to create graphics pipeline\n");
 		return false;
 	}
 
-	if (!createDepthBuffers(appInfo, context))
+	if (!createDepthBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");
 		return false;
@@ -2097,19 +2097,19 @@ bool Vulkan::createSwapChainDependents(AppInformation & appInfo, VulkanContext &
 		return false;
 	}
 
-	if (!createCommandBuffers(appInfo, context, context._commandPool, (unsigned int)context._rawImages.size(), &context._commandBuffers))
+	if (!createCommandBuffers(appDesc, context, context._commandPool, (unsigned int)context._rawImages.size(), &context._commandBuffers))
 	{
 		SDL_LogError(0, "Failed to create standard command buffers\n");
 		return false;
 	}
 
-	if (!createCommandBuffers(appInfo, context, context._adhocCommandPool, (unsigned int)context._rawImages.size(), &context._adhocCommandBuffers))
+	if (!createCommandBuffers(appDesc, context, context._adhocCommandPool, (unsigned int)context._rawImages.size(), &context._adhocCommandBuffers))
 	{
 		SDL_LogError(0, "Failed to create adhoc command buffers\n");
 		return false;
 	}
 
-	if (!recordStandardCommandBuffers(appInfo, context))
+	if (!recordStandardCommandBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create command buffers\n");
 		return false;
@@ -2118,20 +2118,20 @@ bool Vulkan::createSwapChainDependents(AppInformation & appInfo, VulkanContext &
 	return true;
 }
 
-bool Vulkan::recreateSwapChain(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::recreateSwapChain(AppDescriptor & appDesc, VulkanContext & context)
 {
 	vkDeviceWaitIdle(context._device);
 
-	if (!cleanupSwapChain(appInfo, context))
+	if (!cleanupSwapChain(appDesc, context))
 		return false;
 
-	if (!createSwapChainDependents(appInfo, context))
+	if (!createSwapChainDependents(appDesc, context))
 		return false;
 
 	return true;
 }
 
-bool Vulkan::cleanupSwapChain(AppInformation & appInfo, VulkanContext & context)
+bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, VulkanContext & context)
 {
 	VkDevice device = context._device;
 

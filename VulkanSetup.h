@@ -128,21 +128,11 @@ namespace Vulkan
     public:
         Shader(const std::string & filename, ShaderType type);
     };
-    
+        
     struct AppDescriptor
     {
         std::string _appName;
         uint32_t _requiredVulkanVersion;
-        
-        AppDescriptor()
-        : _requiredVulkanVersion(0)
-        {
-        }
-    };
-    
-    struct AppInformation
-    {
-        AppDescriptor _descriptor;
         SDL_Window * _window;
         std::vector<VkPhysicalDevice> _physicalDevices;
         unsigned int _chosenPhysicalDevice;
@@ -165,7 +155,7 @@ namespace Vulkan
         typedef std::function<glm::mat4 (const void*, float, float)> UpdateModelMatrix;
         UpdateModelMatrix _updateModelMatrix = [](const void*, float, float) { return glm::mat4(); };
         
-        AppInformation();
+        AppDescriptor();
     };
     
     struct BufferDescriptor
@@ -269,14 +259,14 @@ namespace Vulkan
 		const VulkanCamera & getCamera() { return _camera;  }
 
 	private:
-		friend bool update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
+		friend bool update(AppDescriptor& appDesc, VulkanContext & context, uint32_t currentImage);
 		VulkanCamera _camera;
 
     };
 
 	bool resetCommandBuffers(VulkanContext& context, std::vector<VkCommandBuffer>& commandBuffers);
-	void clearMeshes(AppInformation & appInfo, VulkanContext & context);
-	bool addMesh(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData);
+	void clearMeshes(AppDescriptor& appDesc, VulkanContext & context);
+	bool addMesh(AppDescriptor& appDesc, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData);
 	void destroyMesh(VulkanContext & context, VulkanMesh & mesh);
 	void destroyBufferDescriptor(VulkanContext & context, BufferDescriptor & descriptor);
 
@@ -284,40 +274,40 @@ namespace Vulkan
     bool areValidationLayersAvailable(const std::vector<const char*> & validationLayers);
     bool loadVulkanLibrary();
     bool loadVulkanFunctions();
-    bool createInstanceAndLoadExtensions(const AppInformation & appInfo, VulkanContext & context);
+    bool createInstanceAndLoadExtensions(const AppDescriptor& appDesc, VulkanContext & context);
     bool createVulkanSurface(SDL_Window * window, VulkanContext & context);
-    bool enumeratePhysicalDevices(AppInformation & appInfo, VulkanContext & context);
-    bool choosePhysicalDevice(AppInformation &appInfo, VulkanContext & vulkanContext);
-    bool lookupDeviceExtensions(AppInformation &appInfo);
-    bool createDevice(AppInformation & appInfo, VulkanContext & context);
-    bool createQueue(AppInformation & appInfo, VulkanContext & context);
-    bool createSwapChain(AppInformation & appInfo, VulkanContext & context);
+    bool enumeratePhysicalDevices(AppDescriptor& appDesc, VulkanContext & context);
+    bool choosePhysicalDevice(AppDescriptor&appDesc, VulkanContext & vulkanContext);
+    bool lookupDeviceExtensions(AppDescriptor&appDesc);
+    bool createDevice(AppDescriptor& appDesc, VulkanContext & context);
+    bool createQueue(AppDescriptor& appDesc, VulkanContext & context);
+    bool createSwapChain(AppDescriptor& appDesc, VulkanContext & context);
     bool createColorBuffers(VulkanContext & context);
-	bool createDepthBuffers(AppInformation & appInfo, VulkanContext & context);
+	bool createDepthBuffers(AppDescriptor& appDesc, VulkanContext & context);
     bool createRenderPass(VulkanContext & vulkanContext, VkRenderPass * result, bool clearColorBuffer);
     bool createDescriptorSetLayout(VulkanContext & vulkanContext);
     bool createFrameBuffers(VulkanContext & vulkanContext);
-    std::vector<VkShaderModule> createShaderModules(AppInformation & appInfo, VulkanContext & context);
-	bool createPipelineCache(AppInformation & appInfo, VulkanContext & context);
-	bool createGraphicsPipeline(AppInformation & appInfo, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules);
-    bool createCommandPool(AppInformation & appInfo, VulkanContext & context, VkCommandPool * result);
-	bool recordStandardCommandBuffers(AppInformation & appInfo, VulkanContext & context);
+    std::vector<VkShaderModule> createShaderModules(AppDescriptor & appDesc, VulkanContext & context);
+	bool createPipelineCache(AppDescriptor & appDesc, VulkanContext & context);
+	bool createGraphicsPipeline(AppDescriptor & appDesc, VulkanContext & context, const std::vector<VkShaderModule> & shaderModules);
+    bool createCommandPool(AppDescriptor & appDesc, VulkanContext & context, VkCommandPool * result);
+	bool recordStandardCommandBuffers(AppDescriptor & appDesc, VulkanContext & context);
 	std::vector<VkFence> createFences(VulkanContext & context);
     std::vector<VkSemaphore> createSemaphores(VulkanContext & context);
-    bool createSemaphores(AppInformation & appInfo, VulkanContext & context);
+    bool createSemaphores(AppDescriptor & appDesc, VulkanContext & context);
     bool createBuffer(VulkanContext & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc);
     bool createBuffer(VulkanContext & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type);
-    bool createIndexAndVertexBuffer(AppInformation & appInfo, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void *userData, unsigned int meshIndex);
-    bool createUniformBuffer(AppInformation & appInfo, VulkanContext & context, unsigned int meshIndex);
+    bool createIndexAndVertexBuffer(AppDescriptor & appDesc, VulkanContext & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void *userData, unsigned int meshIndex);
+    bool createUniformBuffer(AppDescriptor & appDesc, VulkanContext & context, unsigned int meshIndex);
     bool createDescriptorPool(VulkanContext & context, unsigned int bufferIndex);
-    bool createDescriptorSet(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex);
-    bool handleVulkanSetup(AppInformation & appInfo, VulkanContext & context);
+    bool createDescriptorSet(AppDescriptor & appDesc, VulkanContext & context, unsigned int bufferIndex);
+    bool handleVulkanSetup(AppDescriptor & appDesc, VulkanContext & context);
     
-    bool update(AppInformation & appInfo, VulkanContext & context, uint32_t currentImage);
-    void updateUniforms(AppInformation & appInfo, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex);
-	bool createSwapChainDependents(AppInformation & appInfo, VulkanContext & context);
-	bool recreateSwapChain(AppInformation & appInfo, VulkanContext & context);
-	bool cleanupSwapChain(AppInformation & appInfo, VulkanContext & context);
+    bool update(AppDescriptor & appDesc, VulkanContext & context, uint32_t currentImage);
+    void updateUniforms(AppDescriptor & appDesc, VulkanContext & context, unsigned int bufferIndex, uint32_t meshIndex);
+	bool createSwapChainDependents(AppDescriptor & appDesc, VulkanContext & context);
+	bool recreateSwapChain(AppDescriptor & appDesc, VulkanContext & context);
+	bool cleanupSwapChain(AppDescriptor & appDesc, VulkanContext & context);
 
 
 }

@@ -2093,6 +2093,20 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, VulkanContext & 
 		return false;
 	}
 
+    // create standard command pool
+    if(!createCommandPool(appDesc, context, &context._commandPool))
+    {
+        SDL_LogError(0, "Failed to create standard command pool\n");
+        return false;
+    }
+
+    // create adhoc command pool
+    if (!createCommandPool(appDesc, context, &context._adhocCommandPool))
+    {
+        SDL_LogError(0, "Failed to create adhoc command pool\n");
+        return false;
+    }
+    
 	if (!createDepthBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");

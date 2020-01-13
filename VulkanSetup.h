@@ -141,6 +141,9 @@ namespace Vulkan
         
         std::vector<Shader> _shaders;
 
+        unsigned int _numGraphicsPipelines = 0;
+        std::function<void (VkGraphicsPipelineCreateInfo & createInfo, unsigned int index)> _graphicsPipelineCreationCallback = [](VkGraphicsPipelineCreateInfo&, unsigned int) { return; };
+
 		std::function<glm::vec4 (void)> _backgroundClearColor = []() { return glm::vec4{ 0,0,0,1 }; };
 
 		std::function <VkVertexInputBindingDescription()> _getBindingDescription = []() { return VkVertexInputBindingDescription(); };

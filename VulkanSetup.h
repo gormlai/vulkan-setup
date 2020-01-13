@@ -128,6 +128,62 @@ namespace Vulkan
     public:
         Shader(const std::string & filename, ShaderType type);
     };
+
+
+    struct VkGraphicsPipelineCreateInfoDescriptor 
+    {
+        VkGraphicsPipelineCreateInfoDescriptor(
+            VkGraphicsPipelineCreateInfo& createInfo,
+            std::vector<VkPipelineShaderStageCreateInfo>& pipelineShaderStage,
+            VkPipelineVertexInputStateCreateInfo& vertexInputInfo,
+            VkPipelineInputAssemblyStateCreateInfo& inputAssemblyInfo,
+            VkViewport& viewport,
+            VkRect2D& scissor,
+            VkPipelineViewportStateCreateInfo& viewportStateCreateInfo,
+            VkPipelineRasterizationStateCreateInfo& rasterizerCreateInfo,
+            VkPipelineMultisampleStateCreateInfo& multisamplingCreateInfo,
+            VkPipelineDepthStencilStateCreateInfo& depthStencilCreateInfo,
+            VkPipelineColorBlendAttachmentState& colorBlendAttachmentCreateInfo,
+            VkPipelineColorBlendStateCreateInfo& colorBlendingCreateInfo,
+            VkPipelineLayoutCreateInfo& pipelineLayoutCreateInfo,
+            VkPipelineDynamicStateCreateInfo& dynamicStateCreateInfo)
+            :  _createInfo(createInfo)
+            , _pipelineShaderStage(pipelineShaderStage)
+            , _vertexInputInfo(vertexInputInfo)
+            , _inputAssemblyInfo(inputAssemblyInfo)
+            , _viewport(viewport)
+            , _scissor(scissor)
+            , _viewportStateCreateInfo(viewportStateCreateInfo)
+            , _rasterizerCreateInfo(rasterizerCreateInfo)
+            , _multisamplingCreateInfo(multisamplingCreateInfo)
+            , _depthStencilCreateInfo(depthStencilCreateInfo)
+            , _colorBlendAttachmentCreateInfo(colorBlendAttachmentCreateInfo)
+            , _colorBlendingCreateInfo(colorBlendingCreateInfo)
+            , _pipelineLayoutCreateInfo(pipelineLayoutCreateInfo)
+            , _dynamicStateCreateInfo(dynamicStateCreateInfo)
+        {}
+
+        VkGraphicsPipelineCreateInfo& _createInfo;
+           
+        // helper objects
+        std::vector<VkPipelineShaderStageCreateInfo> & _pipelineShaderStage;
+        VkPipelineVertexInputStateCreateInfo & _vertexInputInfo;
+        VkPipelineInputAssemblyStateCreateInfo & _inputAssemblyInfo;
+
+        VkViewport & _viewport;
+        VkRect2D & _scissor;
+        VkPipelineViewportStateCreateInfo & _viewportStateCreateInfo;
+
+        VkPipelineRasterizationStateCreateInfo & _rasterizerCreateInfo;
+        VkPipelineMultisampleStateCreateInfo & _multisamplingCreateInfo;
+        VkPipelineDepthStencilStateCreateInfo & _depthStencilCreateInfo;
+
+        VkPipelineColorBlendAttachmentState & _colorBlendAttachmentCreateInfo;
+        VkPipelineColorBlendStateCreateInfo & _colorBlendingCreateInfo;
+        VkPipelineLayoutCreateInfo & _pipelineLayoutCreateInfo;
+        VkPipelineDynamicStateCreateInfo & _dynamicStateCreateInfo;
+
+    };
         
     struct AppDescriptor
     {
@@ -142,7 +198,7 @@ namespace Vulkan
         std::vector<Shader> _shaders;
 
         unsigned int _numGraphicsPipelines = 0;
-        std::function<void (VkGraphicsPipelineCreateInfo & createInfo, unsigned int index)> _graphicsPipelineCreationCallback = [](VkGraphicsPipelineCreateInfo&, unsigned int) { return; };
+        std::function<void (VkGraphicsPipelineCreateInfoDescriptor & desc, unsigned int index)> _graphicsPipelineCreationCallback = [](VkGraphicsPipelineCreateInfoDescriptor&, unsigned int) { return; };
 
 		std::function<glm::vec4 (void)> _backgroundClearColor = []() { return glm::vec4{ 0,0,0,1 }; };
 

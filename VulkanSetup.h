@@ -51,51 +51,6 @@ namespace Vulkan
 {
     extern bool validationLayersEnabled;
 
-	template<typename PosType, typename ColorType>
-    struct Vertex
-    {
-        PosType _position;
-        ColorType _color;
-        
-        Vertex(const PosType & position, const ColorType & color)
-        :_position(position)
-        ,_color(color) {}
-        
-        Vertex(const Vertex & src)
-        :_position(src._position)
-        ,_color(src._color) {}
-        
-        Vertex() {}
-  
-		static VkVertexInputBindingDescription getBindingDescription()
-		{
-			VkVertexInputBindingDescription bindingDescription;
-			memset(&bindingDescription, 0, sizeof(VkVertexInputBindingDescription));
-
-			bindingDescription.binding = 0;
-			bindingDescription.stride = sizeof(Vertex);
-			bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-			return bindingDescription;
-		}
-
-		static std::array<VkVertexInputAttributeDescription, 2> getAttributes()
-		{
-			std::array<VkVertexInputAttributeDescription, 2> attributes = {};
-
-			attributes[0].binding = 0;
-			attributes[0].location = 0;
-			attributes[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-			attributes[0].offset = offsetof(Vertex, _position);
-
-			attributes[1].binding = 0;
-			attributes[1].location = 1;
-			attributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-			attributes[1].offset = offsetof(Vertex, _color);
-			return attributes;
-		}
-
-    };
     
     enum class ShaderType
     {
@@ -146,7 +101,9 @@ namespace Vulkan
             VkPipelineColorBlendAttachmentState& colorBlendAttachmentCreateInfo,
             VkPipelineColorBlendStateCreateInfo& colorBlendingCreateInfo,
             VkPipelineLayoutCreateInfo& pipelineLayoutCreateInfo,
-            VkPipelineDynamicStateCreateInfo& dynamicStateCreateInfo)
+            VkPipelineDynamicStateCreateInfo& dynamicStateCreateInfo,
+            std::vector<VkVertexInputBindingDescription>& vertexInputBindingDescriptions,
+            std::vector<VkVertexInputAttributeDescription>& vertexInputAttributeDescriptions)
             :  _createInfo(createInfo)
             , _pipelineShaderStage(pipelineShaderStage)
             , _vertexInputInfo(vertexInputInfo)
@@ -161,6 +118,8 @@ namespace Vulkan
             , _colorBlendingCreateInfo(colorBlendingCreateInfo)
             , _pipelineLayoutCreateInfo(pipelineLayoutCreateInfo)
             , _dynamicStateCreateInfo(dynamicStateCreateInfo)
+            , _vertexInputBindingDescriptions(vertexInputBindingDescriptions)
+            , _vertexInputAttributeDescriptions(vertexInputAttributeDescriptions)
         {}
 
         VkGraphicsPipelineCreateInfo& _createInfo;
@@ -182,6 +141,10 @@ namespace Vulkan
         VkPipelineColorBlendStateCreateInfo & _colorBlendingCreateInfo;
         VkPipelineLayoutCreateInfo & _pipelineLayoutCreateInfo;
         VkPipelineDynamicStateCreateInfo & _dynamicStateCreateInfo;
+
+        // setting up vertex arrays
+        std::vector<VkVertexInputBindingDescription> & _vertexInputBindingDescriptions;
+        std::vector<VkVertexInputAttributeDescription> & _vertexInputAttributeDescriptions;
 
     };
         

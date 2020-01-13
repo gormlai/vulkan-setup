@@ -1196,6 +1196,10 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, VulkanContext & con
     std::vector<VkPipelineLayoutCreateInfo> pipelineLayoutCreateInfos(appDesc._numGraphicsPipelines);
     std::vector<VkPipelineDynamicStateCreateInfo> dynamicStateCreateInfos(appDesc._numGraphicsPipelines);
 
+    std::vector<std::vector<VkVertexInputBindingDescription>> vertexInputBindingDescriptions(appDesc._numGraphicsPipelines);
+    std::vector<std::vector<VkVertexInputAttributeDescription>> vertexInputAttributeDescriptions(appDesc._numGraphicsPipelines);
+
+
 
     for(unsigned int graphicsPipelineIndex =0 ; graphicsPipelineIndex < appDesc._numGraphicsPipelines ; graphicsPipelineIndex++ )
     {
@@ -1233,18 +1237,6 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, VulkanContext & con
         createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         createInfo.stageCount = (uint32_t)shaderStages.size();
         createInfo.pStages = (createInfo.stageCount == 0) ? nullptr : &shaderStages[0];
-
-        // Pipeline Vertex Input State
-        VkPipelineVertexInputStateCreateInfo & vertexInputInfo = vertexInputInfos[graphicsPipelineIndex];
-        VkVertexInputBindingDescription vertexBindingDescription = appDesc._getBindingDescription();
-        std::array<VkVertexInputAttributeDescription, 2> vertexAttributeDescription = appDesc._getAttributes();
-        memset(&vertexInputInfo, 0, sizeof(VkPipelineVertexInputStateCreateInfo));
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &vertexBindingDescription;
-        vertexInputInfo.vertexAttributeDescriptionCount = (uint32_t)vertexAttributeDescription.size();
-        vertexInputInfo.pVertexAttributeDescriptions = &vertexAttributeDescription[0];
-        createInfo.pVertexInputState = &vertexInputInfo;
 
         // Pipeline Input Assembly State
         VkPipelineInputAssemblyStateCreateInfo & inputAssemblyInfo = inputAssemblyInfos[graphicsPipelineIndex];
@@ -1375,6 +1367,14 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, VulkanContext & con
         //	dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
         //	createInfo.pDynamicState = &dynamicStateCreateInfo;
 
+        // Pipeline Vertex Input State
+        VkPipelineVertexInputStateCreateInfo& vertexInputInfo = vertexInputInfos[graphicsPipelineIndex];
+        memset(&vertexInputInfo, 0, sizeof(VkPipelineVertexInputStateCreateInfo));
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        std::vector<VkVertexInputBindingDescription> & vertexInputBindingDescription = vertexInputBindingDescriptions[graphicsPipelineIndex];
+        std::vector<VkVertexInputAttributeDescription> & vertexInputAttributeDescription = vertexInputAttributeDescriptions[graphicsPipelineIndex];
+        createInfo.pVertexInputState = &vertexInputInfo;
+
         VkGraphicsPipelineCreateInfoDescriptor graphicsPipelineCreateInfoDescriptor(
             createInfo,
             shaderStages,
@@ -1389,10 +1389,19 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, VulkanContext & con
             colorBlendAttachmentCreateInfo,
             colorBlendingCreateInfo,
             pipelineLayoutCreateInfo,
-            dynamicStateCreateInfo);
-
-
+            dynamicStateCreateInfo,
+            vertexInputBindingDescription,
+            vertexInputAttributeDescription
+        );
         appDesc._graphicsPipelineCreationCallback(graphicsPipelineCreateInfoDescriptor, graphicsPipelineIndex);
+
+        // we can't set these variables until after the callback, as the vectors are dynamic in size, and the pointer to the contents might change
+        vertexInputInfo.vertexBindingDescriptionCount = (uint32_t)vertexInputBindingDescription.size();
+        vertexInputInfo.pVertexBindingDescriptions = &vertexInputBindingDescription[0];
+        vertexInputInfo.vertexAttributeDescriptionCount = (uint32_t)vertexInputAttributeDescription.size();
+        vertexInputInfo.pVertexAttributeDescriptions = &vertexInputAttributeDescription[0];
+
+
 
     }
 

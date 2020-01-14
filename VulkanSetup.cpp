@@ -1928,7 +1928,11 @@ bool Vulkan::addMesh(AppDescriptor & appDesc, VulkanContext & context, std::vect
 		return false;
 	}
 
-	recordStandardCommandBuffers(appDesc, context);
+	if(!recordStandardCommandBuffers(appDesc, context))
+    {
+        SDL_LogError(0, "Failed to record command buffers when adding mesh\n");
+        return false;
+    }
 
     return true;
 }

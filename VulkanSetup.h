@@ -202,8 +202,9 @@ namespace Vulkan
         void * _userData;
         
 		VulkanMesh()
+            :_numIndices(0)
+            ,_userData(nullptr)
 		{
-			memset(this, 0, sizeof(VulkanMesh));
 		}
 	};
     

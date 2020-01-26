@@ -4,6 +4,50 @@
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
+////////////////////////////////////// Vulkan method declarations ///////////////////////////////////////////////////////
+
+namespace Vulkan
+{
+    void clearMeshes(Context& context, EffectDescriptor& effect);
+    void destroyMesh(Context& context, Mesh& mesh);
+    void destroyBufferDescriptor(Context& context, BufferDescriptor& descriptor);
+
+    bool setupDebugCallback(Context& context);
+    bool areValidationLayersAvailable(const std::vector<const char*>& validationLayers);
+    bool loadVulkanLibrary();
+    bool loadVulkanFunctions();
+    bool createInstanceAndLoadExtensions(const AppDescriptor& appDesc, Context& context);
+    bool createVulkanSurface(SDL_Window* window, Context& context);
+    bool enumeratePhysicalDevices(AppDescriptor& appDesc, Context& context);
+    bool choosePhysicalDevice(AppDescriptor& appDesc, Context& vulkanContext);
+    bool lookupDeviceExtensions(AppDescriptor& appDesc);
+    bool createDevice(AppDescriptor& appDesc, Context& context);
+    bool createQueue(AppDescriptor& appDesc, Context& context);
+    bool createSwapChain(AppDescriptor& appDesc, Context& context);
+    bool createColorBuffers(Context& context);
+    bool createDepthBuffers(AppDescriptor& appDesc, Context& context);
+    bool createRenderPass(Context& vulkanContext, VkRenderPass* result, bool clearColorBuffer);
+    bool createDescriptorSetLayout(Context& vulkanContext);
+    bool createFrameBuffers(Context& vulkanContext);
+    bool createPipelineCache(AppDescriptor& appDesc, Context& context);
+    bool createCommandPool(AppDescriptor& appDesc, Context& context, VkCommandPool* result);
+    bool recordStandardCommandBuffers(AppDescriptor& appDesc, Context& context);
+    std::vector<VkFence> createFences(Context& context);
+    std::vector<VkSemaphore> createSemaphores(Context& context);
+    bool createSemaphores(AppDescriptor& appDesc, Context& context);
+    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc);
+    bool createBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferDescriptor& result, BufferType type);
+    bool createIndexAndVertexBuffer(AppDescriptor& appDesc, Context& context, std::vector<unsigned char>& vertexData, std::vector<unsigned char>& indexData, void* userData, Vulkan::Mesh& result);
+    bool createUniformBuffer(AppDescriptor& appDesc, Context& context, VkDeviceSize bufferSize, BufferDescriptor& result);
+    bool createDescriptorPool(Context& context, VkDescriptorPool& pool, unsigned int descriptorCount);
+    bool createDescriptorSet(AppDescriptor& appDesc, Context& context, Mesh & mesh);
+
+    void updateUniforms(AppDescriptor& appDesc, Context& context, unsigned int bufferIndex, uint32_t meshIndex);
+    bool createSwapChainDependents(AppDescriptor& appDesc, Context& context);
+    bool cleanupSwapChain(AppDescriptor& appDesc, Context& context);
+}
+
 ///////////////////////////////////// Vulkan Variable ///////////////////////////////////////////////////////////////////
 
 bool Vulkan::validationLayersEnabled = true;
@@ -13,6 +57,8 @@ bool Vulkan::validationLayersEnabled = true;
 
 namespace
 {
+
+
 	bool createCommandBuffers(Vulkan::AppDescriptor & appDesc, Vulkan::Context & context, VkCommandPool commandPool, unsigned int numBuffers, std::vector<VkCommandBuffer> * result)
 	{
 		std::vector<VkCommandBuffer> commandBuffers(numBuffers);
@@ -304,7 +350,7 @@ Vulkan::Context::Context()
 
 ///////////////////////////////////// Vulkan Shader ///////////////////////////////////////////////////////////////////
 
-Vulkan::Shader::Shader(const std::string & filename, ShaderType type)
+Vulkan::Shader::Shader(const std::string & filename, VkShaderStageFlagBits  type)
 :_filename(filename)
 ,_type(type)
 {
@@ -1120,10 +1166,9 @@ bool Vulkan::createFrameBuffers(Context & vulkanContext)
     return true;
 }
 
-std::vector<VkShaderModule> Vulkan::createShaderModules(AppDescriptor & appDesc, Context & context)
+bool Vulkan::createShaderModules(AppDescriptor & appDesc, Context & context, std::vector<Shader> & shaders)
 {
-    std::vector<VkShaderModule> shaderModules;
-    for (Shader & shader : appDesc._shaders)
+    for (Shader & shader : shaders)
     {
         VkShaderModuleCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
@@ -1139,14 +1184,13 @@ std::vector<VkShaderModule> Vulkan::createShaderModules(AppDescriptor & appDesc,
 		if (result != VK_SUCCESS)
         {
             SDL_LogError(0, "Failed to create shader module for file %s with error %d\n", shader._filename.c_str(), (int)result);
-            return std::vector<VkShaderModule>();
+            return false;
         }
         
-        shaderModules.push_back(module);
+        shader._shaderModule = module;
     }
     
-    // now that all modules have been created, create the pipeline
-    return shaderModules;
+    return true;
 }
 
 bool Vulkan::createPipelineCache(AppDescriptor & appDesc, Context & context)
@@ -1167,253 +1211,201 @@ bool Vulkan::createPipelineCache(AppDescriptor & appDesc, Context & context)
 		return true;
 }
 
-
-bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context)
+bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor & effect)
 {
-    if(appDesc._numGraphicsPipelines == 0)
+    VkGraphicsPipelineCreateInfo createInfo;
+    memset(&createInfo, 0, sizeof(VkGraphicsPipelineCreateInfo));
+
+    const std::vector<Shader>& shaderModules = effect._shaderModules;
+
+    std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+
+    for (unsigned int i = 0; i < (unsigned int)shaderModules.size(); i++)
     {
-        SDL_LogError(0, "AppDescriptor::_numGraphicsPipelines must be > 0\n");
+        VkPipelineShaderStageCreateInfo shaderCreateInfo;
+        memset(&shaderCreateInfo, 0, sizeof(VkPipelineShaderStageCreateInfo));
+
+        shaderCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderCreateInfo.stage = shaderModules[i]._type;
+        shaderCreateInfo.module = shaderModules[i]._shaderModule;
+        shaderCreateInfo.pName = "main";
+
+        shaderStages.push_back(shaderCreateInfo);
+    }
+
+
+    createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    createInfo.stageCount = (uint32_t)shaderStages.size();
+    createInfo.pStages = (createInfo.stageCount == 0) ? nullptr : &shaderStages[0];
+
+    // Pipeline Input Assembly State
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo;
+    memset(&inputAssemblyInfo, 0, sizeof(VkPipelineInputAssemblyStateCreateInfo));
+    inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
+    createInfo.pInputAssemblyState = &inputAssemblyInfo;
+
+    // viewport
+    VkViewport viewport;
+    viewport.x = 0;
+    viewport.y = (float)context._swapChainSize.height;
+    viewport.width = (float)context._swapChainSize.width;
+    viewport.height = -(float)context._swapChainSize.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    // scissor
+    VkRect2D scissor;
+    scissor.offset = { 0,0 };
+    scissor.extent = context._swapChainSize;
+
+    // viewport
+    VkPipelineViewportStateCreateInfo viewportStateCreateInfo;
+    memset(&viewportStateCreateInfo, 0, sizeof(VkPipelineViewportStateCreateInfo));
+    viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportStateCreateInfo.viewportCount = 1;
+    viewportStateCreateInfo.pViewports = &viewport;
+    viewportStateCreateInfo.scissorCount = 1;
+    viewportStateCreateInfo.pScissors = &scissor;
+    createInfo.pViewportState = &viewportStateCreateInfo;
+
+    // basic rasterization parameters
+    VkPipelineRasterizationStateCreateInfo rasterizerCreateInfo;
+    memset(&rasterizerCreateInfo, 0, sizeof(VkPipelineRasterizationStateCreateInfo));
+    rasterizerCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizerCreateInfo.depthClampEnable = VK_FALSE;
+    rasterizerCreateInfo.rasterizerDiscardEnable = VK_FALSE;
+    rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizerCreateInfo.lineWidth = 1.0f;
+    rasterizerCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizerCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizerCreateInfo.depthBiasEnable = VK_FALSE;
+    rasterizerCreateInfo.depthBiasConstantFactor = 0.0f;
+    rasterizerCreateInfo.depthBiasClamp = 0.0f;
+    rasterizerCreateInfo.depthBiasSlopeFactor = 0.0f;
+    createInfo.pRasterizationState = &rasterizerCreateInfo;
+
+    // multisampling
+    VkPipelineMultisampleStateCreateInfo multisamplingCreateInfo;
+    memset(&multisamplingCreateInfo, 0, sizeof(VkPipelineMultisampleStateCreateInfo));
+    multisamplingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisamplingCreateInfo.sampleShadingEnable = VK_FALSE;
+    multisamplingCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisamplingCreateInfo.minSampleShading = 1.0f;
+    multisamplingCreateInfo.pSampleMask = nullptr;
+    multisamplingCreateInfo.alphaToCoverageEnable = VK_FALSE;
+    multisamplingCreateInfo.alphaToOneEnable = VK_FALSE;
+    createInfo.pMultisampleState = &multisamplingCreateInfo;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencilCreateInfo;
+    memset(&depthStencilCreateInfo, 0, sizeof(depthStencilCreateInfo));
+    depthStencilCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencilCreateInfo.depthTestEnable = VK_TRUE;
+    depthStencilCreateInfo.depthWriteEnable = VK_TRUE;
+    depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
+    depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
+    createInfo.pDepthStencilState = &depthStencilCreateInfo;
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachmentCreateInfo;
+    memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));
+    colorBlendAttachmentCreateInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachmentCreateInfo.blendEnable = VK_TRUE;
+    colorBlendAttachmentCreateInfo.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachmentCreateInfo.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachmentCreateInfo.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachmentCreateInfo.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachmentCreateInfo.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachmentCreateInfo.alphaBlendOp = VK_BLEND_OP_ADD;
+
+    VkPipelineColorBlendStateCreateInfo colorBlendingCreateInfo;
+    memset(&colorBlendingCreateInfo, 0, sizeof(VkPipelineColorBlendStateCreateInfo));
+    colorBlendingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendingCreateInfo.logicOpEnable = VK_FALSE;
+    colorBlendingCreateInfo.logicOp = VK_LOGIC_OP_COPY;
+    colorBlendingCreateInfo.attachmentCount = 1;
+    colorBlendingCreateInfo.pAttachments = &colorBlendAttachmentCreateInfo;
+    colorBlendingCreateInfo.blendConstants[0] = 0.0f;
+    colorBlendingCreateInfo.blendConstants[1] = 0.0f;
+    colorBlendingCreateInfo.blendConstants[2] = 0.0f;
+    colorBlendingCreateInfo.blendConstants[3] = 0.0f;
+    createInfo.pColorBlendState = &colorBlendingCreateInfo;
+
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
+    memset(&pipelineLayoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateInfo));
+    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts = &context._descriptorSetLayout;
+    pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+    pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+
+    VkResult createPipelineLayoutResult = vkCreatePipelineLayout(context._device, &pipelineLayoutCreateInfo, nullptr, &effect._pipelineLayout);
+    assert(createPipelineLayoutResult == VK_SUCCESS);
+    if (createPipelineLayoutResult != VK_SUCCESS)
+    {
+        SDL_LogError(0, "Failed to create graphics pipeline layout\n");
         return false;
     }
+    createInfo.layout = effect._pipelineLayout;
+    createInfo.renderPass = context._renderPass;
+    createInfo.subpass = 0;
+    createInfo.basePipelineHandle = VK_NULL_HANDLE;
+    //    createInfo.basePipelineIndex = -1;
 
-    std::vector<VkGraphicsPipelineCreateInfo> createInfos(appDesc._numGraphicsPipelines);
+    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo;
+    memset(&dynamicStateCreateInfo, 0, sizeof(VkPipelineDynamicStateCreateInfo));
+    dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    VkDynamicState dynamicState[] = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+    };
+    dynamicStateCreateInfo.dynamicStateCount = 0;
+    dynamicStateCreateInfo.pDynamicStates = nullptr;
+    //	dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
+    //	createInfo.pDynamicState = &dynamicStateCreateInfo;
 
-    // helper objects
-    std::vector<std::vector<VkPipelineShaderStageCreateInfo>> pipelineShaderStages(appDesc._numGraphicsPipelines);
-    std::vector<VkPipelineVertexInputStateCreateInfo> vertexInputInfos(appDesc._numGraphicsPipelines);
-    std::vector<VkPipelineInputAssemblyStateCreateInfo> inputAssemblyInfos(appDesc._numGraphicsPipelines);
+    // Pipeline Vertex Input State
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo;
+    memset(&vertexInputInfo, 0, sizeof(VkPipelineVertexInputStateCreateInfo));
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    std::vector<VkVertexInputBindingDescription> vertexInputBindingDescription;
+    std::vector<VkVertexInputAttributeDescription> vertexInputAttributeDescription;
+    createInfo.pVertexInputState = &vertexInputInfo;
 
-    std::vector<VkViewport> viewports(appDesc._numGraphicsPipelines);
-    std::vector<VkRect2D> scissors(appDesc._numGraphicsPipelines);
-    std::vector<VkPipelineViewportStateCreateInfo> viewportStateCreateInfos(appDesc._numGraphicsPipelines);
+    VkGraphicsPipelineCreateInfoDescriptor graphicsPipelineCreateInfoDescriptor(
+        createInfo,
+        shaderStages,
+        vertexInputInfo,
+        inputAssemblyInfo,
+        viewport,
+        scissor,
+        viewportStateCreateInfo,
+        rasterizerCreateInfo,
+        multisamplingCreateInfo,
+        depthStencilCreateInfo,
+        colorBlendAttachmentCreateInfo,
+        colorBlendingCreateInfo,
+        pipelineLayoutCreateInfo,
+        dynamicStateCreateInfo,
+        vertexInputBindingDescription,
+        vertexInputAttributeDescription
+    );
+    graphicsPipelineCreationCallback(graphicsPipelineCreateInfoDescriptor);
 
-    std::vector<VkPipelineRasterizationStateCreateInfo> rasterizerCreateInfos(appDesc._numGraphicsPipelines);
-    std::vector<VkPipelineMultisampleStateCreateInfo> multisamplingCreateInfos(appDesc._numGraphicsPipelines);
-    std::vector<VkPipelineDepthStencilStateCreateInfo> depthStencilCreateInfos(appDesc._numGraphicsPipelines);
+    // we can't set these variables until after the callback, as the vectors are dynamic in size, and the pointer to the contents might change
+    vertexInputInfo.vertexBindingDescriptionCount = (uint32_t)vertexInputBindingDescription.size();
+    vertexInputInfo.pVertexBindingDescriptions = &vertexInputBindingDescription[0];
+    vertexInputInfo.vertexAttributeDescriptionCount = (uint32_t)vertexInputAttributeDescription.size();
+    vertexInputInfo.pVertexAttributeDescriptions = &vertexInputAttributeDescription[0];
 
-    std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachmentCreateInfos(appDesc._numGraphicsPipelines);
-    std::vector<VkPipelineColorBlendStateCreateInfo> colorBlendingCreateInfos(appDesc._numGraphicsPipelines);
-    std::vector<VkPipelineLayoutCreateInfo> pipelineLayoutCreateInfos(appDesc._numGraphicsPipelines);
-    std::vector<VkPipelineDynamicStateCreateInfo> dynamicStateCreateInfos(appDesc._numGraphicsPipelines);
-
-    std::vector<std::vector<VkVertexInputBindingDescription>> vertexInputBindingDescriptions(appDesc._numGraphicsPipelines);
-    std::vector<std::vector<VkVertexInputAttributeDescription>> vertexInputAttributeDescriptions(appDesc._numGraphicsPipelines);
-
-
-
-    for(unsigned int graphicsPipelineIndex =0 ; graphicsPipelineIndex < appDesc._numGraphicsPipelines ; graphicsPipelineIndex++ )
-    {
-        VkGraphicsPipelineCreateInfo & createInfo = createInfos[graphicsPipelineIndex];
-        memset(&createInfo, 0, sizeof(VkGraphicsPipelineCreateInfo));
-
-        const std::vector<VkShaderModule>& shaderModules = context._shaderModules;
-        const std::vector<Shader>& shaders = appDesc._shaders;
-
-        std::vector<VkPipelineShaderStageCreateInfo> & shaderStages = pipelineShaderStages[graphicsPipelineIndex];
-
-        for (unsigned int i = 0; i < (unsigned int)shaders.size(); i++)
-        {
-            VkPipelineShaderStageCreateInfo shaderCreateInfo;
-            memset(&shaderCreateInfo, 0, sizeof(VkPipelineShaderStageCreateInfo));
-
-            shaderCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            switch (shaders[i]._type)
-            {
-                case ShaderType::Vertex:
-                    shaderCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-                    break;
-                case ShaderType::Fragment:
-                    shaderCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-                    break;
-            }
-            shaderCreateInfo.module = shaderModules[i];
-            shaderCreateInfo.pName = "main";
-
-            shaderStages.push_back(shaderCreateInfo);
-
-        }
-
-
-        createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        createInfo.stageCount = (uint32_t)shaderStages.size();
-        createInfo.pStages = (createInfo.stageCount == 0) ? nullptr : &shaderStages[0];
-
-        // Pipeline Input Assembly State
-        VkPipelineInputAssemblyStateCreateInfo & inputAssemblyInfo = inputAssemblyInfos[graphicsPipelineIndex];
-        memset(&inputAssemblyInfo, 0, sizeof(VkPipelineInputAssemblyStateCreateInfo));
-        inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
-        createInfo.pInputAssemblyState = &inputAssemblyInfo;
-
-        // viewport
-        VkViewport & viewport = viewports[graphicsPipelineIndex];
-        viewport.x = 0;
-        //	viewport.y = (float)0;
-        viewport.y = (float)context._swapChainSize.height;
-        viewport.width = (float)context._swapChainSize.width;
-        viewport.height = -(float)context._swapChainSize.height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-
-        // scissor
-        VkRect2D & scissor = scissors[graphicsPipelineIndex];
-        scissor.offset = { 0,0 };
-        scissor.extent = context._swapChainSize;
-
-        // viewport
-        VkPipelineViewportStateCreateInfo & viewportStateCreateInfo = viewportStateCreateInfos[graphicsPipelineIndex];
-        memset(&viewportStateCreateInfo, 0, sizeof(VkPipelineViewportStateCreateInfo));
-        viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportStateCreateInfo.viewportCount = 1;
-        viewportStateCreateInfo.pViewports = &viewport;
-        viewportStateCreateInfo.scissorCount = 1;
-        viewportStateCreateInfo.pScissors = &scissor;
-        createInfo.pViewportState = &viewportStateCreateInfo;
-
-        // basic rasterization parameters
-        VkPipelineRasterizationStateCreateInfo & rasterizerCreateInfo = rasterizerCreateInfos[graphicsPipelineIndex];
-        memset(&rasterizerCreateInfo, 0, sizeof(VkPipelineRasterizationStateCreateInfo));
-        rasterizerCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizerCreateInfo.depthClampEnable = VK_FALSE;
-        rasterizerCreateInfo.rasterizerDiscardEnable = VK_FALSE;
-        rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizerCreateInfo.lineWidth = 1.0f;
-        rasterizerCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizerCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizerCreateInfo.depthBiasEnable = VK_FALSE;
-        rasterizerCreateInfo.depthBiasConstantFactor = 0.0f;
-        rasterizerCreateInfo.depthBiasClamp = 0.0f;
-        rasterizerCreateInfo.depthBiasSlopeFactor = 0.0f;
-        createInfo.pRasterizationState = &rasterizerCreateInfo;
-
-        // multisampling
-        VkPipelineMultisampleStateCreateInfo & multisamplingCreateInfo = multisamplingCreateInfos[graphicsPipelineIndex];
-        memset(&multisamplingCreateInfo, 0, sizeof(VkPipelineMultisampleStateCreateInfo));
-        multisamplingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisamplingCreateInfo.sampleShadingEnable = VK_FALSE;
-        multisamplingCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        multisamplingCreateInfo.minSampleShading = 1.0f;
-        multisamplingCreateInfo.pSampleMask = nullptr;
-        multisamplingCreateInfo.alphaToCoverageEnable = VK_FALSE;
-        multisamplingCreateInfo.alphaToOneEnable = VK_FALSE;
-        createInfo.pMultisampleState = &multisamplingCreateInfo;
-
-        VkPipelineDepthStencilStateCreateInfo & depthStencilCreateInfo = depthStencilCreateInfos[graphicsPipelineIndex];
-        memset(&depthStencilCreateInfo, 0, sizeof(depthStencilCreateInfo));
-        depthStencilCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencilCreateInfo.depthTestEnable = VK_TRUE;
-        depthStencilCreateInfo.depthWriteEnable = VK_TRUE;
-        depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS;
-        depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
-        depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
-        createInfo.pDepthStencilState = &depthStencilCreateInfo;
-
-        VkPipelineColorBlendAttachmentState & colorBlendAttachmentCreateInfo = colorBlendAttachmentCreateInfos[graphicsPipelineIndex];
-        memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));
-        colorBlendAttachmentCreateInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        colorBlendAttachmentCreateInfo.blendEnable = VK_TRUE;
-        colorBlendAttachmentCreateInfo.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorBlendAttachmentCreateInfo.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorBlendAttachmentCreateInfo.colorBlendOp = VK_BLEND_OP_ADD;
-        colorBlendAttachmentCreateInfo.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorBlendAttachmentCreateInfo.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorBlendAttachmentCreateInfo.alphaBlendOp = VK_BLEND_OP_ADD;
-
-        VkPipelineColorBlendStateCreateInfo & colorBlendingCreateInfo = colorBlendingCreateInfos[graphicsPipelineIndex];
-        memset(&colorBlendingCreateInfo, 0, sizeof(VkPipelineColorBlendStateCreateInfo));
-        colorBlendingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlendingCreateInfo.logicOpEnable = VK_FALSE;
-        colorBlendingCreateInfo.logicOp = VK_LOGIC_OP_COPY;
-        colorBlendingCreateInfo.attachmentCount = 1;
-        colorBlendingCreateInfo.pAttachments = &colorBlendAttachmentCreateInfo;
-        colorBlendingCreateInfo.blendConstants[0] = 0.0f;
-        colorBlendingCreateInfo.blendConstants[1] = 0.0f;
-        colorBlendingCreateInfo.blendConstants[2] = 0.0f;
-        colorBlendingCreateInfo.blendConstants[3] = 0.0f;
-        createInfo.pColorBlendState = &colorBlendingCreateInfo;
-
-        VkPipelineLayoutCreateInfo & pipelineLayoutCreateInfo = pipelineLayoutCreateInfos[graphicsPipelineIndex];
-        memset(&pipelineLayoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateInfo));
-        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutCreateInfo.setLayoutCount = 1;
-        pipelineLayoutCreateInfo.pSetLayouts = &context._descriptorSetLayout;
-        pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-        pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
-
-
-        VkResult createPipelineLayoutResult = vkCreatePipelineLayout(context._device, &pipelineLayoutCreateInfo, nullptr, &context._pipelineLayout);
-        assert(createPipelineLayoutResult == VK_SUCCESS);
-        if (createPipelineLayoutResult != VK_SUCCESS)
-        {
-            SDL_LogError(0, "Failed to create graphics pipeline layout\n");
-            return false;
-        }
-        createInfo.layout = context._pipelineLayout;
-        createInfo.renderPass = context._renderPass;
-        createInfo.subpass = 0;
-        createInfo.basePipelineHandle = VK_NULL_HANDLE;
-        //    createInfo.basePipelineIndex = -1;
-
-        VkPipelineDynamicStateCreateInfo & dynamicStateCreateInfo = dynamicStateCreateInfos[graphicsPipelineIndex];
-        memset(&dynamicStateCreateInfo, 0, sizeof(VkPipelineDynamicStateCreateInfo));
-        dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        VkDynamicState dynamicState[] = {
-                VK_DYNAMIC_STATE_VIEWPORT,
-                VK_DYNAMIC_STATE_SCISSOR
-        };
-        dynamicStateCreateInfo.dynamicStateCount = 0;
-        dynamicStateCreateInfo.pDynamicStates = nullptr;
-        //	dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
-        //	createInfo.pDynamicState = &dynamicStateCreateInfo;
-
-        // Pipeline Vertex Input State
-        VkPipelineVertexInputStateCreateInfo& vertexInputInfo = vertexInputInfos[graphicsPipelineIndex];
-        memset(&vertexInputInfo, 0, sizeof(VkPipelineVertexInputStateCreateInfo));
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        std::vector<VkVertexInputBindingDescription> & vertexInputBindingDescription = vertexInputBindingDescriptions[graphicsPipelineIndex];
-        std::vector<VkVertexInputAttributeDescription> & vertexInputAttributeDescription = vertexInputAttributeDescriptions[graphicsPipelineIndex];
-        createInfo.pVertexInputState = &vertexInputInfo;
-
-        VkGraphicsPipelineCreateInfoDescriptor graphicsPipelineCreateInfoDescriptor(
-            createInfo,
-            shaderStages,
-            vertexInputInfo,
-            inputAssemblyInfo,
-            viewport,
-            scissor,
-            viewportStateCreateInfo,
-            rasterizerCreateInfo,
-            multisamplingCreateInfo,
-            depthStencilCreateInfo,
-            colorBlendAttachmentCreateInfo,
-            colorBlendingCreateInfo,
-            pipelineLayoutCreateInfo,
-            dynamicStateCreateInfo,
-            vertexInputBindingDescription,
-            vertexInputAttributeDescription
-        );
-        appDesc._graphicsPipelineCreationCallback(graphicsPipelineCreateInfoDescriptor, graphicsPipelineIndex);
-
-        // we can't set these variables until after the callback, as the vectors are dynamic in size, and the pointer to the contents might change
-        vertexInputInfo.vertexBindingDescriptionCount = (uint32_t)vertexInputBindingDescription.size();
-        vertexInputInfo.pVertexBindingDescriptions = &vertexInputBindingDescription[0];
-        vertexInputInfo.vertexAttributeDescriptionCount = (uint32_t)vertexInputAttributeDescription.size();
-        vertexInputInfo.pVertexAttributeDescriptions = &vertexInputAttributeDescription[0];
-
-
-
-    }
-
-    VkPipeline graphicsPipeline;
-    const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, appDesc._numGraphicsPipelines, &createInfos[0], nullptr, &graphicsPipeline);
+    const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &effect._pipeline);
     assert(createGraphicsPipelineResult == VK_SUCCESS);
     if (createGraphicsPipelineResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to create vulkan graphics pipeline\n");
         return false;
     }
-    context._pipeline = graphicsPipeline;
 
     return true;
 }
@@ -1481,84 +1473,6 @@ bool Vulkan::resetCommandBuffers(Context & context, std::vector<VkCommandBuffer>
 
 
 }
-
-
-bool Vulkan::recordStandardCommandBuffers(AppDescriptor & appDesc, Context & context)
-{
-	std::vector<VkCommandBuffer> & commandBuffers = context._commandBuffers;
-
-	if(!resetCommandBuffers(context, commandBuffers))
-		return false;
-
-	// do a basic recording of the command buffers
-	for (unsigned int i = 0; i < (unsigned int)commandBuffers.size(); i++)
-	{
-		VkCommandBufferBeginInfo beginInfo;
-		memset(&beginInfo, 0, sizeof(VkCommandBufferBeginInfo));
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-		const VkResult beginCommandBufferResult = vkBeginCommandBuffer(commandBuffers[i], &beginInfo);
-		assert(beginCommandBufferResult == VK_SUCCESS);
-		if (beginCommandBufferResult != VK_SUCCESS)
-		{
-			SDL_LogError(0, "call to vkBeginCommandBuffer failed, i=%d\n", i);
-			return false;
-		}
-
-		VkRenderPassBeginInfo renderPassBeginInfo;
-		memset(&renderPassBeginInfo, 0, sizeof(VkRenderPassBeginInfo));
-		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassBeginInfo.renderPass = context._renderPass;
-		renderPassBeginInfo.framebuffer = context._frameBuffers[i];
-		renderPassBeginInfo.renderArea.offset = { 0,0 };
-		renderPassBeginInfo.renderArea.extent = context._swapChainSize;
-
-		const glm::vec4 bgColor = appDesc._backgroundClearColor();
-		VkClearValue clearColorValue[2];
-		clearColorValue[0].color = VkClearColorValue{ bgColor[0], bgColor[1], bgColor[2], bgColor[3] };
-		clearColorValue[1].depthStencil = VkClearDepthStencilValue{ 1.0f, 0 };
-
-		renderPassBeginInfo.clearValueCount = 2;
-		renderPassBeginInfo.pClearValues = &clearColorValue[0];
-
-		vkCmdBeginRenderPass(commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, context._pipeline);
-
-		for (unsigned int meshCount = 0; meshCount < context._vulkanMeshes.size(); meshCount++)
-		{
-			VkBuffer vertexBuffer[] = { context._vulkanMeshes[meshCount]._vertexBuffer._buffer };
-			VkDeviceSize offsets[] = { 0 };
-
-
-			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, &vertexBuffer[0], offsets);
-			vkCmdBindIndexBuffer(commandBuffers[i], context._vulkanMeshes[meshCount]._indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT16);
-
-			vkCmdBindDescriptorSets(commandBuffers[i],
-				VK_PIPELINE_BIND_POINT_GRAPHICS,
-				context._pipelineLayout,
-				0,
-				1,
-				&context._vulkanMeshes[meshCount]._descriptorSets[i],
-				0,
-				nullptr);
-
-			vkCmdDrawIndexed(commandBuffers[i], context._vulkanMeshes[meshCount]._numIndices, 1, 0, 0, 0);
-
-		}
-		vkCmdEndRenderPass(commandBuffers[i]);
-
-		const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBuffers[i]);
-		assert(endCommandBufferResult == VK_SUCCESS);
-		if (endCommandBufferResult != VK_SUCCESS)
-		{
-			SDL_LogError(0, "Call to vkEndCommandBuffer failed (i=%d)\n", i);
-			return false;
-		}
-	}
-
-	return true;
-}
-
 
 std::vector<VkFence> Vulkan::createFences(Context & context)
 {
@@ -1694,7 +1608,7 @@ bool Vulkan::createBuffer(Context & context, const void * srcData, VkDeviceSize 
     
 }
 
-bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData, unsigned int meshIndex)
+bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData, Vulkan::Mesh & result)
 {
     BufferDescriptor indexBuffer;
     BufferDescriptor vertexBuffer;
@@ -1718,52 +1632,46 @@ bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & conte
             return false;
     }
     
-    VulkanMesh & vulkanMesh = context._vulkanMeshes[meshIndex];
-    vulkanMesh._indexBuffer = indexBuffer;
-    vulkanMesh._vertexBuffer = vertexBuffer;
-    vulkanMesh._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
-    vulkanMesh._userData = userData;
+    result._indexBuffer = indexBuffer;
+    result._vertexBuffer = vertexBuffer;
+    result._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
+    result._userData = userData;
     
     return true;
 
 }
 
-bool Vulkan::createUniformBuffer(AppDescriptor & appDesc, Context & context, unsigned int bufferIndex)
+bool Vulkan::createUniformBuffer(AppDescriptor & appDesc, Context & context, VkDeviceSize bufferSize, BufferDescriptor & result)
 {
-    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+    BufferDescriptor uniforms;
     
-    std::vector<BufferDescriptor> & uniforms = context._vulkanMeshes[bufferIndex]._uniformBuffers;
-    uniforms.resize(context._rawImages.size());
-    
-    for (size_t i = 0; i < uniforms.size(); i++)
+    if (!createBuffer(context, bufferSize,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        uniforms))
     {
-        if(!createBuffer(context, bufferSize,
-                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     uniforms[i]))
-        {
-            SDL_LogError(0, "Failed to create uniform buffer (bufferIndex=%d, i=%d)\n", (int)bufferIndex, (int)i);
-            return false;
-        }
+        SDL_LogError(0, "Failed to create uniform buffer of size=%d\n", (int)bufferSize);
+        return false;
     }
+
+    result = uniforms;
+
     return true;
 }
 
-bool Vulkan::createDescriptorPool(Context & context, unsigned int bufferIndex)
+bool Vulkan::createDescriptorPool(Context & context,  VkDescriptorPool & pool, unsigned int descriptorCount)
 {
-	VulkanMesh& mesh = context._vulkanMeshes[bufferIndex];
-
 	VkDescriptorPoolSize poolSize = {};
 	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSize.descriptorCount = static_cast<uint32_t>(context._rawImages.size());
+	poolSize.descriptorCount = descriptorCount;
 
 	VkDescriptorPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = 1;
 	poolInfo.pPoolSizes = &poolSize;
-	poolInfo.maxSets = static_cast<uint32_t>(context._rawImages.size());
+	poolInfo.maxSets = descriptorCount;
 
-	VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &mesh._descriptorPool);
+	VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &pool);
 	assert(creationResult == VK_SUCCESS);
 	if (creationResult != VK_SUCCESS)
 		return false;
@@ -1771,49 +1679,61 @@ bool Vulkan::createDescriptorPool(Context & context, unsigned int bufferIndex)
 	return true;
 }
 
-bool Vulkan::createDescriptorSet(AppDescriptor & appDesc, Context & context, unsigned int bufferIndex)
-{
-	VulkanMesh& mesh = context._vulkanMeshes[bufferIndex];
 
-	const uint32_t size = (uint32_t)context._rawImages.size();
-	std::vector<VkDescriptorSetLayout> layouts(size, context._descriptorSetLayout);
+bool Vulkan::createDescriptorSet(AppDescriptor & appDesc, Context & context, Mesh & mesh)
+{
+	const uint32_t framesCount = (uint32_t)context._rawImages.size();
+    const uint32_t numUniforms = (uint32_t)mesh._uniformBuffers.size();
+    const uint32_t numDescriptorSetsNeeded = framesCount * numUniforms;
+
+	std::vector<VkDescriptorSetLayout> layouts(numDescriptorSetsNeeded, context._descriptorSetLayout);
+
 	VkDescriptorSetAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	allocInfo.descriptorPool = mesh._descriptorPool;
-	allocInfo.descriptorSetCount = size;
+	allocInfo.descriptorSetCount = numDescriptorSetsNeeded;
 	allocInfo.pSetLayouts = &layouts[0];
 
-	context._vulkanMeshes[bufferIndex]._descriptorSets.resize(size);
+    mesh._descriptorSets.resize(numDescriptorSetsNeeded);
 	VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &mesh._descriptorSets[0]);
 	assert(allocationResult == VK_SUCCESS);
 	if (allocationResult != VK_SUCCESS)
 		return false;
 
-	for (size_t i = 0; i < size; i++) {
-		VkDescriptorBufferInfo bufferInfo;
-		memset(&bufferInfo, 0, sizeof(bufferInfo));
-		bufferInfo.buffer = mesh._uniformBuffers[i]._buffer;
-		bufferInfo.offset = 0;
-		bufferInfo.range = sizeof(UniformBufferObject);
+    for(uint32_t frame = 0 ; frame < framesCount ; frame++)
+    {
+        uint32_t offset = 0;
+        for(uint32_t uniformIndex = 0 ; uniformIndex < numUniforms ; uniformIndex++)
+        {
+            uint32_t bufferIndex = (frame * numUniforms) + uniformIndex;
+            VkDescriptorBufferInfo bufferInfo;
+            memset(&bufferInfo, 0, sizeof(bufferInfo));
+            bufferInfo.buffer = mesh._uniformBuffers[bufferIndex]._buffer;
+            bufferInfo.offset = offset;
+            bufferInfo.range = mesh._uniformBuffers[bufferIndex]._size;
+            offset += mesh._uniformBuffers[bufferIndex]._size;
 
-		VkWriteDescriptorSet descriptorWrite = {};
-		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrite.dstSet = mesh._descriptorSets[i];
-		descriptorWrite.dstBinding = 0;
-		descriptorWrite.dstArrayElement = 0;
-		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptorWrite.descriptorCount = 1;
-		descriptorWrite.pBufferInfo = &bufferInfo;
+            VkWriteDescriptorSet descriptorWrite = {};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = mesh._descriptorSets[bufferIndex];
+            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pBufferInfo = &bufferInfo;
 
-		vkUpdateDescriptorSets(context._device, 1, &descriptorWrite, 0, nullptr);
-	}
+            vkUpdateDescriptorSets(context._device, 1, &descriptorWrite, 0, nullptr);
+        }
+    }
 
     return true;
 }
 
+
+/*
 void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, unsigned int bufferIndex, uint32_t meshIndex)
 {
-    VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
+    Mesh & mesh = context._vulkanMeshes[meshIndex];
     
     UniformBufferObject ubo = mesh._transformation;
 
@@ -1839,6 +1759,7 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, unsigned
     memcpy(data, &ubo, sizeof(ubo));
     vkUnmapMemory(context._device, context._vulkanMeshes[meshIndex]._uniformBuffers[bufferIndex]._memory);
 }
+*/
 
 bool Vulkan::update(AppDescriptor & appDesc, Context & context, uint32_t currentImage)
 {
@@ -1850,25 +1771,33 @@ bool Vulkan::update(AppDescriptor & appDesc, Context & context, uint32_t current
     const float deltaS = float(deltaMs) / 1000.0f;
     const float timePassedS = float(timePassedMs) / 1000.0f;
     
-
-	// update camera position
-	glm::vec3 pos, lookat, up;
-	appDesc._cameraUpdateFunction(pos, lookat, up);
-	context._camera = VulkanCamera(pos, lookat, up);
-
     const bool updateResult = appDesc._updateFunction(timePassedS, deltaS);
-	for(unsigned int meshIndex = 0 ; meshIndex < context._vulkanMeshes.size() ; meshIndex++)
-	{
-		VulkanMesh & mesh = context._vulkanMeshes[meshIndex];
-        mesh._transformation._model = appDesc._updateModelMatrix(mesh._userData, timePassedS, deltaS);
-		for (unsigned int i = 0; i < (unsigned int)mesh._uniformBuffers.size(); i++)
-			updateUniforms(appDesc, context, i, meshIndex);
-	}
+
+    for(EffectDescriptor & effect : context._effects)
+    {
+        for(Mesh & mesh : effect._meshes)
+        {
+            static std::vector<unsigned char> updateData;
+            const unsigned int numUniformBuffers = (unsigned int)mesh._uniformBuffers.size();
+            const unsigned int numUniformBufferPrFrame = numUniformBuffers / (unsigned int)context._rawImages.size();
+            for(unsigned int i = 0 ; i < numUniformBufferPrFrame ; i++)
+            {
+                unsigned int uniformUpdateSize = mesh._updateUniform(i, updateData);
+                if (uniformUpdateSize != 0)
+                {
+                    const unsigned int bufferIndex = (currentImage * numUniformBufferPrFrame) + i;
+                    mesh._uniformBuffers[bufferIndex].fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
+                }
+            }
+
+
+        }
+    }
     
     return updateResult;
 }
 
-void Vulkan::destroyMesh(Context & context, VulkanMesh& mesh)
+void Vulkan::destroyMesh(Context & context, Mesh& mesh)
 {
 	destroyBufferDescriptor(context, mesh._vertexBuffer);
 	destroyBufferDescriptor(context, mesh._indexBuffer);
@@ -1890,50 +1819,50 @@ void Vulkan::destroyBufferDescriptor(Context & context, BufferDescriptor& descri
 }
 
 
-void Vulkan::clearMeshes(AppDescriptor & appDesc, Context & context)
+void Vulkan::clearMeshes(Context & context, EffectDescriptor & effect)
 {
-	resetCommandBuffers(context, context._commandBuffers);
-	for(auto mesh : context._vulkanMeshes)
+	resetCommandBuffers(context, effect._commandBuffers);
+	for(auto mesh : effect._meshes)
 		destroyMesh(context, mesh);
 
-	context._vulkanMeshes.clear();
-//	recordStandardCommandBuffers(appDesc, context);
+    effect._meshes.clear();
 }
 
-bool Vulkan::addMesh(AppDescriptor & appDesc, Context & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData)
+bool Vulkan::addMesh(AppDescriptor & appDesc, Context & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData, std::vector<unsigned int> uniformBuffers, Vulkan::Mesh & result)
 {
-	context._vulkanMeshes.push_back(Vulkan::VulkanMesh());
-	const unsigned int index = (unsigned int)(context._vulkanMeshes.size() - 1);
-	if (!createIndexAndVertexBuffer(appDesc, context, vertexData, indexData, userData, index))
+    Vulkan::Mesh mesh;
+	if (!createIndexAndVertexBuffer(appDesc, context, vertexData, indexData, userData, mesh))
 	{
 		SDL_LogError(0, "Failed to create index and vertex buffer\n");
 		return false;
 	}
 
-	if (!createUniformBuffer(appDesc, context, index))
-	{
-		SDL_LogError(0, "Failed to create uniform buffer\n");
-		return false;
-	}
+    mesh._uniformBuffers.resize(context._rawImages.size() * uniformBuffers.size());
+    for(unsigned int i=0 ; i < context._rawImages.size() ; i++)
+    {
+        for(unsigned int j=0 ; j < uniformBuffers.size() ; j++)
+        {
+            if (!createUniformBuffer(appDesc, context, uniformBuffers[j], mesh._uniformBuffers[i*uniformBuffers.size() + j]))
+            {
+                SDL_LogError(0, "Failed to create uniform buffer\n");
+                return false;
+            }
+        }
+    }
 
-	if (!createDescriptorPool(context, index))
+	if (!createDescriptorPool(context, mesh._descriptorPool, (unsigned int)mesh._uniformBuffers.size()))
 	{
 		SDL_LogError(0, "Failed to create descriptor pool\n");
 		return false;
 	}
 
-	if (!createDescriptorSet(appDesc, context, index))
+	if (!createDescriptorSet(appDesc, context, mesh))
 	{
 		SDL_LogError(0, "Failed to create descriptor set\n");
 		return false;
 	}
 
-	if(!recordStandardCommandBuffers(appDesc, context))
-    {
-        SDL_LogError(0, "Failed to record command buffers when adding mesh\n");
-        return false;
-    }
-
+    result = mesh;
     return true;
 }
 
@@ -2014,22 +1943,6 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         return false;
     }
 
-	if (!createRenderPass(context, &context._adhocRenderPass, false))
-	{
-		SDL_LogError(0, "Failed to create adhoc render pass\n");
-		return false;
-	}
-
-    if(!appDesc._shaders.empty())
-    {
-        std::vector<VkShaderModule> shaderModules = createShaderModules(appDesc, context);
-        if (shaderModules.empty() || shaderModules.size() != appDesc._shaders.size())
-        {
-            SDL_LogError(0, "Failed to create shader modules\n");
-            return false;
-        }
-        context._shaderModules = shaderModules;
-    }
     
     if(!createDescriptorSetLayout(context))
     {
@@ -2043,26 +1956,12 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
 		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
 	}
 	
-    
-    if (!createGraphicsPipeline(appDesc, context))
-    {
-        SDL_LogError(0, "Failed to create graphics pipeline\n");
-        return false;
-    }
-
 	// create standard command pool
     if(!createCommandPool(appDesc, context, &context._commandPool))
     {
         SDL_LogError(0, "Failed to create standard command pool\n");
         return false;
     }
-
-	// create adhoc command pool
-	if (!createCommandPool(appDesc, context, &context._adhocCommandPool))
-	{
-		SDL_LogError(0, "Failed to create adhoc command pool\n");
-		return false;
-	}
 
 	if (!createDepthBuffers(appDesc, context))
 	{
@@ -2076,24 +1975,6 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
 		return false;
 	}
 
-	if (!createCommandBuffers(appDesc, context, context._commandPool, (unsigned int)context._rawImages.size(), &context._commandBuffers))
-	{
-		SDL_LogError(0, "Failed to create standard command buffers\n");
-		return false;
-	}
-
-	if (!createCommandBuffers(appDesc, context, context._adhocCommandPool, (unsigned int)context._rawImages.size(), &context._adhocCommandBuffers))
-	{
-		SDL_LogError(0, "Failed to create adhoc command buffers\n");
-		return false;
-	}
-    
-    if(!recordStandardCommandBuffers(appDesc, context))
-    {
-        SDL_LogError(0, "Failed to create command buffers\n");
-        return false;
-    }
-    
     if(!createSemaphores(appDesc, context))
     {
         SDL_LogError(0, "Failed to create semaphores\n");
@@ -2123,23 +2004,6 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-	if (!createRenderPass(context, &context._adhocRenderPass, false))
-	{
-		SDL_LogError(0, "Failed to create adhoc render pass\n");
-		return false;
-	}
-
-    if(!appDesc._shaders.empty())
-    {
-        std::vector<VkShaderModule> shaderModules = createShaderModules(appDesc, context);
-        if (shaderModules.empty() || shaderModules.size() != appDesc._shaders.size())
-        {
-            SDL_LogError(0, "Failed to create shader modules\n");
-            return false;
-        }
-        context._shaderModules = shaderModules;
-    }
-
 
 	if (!createDescriptorSetLayout(context))
 	{
@@ -2153,24 +2017,10 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
 	}
 
-
-	if (!createGraphicsPipeline(appDesc, context))
-	{
-		SDL_LogError(0, "Failed to create graphics pipeline\n");
-		return false;
-	}
-
     // create standard command pool
     if(!createCommandPool(appDesc, context, &context._commandPool))
     {
         SDL_LogError(0, "Failed to create standard command pool\n");
-        return false;
-    }
-
-    // create adhoc command pool
-    if (!createCommandPool(appDesc, context, &context._adhocCommandPool))
-    {
-        SDL_LogError(0, "Failed to create adhoc command pool\n");
         return false;
     }
     
@@ -2183,24 +2033,6 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 	if (!createFrameBuffers(context))
 	{
 		SDL_LogError(0, "Failed to create frame buffers\n");
-		return false;
-	}
-
-	if (!createCommandBuffers(appDesc, context, context._commandPool, (unsigned int)context._rawImages.size(), &context._commandBuffers))
-	{
-		SDL_LogError(0, "Failed to create standard command buffers\n");
-		return false;
-	}
-
-	if (!createCommandBuffers(appDesc, context, context._adhocCommandPool, (unsigned int)context._rawImages.size(), &context._adhocCommandBuffers))
-	{
-		SDL_LogError(0, "Failed to create adhoc command buffers\n");
-		return false;
-	}
-
-	if (!recordStandardCommandBuffers(appDesc, context))
-	{
-		SDL_LogError(0, "Failed to create command buffers\n");
 		return false;
 	}
 
@@ -2224,7 +2056,7 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 {
 	VkDevice device = context._device;
 
-	for (unsigned int i = 0; i < (unsigned int)context._commandBuffers.size(); i++)
+	for (unsigned int i = 0; i < (unsigned int)context._fences.size(); i++)
 	{
 		if (!context._fences.empty())
 		{
@@ -2248,7 +2080,7 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 	for (auto frameBuffer : context._frameBuffers)
 		vkDestroyFramebuffer(device, frameBuffer, nullptr);
 	context._frameBuffers.clear();
-
+/*
 	vkFreeCommandBuffers(device, context._commandPool, (uint32_t)context._commandBuffers.size(), &context._commandBuffers[0]);
 	vkDestroyCommandPool(device, context._commandPool, VK_NULL_HANDLE);
 	context._commandBuffers.clear();
@@ -2261,7 +2093,7 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 	context._pipelineLayout = VK_NULL_HANDLE;
 	vkDestroyPipelineCache(device, context._pipelineCache, VK_NULL_HANDLE);
 	context._pipelineCache = VK_NULL_HANDLE;
-
+    */
 	for (auto imageView : context._colorBuffers)
 		vkDestroyImageView(device, imageView, nullptr);
 	context._colorBuffers.clear();
@@ -2279,4 +2111,22 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 
 
 	return true;
+}
+
+bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect)
+{
+    if (!createCommandBuffers(appDesc, context, context._commandPool, (unsigned int)context._rawImages.size(), &effect._commandBuffers))
+    {
+        SDL_LogError(0, "Failed to create command buffers\n");
+        return false;
+    }
+
+
+    if(!createGraphicsPipeline(appDesc, context, graphicsPipelineCreationCallback, effect))
+    {
+        SDL_LogError(0, "Failed to create graphics pipeline\n");
+        return false;
+    }
+
+    return true;
 }

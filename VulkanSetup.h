@@ -51,13 +51,6 @@ namespace Vulkan
 {
     extern bool validationLayersEnabled;
 
-    
-    enum class ShaderType
-    {
-        Vertex,
-        Fragment
-    };
-
 	enum class BufferType
 	{
 		Index,
@@ -65,23 +58,15 @@ namespace Vulkan
         Uniform,
 	};
     
-    struct UniformBufferObject
-    {
-        glm::mat4 _model;
-        glm::mat4 _view;
-        glm::mat4 _projection;
-        glm::vec4 _lights[16];
-        int _numLights;
-    };
-    
     struct Shader
     {
         std::string _filename;
         std::vector<char> _byteCode;
-        ShaderType _type;
+        VkShaderStageFlagBits  _type;
+        VkShaderModule _shaderModule;
         
     public:
-        Shader(const std::string & filename, ShaderType type);
+        Shader(const std::string & filename, VkShaderStageFlagBits type);
     };
 
 
@@ -148,6 +133,7 @@ namespace Vulkan
 
     };
         
+    typedef std::function<void(VkGraphicsPipelineCreateInfoDescriptor &)> GraphicsPipelineCustomizationCallback;
     struct AppDescriptor
     {
         std::string _appName;
@@ -158,16 +144,8 @@ namespace Vulkan
         std::vector<VkExtensionProperties> _deviceExtensions;
         std::vector<VkSurfaceFormatKHR> _surfaceFormats;
         
-        std::vector<Shader> _shaders;
-
-        unsigned int _numGraphicsPipelines = 0;
-        std::function<void (VkGraphicsPipelineCreateInfoDescriptor & desc, unsigned int index)> _graphicsPipelineCreationCallback = [](VkGraphicsPipelineCreateInfoDescriptor&, unsigned int) { return; };
-
 		std::function<glm::vec4 (void)> _backgroundClearColor = []() { return glm::vec4{ 0,0,0,1 }; };
 
-		std::function <VkVertexInputBindingDescription()> _getBindingDescription = []() { return VkVertexInputBindingDescription(); };
-		std::function < std::array<VkVertexInputAttributeDescription, 2>()> _getAttributes = []() {return std::array<VkVertexInputAttributeDescription, 2>(); };
-        
         typedef std::function <bool(float, float)> UpdateFunction; // returns true, if the code should continue. Return false, to request termination
         UpdateFunction _updateFunction = [](float, float) { return true; };
 
@@ -184,28 +162,41 @@ namespace Vulkan
     {
         VkBuffer _buffer;
         VkDeviceMemory _memory;
+        unsigned int _size;
+
+        BufferDescriptor()
+            :_buffer(VK_NULL_HANDLE)
+            ,_memory(VK_NULL_HANDLE)
+            ,_size(0)
+        {
+        }
         
         bool fill(VkDevice device, const void * srcData, VkDeviceSize amount);
         bool copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, BufferDescriptor & src, VkDeviceSize amount);
     };
     
-	struct VulkanMesh
+    struct Mesh;
+    typedef std::function<unsigned int (unsigned int uniformIndex, std::vector<unsigned char> &)> UpdateUniformFunction;
+
+	struct Mesh
 	{
 		BufferDescriptor _vertexBuffer;
 		BufferDescriptor _indexBuffer;
         std::vector<BufferDescriptor> _uniformBuffers;
         VkDescriptorPool _descriptorPool;
         std::vector<VkDescriptorSet> _descriptorSets;
+        UpdateUniformFunction _updateUniform = [](unsigned int uniformIndex, std::vector<unsigned char> &) { return 0; };
 
 		unsigned int _numIndices;
-        UniformBufferObject _transformation;
         void * _userData;
         
-		VulkanMesh()
+		Mesh()
             :_numIndices(0)
             ,_userData(nullptr)
 		{
 		}
+
+
 	};
     
 	struct VulkanCamera
@@ -220,6 +211,20 @@ namespace Vulkan
 		glm::vec3 _lookat;
 		glm::vec3 _up;
 	};
+
+    struct EffectDescriptor;
+    struct Context;
+    typedef std::function<bool (AppDescriptor &, Context &, EffectDescriptor &)> RecordCommandBuffersFunction;
+
+    struct EffectDescriptor
+    {
+        VkPipeline _pipeline;
+        VkPipelineLayout _pipelineLayout;
+        std::vector<Shader> _shaderModules;
+        std::vector<VkCommandBuffer> _commandBuffers;
+        std::vector<Mesh> _meshes;
+        RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true;};
+    };
 
     struct Context
     {
@@ -249,13 +254,6 @@ namespace Vulkan
 		std::vector<VkDeviceMemory> _depthMemory;
 
         std::vector<VkFramebuffer> _frameBuffers;
-		std::vector<VkShaderModule> _shaderModules;
-        
-        VkRenderPass _renderPass;
-		VkRenderPass _adhocRenderPass;
-		VkPipeline _pipeline;
-        VkPipelineLayout _pipelineLayout;
-		VkPipelineCache _pipelineCache;
         
         VkDescriptorSetLayout _descriptorSetLayout;
         
@@ -264,19 +262,17 @@ namespace Vulkan
 		VkAllocationCallbacks * _allocator;
         
         VkCommandPool _commandPool;
-        std::vector<VkCommandBuffer> _commandBuffers;
-
-		VkCommandPool _adhocCommandPool;
-		std::vector<VkCommandBuffer> _adhocCommandBuffers;
 
         std::vector<VkSemaphore> _renderFinishedSemaphores;
         std::vector<VkSemaphore> _imageAvailableSemaphores;
         std::vector<VkFence> _fences;
         
-		std::vector<VulkanMesh> _vulkanMeshes;
-        
+        VkPipelineCache _pipelineCache;
+        VkRenderPass _renderPass;
+
         unsigned int _currentFrame;
-        
+        std::vector<EffectDescriptor> _effects;
+
         Context();
 
 		const VulkanCamera & getCamera() { return _camera;  }
@@ -287,51 +283,16 @@ namespace Vulkan
 
     };
 
-	bool resetCommandBuffers(Context& context, std::vector<VkCommandBuffer>& commandBuffers);
-	void clearMeshes(AppDescriptor& appDesc, Context & context);
-	bool addMesh(AppDescriptor& appDesc, Context & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData);
-	void destroyMesh(Context & context, VulkanMesh & mesh);
-	void destroyBufferDescriptor(Context & context, BufferDescriptor & descriptor);
-
-    bool setupDebugCallback(Context & context);
-    bool areValidationLayersAvailable(const std::vector<const char*> & validationLayers);
-    bool loadVulkanLibrary();
-    bool loadVulkanFunctions();
-    bool createInstanceAndLoadExtensions(const AppDescriptor& appDesc, Context & context);
-    bool createVulkanSurface(SDL_Window * window, Context & context);
-    bool enumeratePhysicalDevices(AppDescriptor& appDesc, Context & context);
-    bool choosePhysicalDevice(AppDescriptor&appDesc, Context & vulkanContext);
-    bool lookupDeviceExtensions(AppDescriptor&appDesc);
-    bool createDevice(AppDescriptor& appDesc, Context & context);
-    bool createQueue(AppDescriptor& appDesc, Context & context);
-    bool createSwapChain(AppDescriptor& appDesc, Context & context);
-    bool createColorBuffers(Context & context);
-	bool createDepthBuffers(AppDescriptor& appDesc, Context & context);
-    bool createRenderPass(Context & vulkanContext, VkRenderPass * result, bool clearColorBuffer);
-    bool createDescriptorSetLayout(Context & vulkanContext);
-    bool createFrameBuffers(Context & vulkanContext);
-    std::vector<VkShaderModule> createShaderModules(AppDescriptor & appDesc, Context & context);
-	bool createPipelineCache(AppDescriptor & appDesc, Context & context);
-	bool createGraphicsPipeline(AppDescriptor & appDesc, Context & context);
-    bool createCommandPool(AppDescriptor & appDesc, Context & context, VkCommandPool * result);
-	bool recordStandardCommandBuffers(AppDescriptor & appDesc, Context & context);
-	std::vector<VkFence> createFences(Context & context);
-    std::vector<VkSemaphore> createSemaphores(Context & context);
-    bool createSemaphores(AppDescriptor & appDesc, Context & context);
-    bool createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc);
-    bool createBuffer(Context & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type);
-    bool createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void *userData, unsigned int meshIndex);
-    bool createUniformBuffer(AppDescriptor & appDesc, Context & context, unsigned int meshIndex);
-    bool createDescriptorPool(Context & context, unsigned int bufferIndex);
-    bool createDescriptorSet(AppDescriptor & appDesc, Context & context, unsigned int bufferIndex);
-    bool handleVulkanSetup(AppDescriptor & appDesc, Context & context);
     
-    bool update(AppDescriptor & appDesc, Context & context, uint32_t currentImage);
-    void updateUniforms(AppDescriptor & appDesc, Context & context, unsigned int bufferIndex, uint32_t meshIndex);
-	bool createSwapChainDependents(AppDescriptor & appDesc, Context & context);
-	bool recreateSwapChain(AppDescriptor & appDesc, Context & context);
-	bool cleanupSwapChain(AppDescriptor & appDesc, Context & context);
+    bool addMesh(AppDescriptor& appDesc, Context& context, std::vector<unsigned char>& vertexData, std::vector<unsigned char>& indexData, void* userData, std::vector<unsigned int> uniformBuffers, Vulkan::Mesh& result);
+    bool handleVulkanSetup(AppDescriptor& appDesc, Context& context);
+    bool recreateSwapChain(AppDescriptor& appDesc, Context& context);
+    bool update(AppDescriptor& appDesc, Context& context, uint32_t currentImage);
 
+    bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback , Vulkan::EffectDescriptor & effect);
+    bool resetCommandBuffers(Context& context, std::vector<VkCommandBuffer>& commandBuffers);
+    bool createShaderModules(AppDescriptor& appDesc, Context& context, std::vector<Shader>& shaders);
+    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
 
 }
 

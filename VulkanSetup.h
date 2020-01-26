@@ -196,9 +196,9 @@ namespace Vulkan
 		{
 		}
 
-
 	};
-    
+    typedef std::shared_ptr<Mesh> MeshPtr;
+
 	struct VulkanCamera
 	{
 		VulkanCamera() { }
@@ -222,9 +222,13 @@ namespace Vulkan
         VkPipelineLayout _pipelineLayout;
         std::vector<Shader> _shaderModules;
         std::vector<VkCommandBuffer> _commandBuffers;
-        std::vector<Mesh> _meshes;
-        RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true;};
+        std::vector<MeshPtr> _meshes;
+        std::vector<VkDescriptorSetLayout> _descriptorSetLayouts;
+        std::vector<uint32_t> _uniformBufferSizes;
+
+        RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true; };
     };
+    typedef std::shared_ptr<EffectDescriptor> EffectDescriptorPtr;
 
     struct Context
     {
@@ -255,7 +259,6 @@ namespace Vulkan
 
         std::vector<VkFramebuffer> _frameBuffers;
         
-        VkDescriptorSetLayout _descriptorSetLayout;
         
         VkDebugUtilsMessengerEXT _debugUtilsCallback;
 		VkDebugReportCallbackEXT _debugReportCallback;
@@ -271,7 +274,7 @@ namespace Vulkan
         VkRenderPass _renderPass;
 
         unsigned int _currentFrame;
-        std::vector<EffectDescriptor> _effects;
+        std::vector<EffectDescriptorPtr> _effects;
 
         Context();
 
@@ -284,7 +287,15 @@ namespace Vulkan
     };
 
     
-    bool addMesh(AppDescriptor& appDesc, Context& context, std::vector<unsigned char>& vertexData, std::vector<unsigned char>& indexData, void* userData, std::vector<unsigned int> uniformBuffers, Vulkan::Mesh& result);
+    bool addMesh(AppDescriptor& appDesc, 
+        Context& context,
+        std::vector<unsigned char>& vertexData, 
+        std::vector<unsigned char>& indexData, 
+        void* userData, 
+        EffectDescriptor& effectDescriptor,
+        Vulkan::Mesh& result);
+
+
     bool handleVulkanSetup(AppDescriptor& appDesc, Context& context);
     bool recreateSwapChain(AppDescriptor& appDesc, Context& context);
     bool update(AppDescriptor& appDesc, Context& context, uint32_t currentImage);

@@ -28,7 +28,7 @@ namespace Vulkan
     bool createColorBuffers(Context& context);
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context);
     bool createRenderPass(Context& vulkanContext, VkRenderPass* result, bool clearColorBuffer);
-    bool createDescriptorSetLayout(Context& vulkanContext);
+    bool createDescriptorSetLayout(Context& vulkanContext, EffectDescriptor& effect);
     bool createFrameBuffers(Context& vulkanContext);
     bool createPipelineCache(AppDescriptor& appDesc, Context& context);
     bool createCommandPool(AppDescriptor& appDesc, Context& context, VkCommandPool* result);
@@ -41,7 +41,7 @@ namespace Vulkan
     bool createIndexAndVertexBuffer(AppDescriptor& appDesc, Context& context, std::vector<unsigned char>& vertexData, std::vector<unsigned char>& indexData, void* userData, Vulkan::Mesh& result);
     bool createUniformBuffer(AppDescriptor& appDesc, Context& context, VkDeviceSize bufferSize, BufferDescriptor& result);
     bool createDescriptorPool(Context& context, VkDescriptorPool& pool, unsigned int descriptorCount);
-    bool createDescriptorSet(AppDescriptor& appDesc, Context& context, Mesh & mesh);
+    bool createDescriptorSet(AppDescriptor& appDesc, Context& context, EffectDescriptor & effect, Mesh & mesh);
 
     void updateUniforms(AppDescriptor& appDesc, Context& context, unsigned int bufferIndex, uint32_t meshIndex);
     bool createSwapChainDependents(AppDescriptor& appDesc, Context& context);
@@ -1335,8 +1335,8 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
     memset(&pipelineLayoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateInfo));
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
-    pipelineLayoutCreateInfo.pSetLayouts = &context._descriptorSetLayout;
+    pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)effect._descriptorSetLayouts.size();
+    pipelineLayoutCreateInfo.pSetLayouts = &effect._descriptorSetLayouts[0];
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
 
@@ -1410,21 +1410,27 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     return true;
 }
 
-bool Vulkan::createDescriptorSetLayout(Context & vulkanContext)
+bool Vulkan::createDescriptorSetLayout(Context & context, Vulkan::EffectDescriptor& effect)
 {
-    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
-    descriptorSetLayoutBinding.binding = 0;
-    descriptorSetLayoutBinding.descriptorCount = 1;
-    descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
-    descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    
+    std::vector<VkDescriptorSetLayoutBinding> layouts;
+    for(size_t i=0 ; i < effect._uniformBufferSizes.size() ; i++)
+    {
+        VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
+        descriptorSetLayoutBinding.binding = (uint32_t)i;
+        descriptorSetLayoutBinding.descriptorCount = 1;
+        descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+        descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        layouts.push_back(descriptorSetLayoutBinding);
+    }
+
     VkDescriptorSetLayoutCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     createInfo.bindingCount = 1;
-    createInfo.pBindings = &descriptorSetLayoutBinding;
+    createInfo.pBindings = &layouts[0];
     
-    VkResult creationResult = vkCreateDescriptorSetLayout(vulkanContext._device, &createInfo, nullptr, &vulkanContext._descriptorSetLayout);
+    effect._descriptorSetLayouts.resize(layouts.size());
+    VkResult creationResult = vkCreateDescriptorSetLayout(context._device, &createInfo, nullptr, &effect._descriptorSetLayouts[0]);
 	assert(creationResult == VK_SUCCESS);
 	return creationResult == VK_SUCCESS;
 }
@@ -1579,6 +1585,7 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     
     bufDesc._buffer = vertexBuffer;
     bufDesc._memory = vertexBufferMemory;
+    bufDesc._size = (unsigned int)size;
     return true;
 }
 
@@ -1680,21 +1687,18 @@ bool Vulkan::createDescriptorPool(Context & context,  VkDescriptorPool & pool, u
 }
 
 
-bool Vulkan::createDescriptorSet(AppDescriptor & appDesc, Context & context, Mesh & mesh)
+bool Vulkan::createDescriptorSet(AppDescriptor & appDesc, Context & context, EffectDescriptor & effect, Mesh & mesh)
 {
 	const uint32_t framesCount = (uint32_t)context._rawImages.size();
-    const uint32_t numUniforms = (uint32_t)mesh._uniformBuffers.size();
-    const uint32_t numDescriptorSetsNeeded = framesCount * numUniforms;
-
-	std::vector<VkDescriptorSetLayout> layouts(numDescriptorSetsNeeded, context._descriptorSetLayout);
+    const uint32_t numUniforms = (uint32_t)effect._uniformBufferSizes.size();
 
 	VkDescriptorSetAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	allocInfo.descriptorPool = mesh._descriptorPool;
-	allocInfo.descriptorSetCount = numDescriptorSetsNeeded;
-	allocInfo.pSetLayouts = &layouts[0];
+	allocInfo.descriptorSetCount = numUniforms;
+	allocInfo.pSetLayouts = &effect._descriptorSetLayouts[0];
 
-    mesh._descriptorSets.resize(numDescriptorSetsNeeded);
+    mesh._descriptorSets.resize(numUniforms);
 	VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &mesh._descriptorSets[0]);
 	assert(allocationResult == VK_SUCCESS);
 	if (allocationResult != VK_SUCCESS)
@@ -1715,7 +1719,7 @@ bool Vulkan::createDescriptorSet(AppDescriptor & appDesc, Context & context, Mes
 
             VkWriteDescriptorSet descriptorWrite = {};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrite.dstSet = mesh._descriptorSets[bufferIndex];
+            descriptorWrite.dstSet = mesh._descriptorSets[uniformIndex];
             descriptorWrite.dstBinding = 0;
             descriptorWrite.dstArrayElement = 0;
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1773,25 +1777,24 @@ bool Vulkan::update(AppDescriptor & appDesc, Context & context, uint32_t current
     
     const bool updateResult = appDesc._updateFunction(timePassedS, deltaS);
 
-    for(EffectDescriptor & effect : context._effects)
+    for(EffectDescriptorPtr & effect : context._effects)
     {
-        for(Mesh & mesh : effect._meshes)
+        for(MeshPtr & mesh : effect->_meshes)
         {
             static std::vector<unsigned char> updateData;
-            const unsigned int numUniformBuffers = (unsigned int)mesh._uniformBuffers.size();
+            const unsigned int numUniformBuffers = (unsigned int)mesh->_uniformBuffers.size();
             const unsigned int numUniformBufferPrFrame = numUniformBuffers / (unsigned int)context._rawImages.size();
             for(unsigned int i = 0 ; i < numUniformBufferPrFrame ; i++)
             {
-                unsigned int uniformUpdateSize = mesh._updateUniform(i, updateData);
+                unsigned int uniformUpdateSize = mesh->_updateUniform(i, updateData);
                 if (uniformUpdateSize != 0)
                 {
                     const unsigned int bufferIndex = (currentImage * numUniformBufferPrFrame) + i;
-                    mesh._uniformBuffers[bufferIndex].fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
+                    mesh->_uniformBuffers[bufferIndex].fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
                 }
             }
-
-
         }
+        effect->_recordCommandBuffers(appDesc, context, *effect);
     }
     
     return updateResult;
@@ -1823,12 +1826,18 @@ void Vulkan::clearMeshes(Context & context, EffectDescriptor & effect)
 {
 	resetCommandBuffers(context, effect._commandBuffers);
 	for(auto mesh : effect._meshes)
-		destroyMesh(context, mesh);
+		destroyMesh(context, *mesh);
 
     effect._meshes.clear();
 }
 
-bool Vulkan::addMesh(AppDescriptor & appDesc, Context & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData, std::vector<unsigned int> uniformBuffers, Vulkan::Mesh & result)
+bool Vulkan::addMesh(AppDescriptor & appDesc, 
+    Context & context, 
+    std::vector<unsigned char> & vertexData, 
+    std::vector<unsigned char> & indexData, 
+    void * userData, 
+    EffectDescriptor & effectDescriptor, 
+    Vulkan::Mesh & result)
 {
     Vulkan::Mesh mesh;
 	if (!createIndexAndVertexBuffer(appDesc, context, vertexData, indexData, userData, mesh))
@@ -1837,12 +1846,12 @@ bool Vulkan::addMesh(AppDescriptor & appDesc, Context & context, std::vector<uns
 		return false;
 	}
 
-    mesh._uniformBuffers.resize(context._rawImages.size() * uniformBuffers.size());
+    mesh._uniformBuffers.resize(context._rawImages.size() * effectDescriptor._uniformBufferSizes.size());
     for(unsigned int i=0 ; i < context._rawImages.size() ; i++)
     {
-        for(unsigned int j=0 ; j < uniformBuffers.size() ; j++)
+        for(unsigned int j=0 ; j < effectDescriptor._uniformBufferSizes.size() ; j++)
         {
-            if (!createUniformBuffer(appDesc, context, uniformBuffers[j], mesh._uniformBuffers[i*uniformBuffers.size() + j]))
+            if (!createUniformBuffer(appDesc, context, effectDescriptor._uniformBufferSizes[j], mesh._uniformBuffers[i* effectDescriptor._uniformBufferSizes.size() + j]))
             {
                 SDL_LogError(0, "Failed to create uniform buffer\n");
                 return false;
@@ -1850,17 +1859,17 @@ bool Vulkan::addMesh(AppDescriptor & appDesc, Context & context, std::vector<uns
         }
     }
 
-	if (!createDescriptorPool(context, mesh._descriptorPool, (unsigned int)mesh._uniformBuffers.size()))
-	{
-		SDL_LogError(0, "Failed to create descriptor pool\n");
-		return false;
-	}
+    if (!createDescriptorPool(context, mesh._descriptorPool, (unsigned int)mesh._uniformBuffers.size()))
+    {
+        SDL_LogError(0, "Failed to create descriptor pool\n");
+        return false;
+    }
 
-	if (!createDescriptorSet(appDesc, context, mesh))
-	{
-		SDL_LogError(0, "Failed to create descriptor set\n");
-		return false;
-	}
+    if (!createDescriptorSet(appDesc, context, effectDescriptor, mesh))
+    {
+        SDL_LogError(0, "Failed to create descriptor set\n");
+        return false;
+    }
 
     result = mesh;
     return true;
@@ -1943,13 +1952,6 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         return false;
     }
 
-    
-    if(!createDescriptorSetLayout(context))
-    {
-        SDL_LogError(0, "Failed to create descriptor set layouts!");
-        return false;
-    }
-
 	
 	if (!createPipelineCache(appDesc, context))
 	{
@@ -2001,13 +2003,6 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 	if (!createRenderPass(context, &context._renderPass, true))
 	{
 		SDL_LogError(0, "Failed to create standard render pass\n");
-		return false;
-	}
-
-
-	if (!createDescriptorSetLayout(context))
-	{
-		SDL_LogError(0, "Failed to create descriptor set layouts!");
 		return false;
 	}
 
@@ -2102,8 +2097,8 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 		vkDestroyImage(device, image, nullptr);*/
 	context._rawImages.clear();
 
-	vkDestroyDescriptorSetLayout(device, context._descriptorSetLayout, VK_NULL_HANDLE);
-	context._descriptorSetLayout = VK_NULL_HANDLE;
+//	vkDestroyDescriptorSetLayout(device, context._descriptorSetLayout, VK_NULL_HANDLE);
+//	context._descriptorSetLayout = VK_NULL_HANDLE;
 
 	vkDestroySwapchainKHR(device, context._swapChain, nullptr);
 	context._swapChain = VK_NULL_HANDLE;
@@ -2115,12 +2110,28 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 
 bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect)
 {
+    if (!createDescriptorSetLayout(context, effect))
+    {
+        SDL_LogError(0, "Failed to create descriptor set layouts!");
+        return false;
+    }
+
+
     if (!createCommandBuffers(appDesc, context, context._commandPool, (unsigned int)context._rawImages.size(), &effect._commandBuffers))
     {
         SDL_LogError(0, "Failed to create command buffers\n");
         return false;
     }
 
+    if (!effect._shaderModules.empty())
+    {
+        bool createShaderModulesSuccess = Vulkan::createShaderModules(appDesc, context, effect._shaderModules);
+        if (!createShaderModulesSuccess)
+        {
+            SDL_LogError(0, "Failed to create shader modules\n");
+            return 1;
+        }
+    }
 
     if(!createGraphicsPipeline(appDesc, context, graphicsPipelineCreationCallback, effect))
     {

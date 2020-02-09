@@ -964,8 +964,9 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
     swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     swapChainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
     swapChainCreateInfo.clipped = VK_TRUE;
-    swapChainCreateInfo.oldSwapchain = context._swapChain;
-    
+//    swapChainCreateInfo.oldSwapchain = context._swapChain;
+    swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+
     VkResult swapChainCreationResult = vkCreateSwapchainKHR(context._device, &swapChainCreateInfo, nullptr, &context._swapChain);
 	assert(swapChainCreationResult == VK_SUCCESS);
 	if (swapChainCreationResult != VK_SUCCESS)
@@ -1014,7 +1015,7 @@ bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context)
 		if(!createImageView(context, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, depthImageView))
 			continue;
 
-		if (!transitionImageLayout(appDesc, context, depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
+		if (!transitionImageLayout(appDesc, context, depthImage, depthFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
 			continue;
 
 		context._depthImages[i] = depthImage;
@@ -1079,7 +1080,7 @@ bool Vulkan::createRenderPass(Context & vulkanContext, VkRenderPass * result, bo
     subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpassDescription.colorAttachmentCount = 1;
     subpassDescription.pColorAttachments = &colorAttachmentReference;
-	subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
+//	subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
 
     VkAttachmentDescription colorAttachment;
     memset(&colorAttachment, 0, sizeof(colorAttachment));
@@ -1118,7 +1119,8 @@ bool Vulkan::createRenderPass(Context & vulkanContext, VkRenderPass * result, bo
     
     VkRenderPassCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
-	VkAttachmentDescription attachmentDescriptions[] = { colorAttachment, depthAttachment };
+//    VkAttachmentDescription attachmentDescriptions[] = { colorAttachment, depthAttachment };
+    VkAttachmentDescription attachmentDescriptions[] = { colorAttachment};
     createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     createInfo.attachmentCount = sizeof(attachmentDescriptions) / sizeof(VkAttachmentDescription);
 	createInfo.pAttachments = &attachmentDescriptions[0];
@@ -1145,10 +1147,11 @@ bool Vulkan::createFrameBuffers(Context & vulkanContext)
         VkFramebufferCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
         
-		VkImageView attachments[] = { vulkanContext._colorBuffers[i], vulkanContext._depthImageViews[i] };
+//        VkImageView attachments[] = { vulkanContext._colorBuffers[i], vulkanContext._depthImageViews[i] };
+        VkImageView attachments[] = { vulkanContext._colorBuffers[i]};
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = vulkanContext._renderPass;
-        createInfo.attachmentCount = 2;
+        createInfo.attachmentCount = sizeof(attachments) / sizeof(VkImageView);
 		createInfo.pAttachments = &attachments[0];
         createInfo.width = vulkanContext._swapChainSize.width;
         createInfo.height = vulkanContext._swapChainSize.height;
@@ -1306,7 +1309,7 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS;
     depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
     depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
-    createInfo.pDepthStencilState = &depthStencilCreateInfo;
+//    createInfo.pDepthStencilState = &depthStencilCreateInfo;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachmentCreateInfo;
     memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));
@@ -1462,9 +1465,10 @@ bool Vulkan::resetCommandBuffers(Context & context, std::vector<VkCommandBuffer>
 	{
 		if (!context._fences.empty())
 		{
-			const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, std::numeric_limits<uint64_t>::max());
-			assert(waitForFencesResult == VK_SUCCESS);
-		}
+//			const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, std::numeric_limits<uint64_t>::max());
+            const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, 1);
+//            assert(waitForFencesResult == VK_SUCCESS);
+        }
 
 		VkCommandBufferResetFlags resetFlags = VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT;
 		const VkResult resetCommandBufferResult = vkResetCommandBuffer(commandBuffers[i], resetFlags);
@@ -1497,6 +1501,7 @@ std::vector<VkFence> Vulkan::createFences(Context & context)
             SDL_LogError(0, "Failed to create fences (%d)\n", i);
             return std::vector<VkFence>();
         }
+
     }
     return fences;
     
@@ -1777,6 +1782,7 @@ bool Vulkan::update(AppDescriptor & appDesc, Context & context, uint32_t current
     
     const bool updateResult = appDesc._updateFunction(timePassedS, deltaS);
 
+    
     for(EffectDescriptorPtr & effect : context._effects)
     {
         for(MeshPtr & mesh : effect->_meshes)
@@ -1786,11 +1792,11 @@ bool Vulkan::update(AppDescriptor & appDesc, Context & context, uint32_t current
             const unsigned int numUniformBufferPrFrame = numUniformBuffers / (unsigned int)context._rawImages.size();
             for(unsigned int i = 0 ; i < numUniformBufferPrFrame ; i++)
             {
-                unsigned int uniformUpdateSize = mesh->_updateUniform(i, updateData);
-                if (uniformUpdateSize != 0)
+//                unsigned int uniformUpdateSize = mesh->_updateUniform(i, updateData);
+//                if (uniformUpdateSize != 0)
                 {
                     const unsigned int bufferIndex = (currentImage * numUniformBufferPrFrame) + i;
-                    mesh->_uniformBuffers[bufferIndex].fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
+  //                  mesh->_uniformBuffers[bufferIndex].fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
                 }
             }
         }
@@ -1965,11 +1971,13 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         return false;
     }
 
+    /*
 	if (!createDepthBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");
 		return false;
 	}
+    */
 
 	if (!createFrameBuffers(context))
 	{
@@ -2019,11 +2027,12 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
         return false;
     }
     
+    /*
 	if (!createDepthBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");
 		return false;
-	}
+	}*/
 
 	if (!createFrameBuffers(context))
 	{
@@ -2044,6 +2053,7 @@ bool Vulkan::recreateSwapChain(AppDescriptor & appDesc, Context & context)
 	if (!createSwapChainDependents(appDesc, context))
 		return false;
 
+    context._currentFrame = 0;
 	return true;
 }
 
@@ -2057,7 +2067,7 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 		{
 			const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, std::numeric_limits<uint64_t>::max());
 			assert(waitForFencesResult == VK_SUCCESS);
-		}
+        }
 	}
 
 	for (auto depthImageView : context._depthImageViews)

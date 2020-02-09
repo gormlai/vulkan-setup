@@ -1703,7 +1703,7 @@ bool Vulkan::createDescriptorSet(AppDescriptor & appDesc, Context & context, Eff
 	allocInfo.descriptorSetCount = numUniforms;
 	allocInfo.pSetLayouts = &effect._descriptorSetLayouts[0];
 
-    mesh._descriptorSets.resize(numUniforms);
+    mesh._descriptorSets.resize(allocInfo.descriptorSetCount);
 	VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &mesh._descriptorSets[0]);
 	assert(allocationResult == VK_SUCCESS);
 	if (allocationResult != VK_SUCCESS)
@@ -1725,7 +1725,7 @@ bool Vulkan::createDescriptorSet(AppDescriptor & appDesc, Context & context, Eff
             VkWriteDescriptorSet descriptorWrite = {};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = mesh._descriptorSets[uniformIndex];
-            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstBinding = uniformIndex;
             descriptorWrite.dstArrayElement = 0;
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             descriptorWrite.descriptorCount = 1;
@@ -1792,11 +1792,11 @@ bool Vulkan::update(AppDescriptor & appDesc, Context & context, uint32_t current
             const unsigned int numUniformBufferPrFrame = numUniformBuffers / (unsigned int)context._rawImages.size();
             for(unsigned int i = 0 ; i < numUniformBufferPrFrame ; i++)
             {
-//                unsigned int uniformUpdateSize = mesh->_updateUniform(i, updateData);
-//                if (uniformUpdateSize != 0)
+                unsigned int uniformUpdateSize = mesh->_updateUniform(i, updateData);
+                if (uniformUpdateSize != 0)
                 {
                     const unsigned int bufferIndex = (currentImage * numUniformBufferPrFrame) + i;
-  //                  mesh->_uniformBuffers[bufferIndex].fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
+                    mesh->_uniformBuffers[bufferIndex].fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
                 }
             }
         }

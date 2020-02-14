@@ -149,8 +149,6 @@ namespace Vulkan
         typedef std::function <bool(float, float)> UpdateFunction; // returns true, if the code should continue. Return false, to request termination
         UpdateFunction _updateFunction = [](float, float) { return true; };
 
-		typedef std::function<void(glm::vec3 &, glm::vec3 &, glm::vec3 &)> CameraUpdateFunction;
-		CameraUpdateFunction _cameraUpdateFunction = [](glm::vec3 & pos, glm::vec3 & lookat, glm::vec3 & up) { pos = glm::vec3{ 0,0,0}; lookat = glm::vec3{ 0,0,-1 }; up = glm::vec3{ 0,1,0 }; };
         
         typedef std::function<glm::mat4 (const void*, float, float)> UpdateModelMatrix;
         UpdateModelMatrix _updateModelMatrix = [](const void*, float, float) { return glm::mat4(); };

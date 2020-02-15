@@ -144,8 +144,6 @@ namespace Vulkan
         std::vector<VkExtensionProperties> _deviceExtensions;
         std::vector<VkSurfaceFormatKHR> _surfaceFormats;
         
-		std::function<glm::vec4 (void)> _backgroundClearColor = []() { return glm::vec4{ 0,0,0,1 }; };
-        
         AppDescriptor();
     };
     

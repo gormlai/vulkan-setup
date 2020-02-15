@@ -1771,15 +1771,7 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, unsigned
 */
 
 void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t currentImage)
-{
-    static uint32_t firstTime = SDL_GetTicks();
-    static uint32_t lastTime = firstTime;
-    const uint32_t currentTime = SDL_GetTicks();
-    const uint32_t deltaMs = currentTime - lastTime;
-    const uint32_t timePassedMs = currentTime - firstTime;
-    const float deltaS = float(deltaMs) / 1000.0f;
-    const float timePassedS = float(timePassedMs) / 1000.0f;
-    
+{    
     for(EffectDescriptorPtr & effect : context._effects)
     {
         for(MeshPtr & mesh : effect->_meshes)

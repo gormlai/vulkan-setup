@@ -161,7 +161,18 @@ namespace Vulkan
         }
         
         bool fill(VkDevice device, const void * srcData, VkDeviceSize amount);
-        bool copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, BufferDescriptor & src, VkDeviceSize amount);
+        bool copyFrom(VkDevice device,
+                      VkCommandPool commandPool,
+                      VkQueue queue,
+                      BufferDescriptor & src,
+                      VkDeviceSize amount);
+
+        bool copyTo(VkDevice device,
+                    VkCommandPool commandPool,
+                    VkQueue queue,
+                    VkImage image,
+                    unsigned int width,
+                    unsigned int height);
     };
     
     struct Mesh;
@@ -293,6 +304,22 @@ namespace Vulkan
     bool resetCommandBuffers(Context& context, std::vector<VkCommandBuffer>& commandBuffers);
     bool createShaderModules(AppDescriptor& appDesc, Context& context, std::vector<Shader>& shaders);
     bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc);
+
+    bool createImage(Vulkan::Context & context,
+                 unsigned int width,
+                 unsigned int height,
+                 unsigned int depth,
+                 VkFormat requiredFormat,
+                 VkImageTiling requiredTiling,
+                 VkImageUsageFlags requiredUsage,
+                     VkImage& resultImage);
+
+    bool transitionImageLayout(Vulkan::Context & context,
+                               VkImage image,
+                               VkFormat format,
+                               VkImageLayout oldLayout,
+                               VkImageLayout newLayout);
 
 }
 

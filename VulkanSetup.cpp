@@ -1770,7 +1770,7 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, unsigned
 }
 */
 
-bool Vulkan::update(AppDescriptor & appDesc, Context & context, uint32_t currentImage)
+void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t currentImage)
 {
     static uint32_t firstTime = SDL_GetTicks();
     static uint32_t lastTime = firstTime;
@@ -1779,9 +1779,6 @@ bool Vulkan::update(AppDescriptor & appDesc, Context & context, uint32_t current
     const uint32_t timePassedMs = currentTime - firstTime;
     const float deltaS = float(deltaMs) / 1000.0f;
     const float timePassedS = float(timePassedMs) / 1000.0f;
-    
-    const bool updateResult = appDesc._updateFunction(timePassedS, deltaS);
-
     
     for(EffectDescriptorPtr & effect : context._effects)
     {
@@ -1803,7 +1800,6 @@ bool Vulkan::update(AppDescriptor & appDesc, Context & context, uint32_t current
         effect->_recordCommandBuffers(appDesc, context, *effect);
     }
     
-    return updateResult;
 }
 
 void Vulkan::destroyMesh(Context & context, Mesh& mesh)

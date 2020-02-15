@@ -145,13 +145,6 @@ namespace Vulkan
         std::vector<VkSurfaceFormatKHR> _surfaceFormats;
         
 		std::function<glm::vec4 (void)> _backgroundClearColor = []() { return glm::vec4{ 0,0,0,1 }; };
-
-        typedef std::function <bool(float, float)> UpdateFunction; // returns true, if the code should continue. Return false, to request termination
-        UpdateFunction _updateFunction = [](float, float) { return true; };
-
-        
-        typedef std::function<glm::mat4 (const void*, float, float)> UpdateModelMatrix;
-        UpdateModelMatrix _updateModelMatrix = [](const void*, float, float) { return glm::mat4(); };
         
         AppDescriptor();
     };
@@ -296,7 +289,7 @@ namespace Vulkan
 
     bool handleVulkanSetup(AppDescriptor& appDesc, Context& context);
     bool recreateSwapChain(AppDescriptor& appDesc, Context& context);
-    bool update(AppDescriptor& appDesc, Context& context, uint32_t currentImage);
+    void updateUniforms(AppDescriptor& appDesc, Context& context, uint32_t currentImage);
 
     bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback , Vulkan::EffectDescriptor & effect);
     bool resetCommandBuffers(Context& context, std::vector<VkCommandBuffer>& commandBuffers);

@@ -318,7 +318,7 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
     region.imageOffset = VkOffset3D{0, 0, 0};
-    region.imageExtent = VkExtent3D{width, height, 1};
+    region.imageExtent = VkExtent3D{width, height, 0};
 
     vkCmdCopyBufferToImage(commandBuffer, _buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 

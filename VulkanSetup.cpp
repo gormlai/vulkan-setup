@@ -39,7 +39,8 @@ namespace Vulkan
     bool createVertexOrIndexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferDescriptor& result, BufferType type);
     bool createIndexAndVertexBuffer(AppDescriptor& appDesc, Context& context, std::vector<unsigned char>& vertexData, std::vector<unsigned char>& indexData, void* userData, Vulkan::Mesh& result);
     bool createUniformBuffer(AppDescriptor& appDesc, Context& context, VkDeviceSize bufferSize, BufferDescriptor& result);
-    bool createDescriptorPool(Context& context, VkDescriptorPool& pool, unsigned int descriptorCount);
+    bool createDescriptorPool(Context& context, VkDescriptorPool& pool, unsigned int descriptorCount, VkDescriptorType poolType);
+    bool createDescriptorSet(AppDescriptor& appDesc, Context& context, EffectDescriptor& effect);
     bool createDescriptorSet(AppDescriptor& appDesc, Context& context, EffectDescriptor & effect, Mesh & mesh);
 
     void updateUniforms(AppDescriptor& appDesc, Context& context, unsigned int bufferIndex, uint32_t meshIndex);
@@ -178,7 +179,25 @@ Vulkan::Context::Context()
 
 }
 
+///////////////////////////////////// Vulkan Effect Descriptor ///////////////////////////////////////////////////////////////////
+
+bool Vulkan::EffectDescriptor::bindImageViewsAndSamples(Vulkan::Context & context, std::vector<VkImageView>& imageViews, std::vector<VkSampler>& samplers)
+{
+    assert(imageViews.size == samplers.size());
+    if (imageViews.size() != samplers.size())
+        return false;
+
+    assert(imageViews.size() == _descriptorSets.size());
+    if (imageViews.size != imageViews.size())
+        return false;
+
+
+
+    return true;
+}
+
 ///////////////////////////////////// Vulkan Shader ///////////////////////////////////////////////////////////////////
+
 
 Vulkan::Shader::Shader(const std::string & filename, VkShaderStageFlagBits  type)
 :_filename(filename)
@@ -1411,7 +1430,8 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
     memset(&pipelineLayoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateInfo));
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)effect._descriptorSetLayouts.size();
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+//    pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)effect._descriptorSetLayouts.size();
     pipelineLayoutCreateInfo.pSetLayouts = &effect._descriptorSetLayouts[0];
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
@@ -1500,9 +1520,32 @@ bool Vulkan::createDescriptorSetLayout(Context & context, Vulkan::EffectDescript
         layouts.push_back(descriptorSetLayoutBinding);
     }
 
+    for (size_t i = effect._uniformBufferSizes.size(); i < effect._uniformBufferSizes.size() + effect._numVertexStageImages; i++)
+    {
+        VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
+        descriptorSetLayoutBinding.binding = (uint32_t)i;
+        descriptorSetLayoutBinding.descriptorCount = 1;
+        descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+        descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        layouts.push_back(descriptorSetLayoutBinding);
+    }
+
+    for (size_t i = effect._uniformBufferSizes.size() + effect._numVertexStageImages; i < effect._uniformBufferSizes.size() + effect._numVertexStageImages + effect._numFragmentStageImages; i++)
+    {
+        VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
+        descriptorSetLayoutBinding.binding = (uint32_t)i;
+        descriptorSetLayoutBinding.descriptorCount = 1;
+        descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+        descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        layouts.push_back(descriptorSetLayoutBinding);
+    }
+
+
     VkDescriptorSetLayoutCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    createInfo.bindingCount = 1;
+    createInfo.bindingCount = (uint32_t)layouts.size();
     createInfo.pBindings = &layouts[0];
     
     effect._descriptorSetLayouts.resize(layouts.size());
@@ -1744,10 +1787,10 @@ bool Vulkan::createUniformBuffer(AppDescriptor & appDesc, Context & context, VkD
     return true;
 }
 
-bool Vulkan::createDescriptorPool(Context & context,  VkDescriptorPool & pool, unsigned int descriptorCount)
+bool Vulkan::createDescriptorPool(Context & context,  VkDescriptorPool & pool, unsigned int descriptorCount, VkDescriptorType poolType)
 {
 	VkDescriptorPoolSize poolSize = {};
-	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSize.type = poolType;
 	poolSize.descriptorCount = descriptorCount;
 
 	VkDescriptorPoolCreateInfo poolInfo = {};
@@ -1764,6 +1807,26 @@ bool Vulkan::createDescriptorPool(Context & context,  VkDescriptorPool & pool, u
 	return true;
 }
 
+bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, EffectDescriptor& effect)
+{
+    const uint32_t framesCount = (uint32_t)context._rawImages.size();
+    const uint32_t numUniforms = (uint32_t)effect._uniformBufferSizes.size();
+
+    VkDescriptorSetAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = effect._descriptorPool;
+    allocInfo.descriptorSetCount = effect._numFragmentStageImages + effect._numVertexStageImages;
+    allocInfo.pSetLayouts = &effect._descriptorSetLayouts[0];
+
+    effect._descriptorSets.resize(allocInfo.descriptorSetCount);
+    VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &effect._descriptorSets[0]);
+    assert(allocationResult == VK_SUCCESS);
+    if (allocationResult != VK_SUCCESS)
+        return false;
+
+
+    return true;
+}
 
 bool Vulkan::createDescriptorSet(AppDescriptor & appDesc, Context & context, EffectDescriptor & effect, Mesh & mesh)
 {
@@ -1926,7 +1989,7 @@ bool Vulkan::addMesh(AppDescriptor & appDesc,
         }
     }
 
-    if (!createDescriptorPool(context, mesh._descriptorPool, (unsigned int)mesh._uniformBuffers.size()))
+    if (!createDescriptorPool(context, mesh._descriptorPool, (unsigned int)mesh._uniformBuffers.size(), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER))
     {
         SDL_LogError(0, "Failed to create descriptor pool\n");
         return false;
@@ -2184,6 +2247,18 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Grap
     if (!createDescriptorSetLayout(context, effect))
     {
         SDL_LogError(0, "Failed to create descriptor set layouts!");
+        return false;
+    }
+
+    if (!createDescriptorPool(context, effect._descriptorPool, (unsigned int)(effect._numFragmentStageImages + effect._numVertexStageImages), VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER))
+    {
+        SDL_LogError(0, "Failed to create descriptor pool\n");
+        return false;
+    }
+
+    if (!createDescriptorSet(appDesc, context, effect))
+    {
+        SDL_LogError(0, "Failed to create descriptor set\n");
         return false;
     }
 

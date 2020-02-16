@@ -224,9 +224,21 @@ namespace Vulkan
         std::vector<VkCommandBuffer> _commandBuffers;
         std::vector<MeshPtr> _meshes;
         std::vector<VkDescriptorSetLayout> _descriptorSetLayouts;
+        std::vector<VkDescriptorSet> _descriptorSets;
         std::vector<uint32_t> _uniformBufferSizes;
+        uint32_t _numVertexStageImages;
+        uint32_t _numFragmentStageImages;
+        VkDescriptorPool _descriptorPool; // for image samplers
 
         RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true; };
+
+        EffectDescriptor()
+            :_numVertexStageImages(0)
+            ,_numFragmentStageImages(0)
+        {
+        }
+
+        bool bindImageViewsAndSamples(Vulkan::Context& context, std::vector<VkImageView>& imageViews, std::vector<VkSampler>& samplers);
     };
     typedef std::shared_ptr<EffectDescriptor> EffectDescriptorPtr;
 

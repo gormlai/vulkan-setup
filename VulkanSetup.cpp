@@ -318,7 +318,7 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
     region.imageOffset = VkOffset3D{0, 0, 0};
-    region.imageExtent = VkExtent3D{width, height, 0};
+    region.imageExtent = VkExtent3D{width, height, 1};
 
     vkCmdCopyBufferToImage(commandBuffer, _buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
@@ -389,7 +389,7 @@ namespace
 	}
 }
 
-
+// TODO - this method leaks device memory
 bool Vulkan::createImage(Vulkan::Context & context,
                  unsigned int width,
                  unsigned int height,
@@ -422,6 +422,21 @@ bool Vulkan::createImage(Vulkan::Context & context,
     const VkResult result = vkCreateImage(context._device, &createInfo, VK_NULL_HANDLE, &resultImage);
     if (result != VK_SUCCESS)
         return false;
+
+    VkMemoryRequirements imageMemoryRequirements;
+    vkGetImageMemoryRequirements(context._device, resultImage, &imageMemoryRequirements);
+
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = imageMemoryRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(context, imageMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    VkDeviceMemory imageMemory;
+    if (vkAllocateMemory(context._device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate image memory!");
+    }
+
+    vkBindImageMemory(context._device, resultImage, imageMemory, 0);
 
     return true;
 }

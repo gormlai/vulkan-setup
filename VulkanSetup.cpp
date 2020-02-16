@@ -58,133 +58,108 @@ namespace
 {
 
 
-	bool createCommandBuffers(Vulkan::Context & context, VkCommandPool commandPool, unsigned int numBuffers, std::vector<VkCommandBuffer> * result)
-	{
-		std::vector<VkCommandBuffer> commandBuffers(numBuffers);
+    bool createCommandBuffers(Vulkan::Context& context, VkCommandPool commandPool, unsigned int numBuffers, std::vector<VkCommandBuffer>* result)
+    {
+        std::vector<VkCommandBuffer> commandBuffers(numBuffers);
 
-		VkCommandBufferAllocateInfo commandBufferAllocateInfo;
-		memset(&commandBufferAllocateInfo, 0, sizeof(VkCommandBufferAllocateInfo));
-		commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		commandBufferAllocateInfo.commandPool = commandPool;
-		commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		commandBufferAllocateInfo.commandBufferCount = (unsigned int)commandBuffers.size();
-		const VkResult allocateCommandBuffersResult = vkAllocateCommandBuffers(context._device, &commandBufferAllocateInfo, &commandBuffers[0]);
-		assert(allocateCommandBuffersResult == VK_SUCCESS);
-		if (allocateCommandBuffersResult != VK_SUCCESS)
-		{
-			SDL_LogError(0, "Failed to create VkCommandbufferAllocateInfo\n");
-			return false;
-		}
+        VkCommandBufferAllocateInfo commandBufferAllocateInfo;
+        memset(&commandBufferAllocateInfo, 0, sizeof(VkCommandBufferAllocateInfo));
+        commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        commandBufferAllocateInfo.commandPool = commandPool;
+        commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        commandBufferAllocateInfo.commandBufferCount = (unsigned int)commandBuffers.size();
+        const VkResult allocateCommandBuffersResult = vkAllocateCommandBuffers(context._device, &commandBufferAllocateInfo, &commandBuffers[0]);
+        assert(allocateCommandBuffersResult == VK_SUCCESS);
+        if (allocateCommandBuffersResult != VK_SUCCESS)
+        {
+            SDL_LogError(0, "Failed to create VkCommandbufferAllocateInfo\n");
+            return false;
+        }
 
-		*result = commandBuffers;
+        *result = commandBuffers;
 
-		return true;
-	}
-
-
-	int findMemoryType(Vulkan::Context & context, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
-
-		VkPhysicalDeviceMemoryProperties memProperties;
-		vkGetPhysicalDeviceMemoryProperties(context._physicalDevice, &memProperties);
-
-		for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
-		{
-			if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-				return i;
-		}
-
-		return -1;
-	}
-
-	bool findMatchingFormat(Vulkan::Context & context, const std::vector<VkFormat> & requiredFormats, VkImageTiling requiredTiling, VkFormatFeatureFlags requiredFeatures, VkFormat & result)
-	{
-		std::vector<VkFormat> matches;
-		matches.reserve(requiredFormats.size());
-		for (VkFormat format : requiredFormats)
-		{
-			VkFormatProperties props;
-			vkGetPhysicalDeviceFormatProperties(context._physicalDevice, format, &props);
-			switch (requiredTiling)
-			{
-			case VK_IMAGE_TILING_LINEAR:
-				if (props.linearTilingFeatures & requiredFeatures)
-					matches.push_back(format);
-				break;
-			case VK_IMAGE_TILING_OPTIMAL:
-				if (props.optimalTilingFeatures & requiredFeatures)
-					matches.push_back(format);
-				break;
-			default:
-				break; // do nothing
-			}
-
-		}
-
-		if (matches.empty())
-			return false;
-
-		// for now just take the first match
-		result = matches[0];
-		return true;
-	}
-
-	VkFormat findDepthFormat(Vulkan::Context & context, VkImageTiling requiredTiling)
-	{
-		VkFormat requiredFormat;
-		findMatchingFormat(
-			context,
-			{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
-			requiredTiling,
-			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, requiredFormat);
-
-		return requiredFormat;
-	};
+        return true;
+    }
 
 
-	bool createImageView(Vulkan::Context & context, VkImage image, VkFormat requiredFormat, VkImageAspectFlags requiredAspectFlags, VkImageView & result)
-	{
-		VkImageViewCreateInfo createInfo;
-		memset(&createInfo, 0, sizeof(createInfo));
-		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		createInfo.pNext = NULL;
-		createInfo.flags = 0;
-		createInfo.image = image;
-		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		createInfo.format = requiredFormat;
-		createInfo.components = VkComponentMapping{ VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
-		createInfo.subresourceRange.aspectMask = requiredAspectFlags;
-		createInfo.subresourceRange.baseMipLevel = 0;
-		createInfo.subresourceRange.levelCount = 1;
-		createInfo.subresourceRange.baseArrayLayer = 0;
-		createInfo.subresourceRange.layerCount = 1;
+    int findMemoryType(Vulkan::Context& context, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
 
-		const VkResult imageViewCreationResult = vkCreateImageView(context._device, &createInfo, VK_NULL_HANDLE, &result);
-		if (imageViewCreationResult != VK_SUCCESS)
-			return false;
+        VkPhysicalDeviceMemoryProperties memProperties;
+        vkGetPhysicalDeviceMemoryProperties(context._physicalDevice, &memProperties);
 
-		return true;
-	}
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+        {
+            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+                return i;
+        }
 
-	bool allocateImageMemory(Vulkan::Context & context,
-		VkMemoryPropertyFlags requiredProperties,
-		VkImage image,
-		VkDeviceMemory & result)
-	{
-		VkMemoryRequirements memRequirements;
-		vkGetImageMemoryRequirements(context._device, image, &memRequirements);
+        return -1;
+    }
 
-		VkMemoryAllocateInfo allocInfo = {};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = findMemoryType(context, memRequirements.memoryTypeBits, requiredProperties);
+    bool findMatchingFormat(Vulkan::Context& context, const std::vector<VkFormat>& requiredFormats, VkImageTiling requiredTiling, VkFormatFeatureFlags requiredFeatures, VkFormat& result)
+    {
+        std::vector<VkFormat> matches;
+        matches.reserve(requiredFormats.size());
+        for (VkFormat format : requiredFormats)
+        {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(context._physicalDevice, format, &props);
+            switch (requiredTiling)
+            {
+            case VK_IMAGE_TILING_LINEAR:
+                if (props.linearTilingFeatures & requiredFeatures)
+                    matches.push_back(format);
+                break;
+            case VK_IMAGE_TILING_OPTIMAL:
+                if (props.optimalTilingFeatures & requiredFeatures)
+                    matches.push_back(format);
+                break;
+            default:
+                break; // do nothing
+            }
 
-		const VkResult allocationMemoryResult = vkAllocateMemory(context._device, &allocInfo, VK_NULL_HANDLE, &result);
-		if (allocationMemoryResult != VK_SUCCESS)
-			return false;
-	
-		vkBindImageMemory(context._device, image, result, 0);
-		return true;
-	}
+        }
+
+        if (matches.empty())
+            return false;
+
+        // for now just take the first match
+        result = matches[0];
+        return true;
+    }
+
+    VkFormat findDepthFormat(Vulkan::Context& context, VkImageTiling requiredTiling)
+    {
+        VkFormat requiredFormat;
+        findMatchingFormat(
+            context,
+            { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+            requiredTiling,
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT, requiredFormat);
+
+        return requiredFormat;
+    };
+
+    bool allocateImageMemory(Vulkan::Context& context,
+        VkMemoryPropertyFlags requiredProperties,
+        VkImage image,
+        VkDeviceMemory& result)
+    {
+        VkMemoryRequirements memRequirements;
+        vkGetImageMemoryRequirements(context._device, image, &memRequirements);
+
+        VkMemoryAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = findMemoryType(context, memRequirements.memoryTypeBits, requiredProperties);
+
+        const VkResult allocationMemoryResult = vkAllocateMemory(context._device, &allocInfo, VK_NULL_HANDLE, &result);
+        if (allocationMemoryResult != VK_SUCCESS)
+            return false;
+
+        vkBindImageMemory(context._device, image, result, 0);
+        return true;
+    }
 
 
 }
@@ -440,6 +415,33 @@ bool Vulkan::createImage(Vulkan::Context & context,
 
     return true;
 }
+
+bool Vulkan::createImageView(Vulkan::Context& context, VkImage image, VkFormat requiredFormat, VkImageAspectFlags requiredAspectFlags, VkImageView& result)
+{
+    VkImageViewCreateInfo createInfo;
+    memset(&createInfo, 0, sizeof(createInfo));
+    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    createInfo.pNext = NULL;
+    createInfo.flags = 0;
+    createInfo.image = image;
+    createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    createInfo.format = requiredFormat;
+    createInfo.components = VkComponentMapping{ VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
+    createInfo.subresourceRange.aspectMask = requiredAspectFlags;
+    createInfo.subresourceRange.baseMipLevel = 0;
+    createInfo.subresourceRange.levelCount = 1;
+    createInfo.subresourceRange.baseArrayLayer = 0;
+    createInfo.subresourceRange.layerCount = 1;
+
+    const VkResult imageViewCreationResult = vkCreateImageView(context._device, &createInfo, VK_NULL_HANDLE, &result);
+    if (imageViewCreationResult != VK_SUCCESS)
+        return false;
+
+    return true;
+}
+
+
+
 
 bool Vulkan::transitionImageLayout(Vulkan::Context & context, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
 {

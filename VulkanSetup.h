@@ -315,6 +315,13 @@ namespace Vulkan
                  VkImageUsageFlags requiredUsage,
                      VkImage& resultImage);
 
+    bool createImageView(Vulkan::Context& context,
+        VkImage image,
+        VkFormat requiredFormat,
+        VkImageAspectFlags requiredAspectFlags,
+        VkImageView& result);
+
+
     bool transitionImageLayout(Vulkan::Context & context,
                                VkImage image,
                                VkFormat format,

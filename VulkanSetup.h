@@ -238,7 +238,7 @@ namespace Vulkan
         {
         }
 
-        bool bindImageViewsAndSamples(Vulkan::Context& context, std::vector<VkImageView>& imageViews, std::vector<VkSampler>& samplers);
+        bool bindImageViewsAndSamplers(Vulkan::Context& context, std::vector<VkImageView> imageViews, std::vector<VkSampler> samplers);
     };
     typedef std::shared_ptr<EffectDescriptor> EffectDescriptorPtr;
 

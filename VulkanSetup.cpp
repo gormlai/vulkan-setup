@@ -181,17 +181,42 @@ Vulkan::Context::Context()
 
 ///////////////////////////////////// Vulkan Effect Descriptor ///////////////////////////////////////////////////////////////////
 
-bool Vulkan::EffectDescriptor::bindImageViewsAndSamples(Vulkan::Context & context, std::vector<VkImageView>& imageViews, std::vector<VkSampler>& samplers)
+bool Vulkan::EffectDescriptor::bindImageViewsAndSamplers(Vulkan::Context & context, std::vector<VkImageView> imageViews, std::vector<VkSampler> samplers)
 {
-    assert(imageViews.size == samplers.size());
+    assert(imageViews.size() == samplers.size());
     if (imageViews.size() != samplers.size())
         return false;
 
     assert(imageViews.size() == _descriptorSets.size());
-    if (imageViews.size != imageViews.size())
+    if (imageViews.size() != imageViews.size())
         return false;
 
+    std::vector<VkWriteDescriptorSet> writes(_descriptorSets.size());
+    std::vector<VkDescriptorImageInfo> imageInfos(_descriptorSets.size());
 
+    for (size_t i = 0; i < _descriptorSets.size(); i++)
+    {
+        VkDescriptorImageInfo& imageInfo = imageInfos[i];
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = imageViews[i];
+        imageInfo.sampler = samplers[i];
+
+        VkWriteDescriptorSet writeSet = { };
+        writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeSet.descriptorCount = 1;
+        writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeSet.dstArrayElement = 0;
+        writeSet.dstBinding = static_cast<uint32_t>(i);
+        writeSet.dstSet = _descriptorSets[i];
+        writeSet.pBufferInfo = VK_NULL_HANDLE;
+        writeSet.pImageInfo = &imageInfo;
+        writeSet.pNext = VK_NULL_HANDLE;
+        writeSet.pTexelBufferView = VK_NULL_HANDLE;
+
+        writes[i] = writeSet;
+    }
+
+    vkUpdateDescriptorSets(context._device, static_cast<uint32_t>(_descriptorSets.size()), &writes[0], 0, nullptr);
 
     return true;
 }

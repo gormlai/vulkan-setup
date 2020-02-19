@@ -182,10 +182,6 @@ namespace Vulkan
 	{
 		BufferDescriptor _vertexBuffer;
 		BufferDescriptor _indexBuffer;
-        std::vector<BufferDescriptor> _uniformBuffers;
-        VkDescriptorPool _descriptorPool;
-        std::vector<VkDescriptorSet> _descriptorSets;
-        UpdateUniformFunction _updateUniform = [](unsigned int uniformIndex, std::vector<unsigned char> &) { return 0; };
 
 		unsigned int _numIndices;
         void * _userData;
@@ -223,12 +219,17 @@ namespace Vulkan
         std::vector<Shader> _shaderModules;
         std::vector<VkCommandBuffer> _commandBuffers;
         std::vector<MeshPtr> _meshes;
-        std::vector<VkDescriptorSetLayout> _descriptorSetLayouts;
+
+        VkDescriptorSetLayout _descriptorSetLayout;
         std::vector<VkDescriptorSet> _descriptorSets;
+
+        VkDescriptorPool _descriptorPool; // for image samplers
+
+        UpdateUniformFunction _updateUniform = [](unsigned int uniformIndex, std::vector<unsigned char>&) { return 0; };
+        std::vector<BufferDescriptor> _uniformBuffers;
         std::vector<uint32_t> _uniformBufferSizes;
         uint32_t _numVertexStageImages;
         uint32_t _numFragmentStageImages;
-        VkDescriptorPool _descriptorPool; // for image samplers
 
         RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true; };
 
@@ -339,6 +340,8 @@ namespace Vulkan
                                VkFormat format,
                                VkImageLayout oldLayout,
                                VkImageLayout newLayout);
+
+    bool createUniformBuffer(AppDescriptor& appDesc, Context& context, VkDeviceSize bufferSize, BufferDescriptor& result);
 
 }
 

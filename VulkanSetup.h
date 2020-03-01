@@ -140,8 +140,15 @@ namespace Vulkan
         std::vector<VkVertexInputAttributeDescription> & _vertexInputAttributeDescriptions;
 
     };
+
+    struct VkComputePipelineCreateInfoDescriptor
+    {
+    };
+
         
     typedef std::function<void(VkGraphicsPipelineCreateInfoDescriptor &)> GraphicsPipelineCustomizationCallback;
+    typedef std::function<void(VkComputePipelineCreateInfoDescriptor&)> ComputePipelineCustomizationCallback;
+
     struct AppDescriptor
     {
         std::string _appName;
@@ -239,6 +246,7 @@ namespace Vulkan
         uint32_t _shaderStageImageCount[(int)(Vulkan::ShaderStage::ShaderStageCount)];
 
         RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true; };
+        std::string _name;
 
         EffectDescriptor()
         {
@@ -323,10 +331,11 @@ namespace Vulkan
     bool recreateSwapChain(AppDescriptor& appDesc, Context& context);
     void updateUniforms(AppDescriptor& appDesc, Context& context, uint32_t currentImage);
 
-    bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback , Vulkan::EffectDescriptor & effect);
     bool resetCommandBuffers(Context& context, std::vector<VkCommandBuffer>& commandBuffers);
     bool createShaderModules(AppDescriptor& appDesc, Context& context, std::vector<Shader>& shaders);
     bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+
     bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc);
 
     bool createImage(Vulkan::Context & context,
@@ -352,6 +361,8 @@ namespace Vulkan
                                VkImageLayout newLayout);
 
     bool createUniformBuffer(AppDescriptor& appDesc, Context& context, VkDeviceSize bufferSize, BufferDescriptor& result);
+
+
 
 }
 

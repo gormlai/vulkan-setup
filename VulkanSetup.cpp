@@ -44,6 +44,11 @@ namespace Vulkan
     void updateUniforms(AppDescriptor& appDesc, Context& context, unsigned int bufferIndex, uint32_t meshIndex);
     bool createSwapChainDependents(AppDescriptor& appDesc, Context& context);
     bool cleanupSwapChain(AppDescriptor& appDesc, Context& context);
+    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulkan::EffectDescriptor& effect);
+
+    bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+    bool createComputePipeline(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+
 }
 
 ///////////////////////////////////// Vulkan Variable ///////////////////////////////////////////////////////////////////
@@ -1380,6 +1385,66 @@ bool Vulkan::createPipelineCache(AppDescriptor & appDesc, Context & context)
 		return true;
 }
 
+bool Vulkan::createComputePipeline(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect)
+{
+    VkComputePipelineCreateInfo createInfo;
+    memset(&createInfo, 0, sizeof(VkComputePipelineCreateInfo));
+
+    const std::vector<Shader>& shaderModules = effect._shaderModules;
+
+    std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+
+    for (unsigned int i = 0; i < (unsigned int)shaderModules.size(); i++)
+    {
+        VkPipelineShaderStageCreateInfo shaderCreateInfo;
+        memset(&shaderCreateInfo, 0, sizeof(VkPipelineShaderStageCreateInfo));
+
+        shaderCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderCreateInfo.stage = shaderModules[i]._type;
+        shaderCreateInfo.module = shaderModules[i]._shaderModule;
+        shaderCreateInfo.pName = "main";
+
+        shaderStages.push_back(shaderCreateInfo);
+    }
+
+
+    createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    createInfo.pNext = VK_NULL_HANDLE;
+    createInfo.flags = 0;
+    createInfo.stage = shaderStages[0];
+
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
+    memset(&pipelineLayoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateInfo));
+    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    //    pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)effect._descriptorSetLayouts.size();
+    pipelineLayoutCreateInfo.pSetLayouts = &effect._descriptorSetLayout;
+    pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+    pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+
+    VkResult createPipelineLayoutResult = vkCreatePipelineLayout(context._device, &pipelineLayoutCreateInfo, nullptr, &effect._pipelineLayout);
+    assert(createPipelineLayoutResult == VK_SUCCESS);
+    if (createPipelineLayoutResult != VK_SUCCESS)
+    {
+        SDL_LogError(0, "Failed to create pipeline layout\n");
+        return false;
+    }
+    createInfo.layout = effect._pipelineLayout;
+    createInfo.basePipelineHandle = effect._pipeline;
+    createInfo.basePipelineIndex = 0;
+
+    const VkResult createComputePipelineResult = vkCreateComputePipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, VK_NULL_HANDLE, &effect._pipeline);
+    assert(createComputePipelineResult == VK_SUCCESS);
+    if (createComputePipelineResult != VK_SUCCESS)
+    {
+        SDL_LogError(0, "Failed to create vulkan compute pipeline\n");
+        return false;
+    }
+
+    return true;
+
+}
+
 bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor & effect)
 {
     VkGraphicsPipelineCreateInfo createInfo;
@@ -1615,8 +1680,8 @@ bool Vulkan::createDescriptorSetLayout(Context & context, Vulkan::EffectDescript
 
     VkDescriptorSetLayoutCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    createInfo.bindingCount = 2;
-    createInfo.pBindings = &layouts[0];
+    createInfo.bindingCount = count;
+    createInfo.pBindings = count == 0 ? nullptr : &layouts[0];
     
     VkResult creationResult = vkCreateDescriptorSetLayout(context._device, &createInfo, nullptr, &effect._descriptorSetLayout);
 	assert(creationResult == VK_SUCCESS);
@@ -1859,15 +1924,25 @@ bool Vulkan::createUniformBuffer(AppDescriptor & appDesc, Context & context, VkD
 bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
 {
 	VkDescriptorPoolSize poolSizes[2] = {};
-	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSizes[0].descriptorCount = static_cast<uint32_t>(effect.totalNumUniformBuffers() * context._rawImages.size());
+    int poolIndex = 0;
+    if (effect.totalNumUniformBuffers() > 0)
+    {
+        poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalNumUniformBuffers() * context._rawImages.size());
+        poolIndex++;
+    }
 
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(effect.totalImageCount() * context._rawImages.size());
+    if (effect.totalImageCount() > 0)
+    {
+        poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalImageCount() * context._rawImages.size());
+        poolIndex++;
+    }
+
 
 	VkDescriptorPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 2;
+	poolInfo.poolSizeCount = poolIndex;
 	poolInfo.pPoolSizes = &poolSizes[0];
     poolInfo.maxSets = static_cast<uint32_t>(context._rawImages.size());
 
@@ -2277,7 +2352,7 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 	return true;
 }
 
-bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect)
+bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulkan::EffectDescriptor& effect)
 {
     // create uniform buffers
     for (unsigned int i = 0; i < context._rawImages.size(); i++)
@@ -2333,6 +2408,34 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Grap
             SDL_LogError(0, "Failed to create shader modules\n");
             return 1;
         }
+    }
+
+    return true;
+}
+
+bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect)
+{
+    if (!initEffectDescriptor(appDesc, context, effect))
+    {
+        SDL_LogError(0, "Failed to create pipeline\n");
+        return false;
+    }
+
+    if (!createComputePipeline(appDesc, context,  computePipelineCreationCallback, effect))
+    {
+        SDL_LogError(0, "Failed to create compute pipeline\n");
+        return false;
+    }
+
+    return true;
+}
+
+bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect)
+{
+    if (!initEffectDescriptor(appDesc, context, effect))
+    {
+        SDL_LogError(0, "Failed to create pipeline\n");
+        return false;
     }
 
     if(!createGraphicsPipeline(appDesc, context, graphicsPipelineCreationCallback, effect))

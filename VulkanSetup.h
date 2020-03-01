@@ -243,21 +243,26 @@ namespace Vulkan
         UpdateUniformFunction _updateUniform = [](Vulkan::ShaderStage stage, unsigned int uniformIndex, std::vector<unsigned char>&) { return 0; };
         std::vector<BufferDescriptor> _uniformBuffers[(int)(Vulkan::ShaderStage::ShaderStageCount)];
         std::vector<uint32_t> _uniformBufferSizes[(int)(Vulkan::ShaderStage::ShaderStageCount)];
-        uint32_t _shaderStageImageCount[(int)(Vulkan::ShaderStage::ShaderStageCount)];
+        uint32_t _shaderStageSamplerCount[(int)(Vulkan::ShaderStage::ShaderStageCount)];
+        uint32_t _shaderStageImagesCount[(int)(Vulkan::ShaderStage::ShaderStageCount)];
 
         RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true; };
         std::string _name;
 
         EffectDescriptor()
         {
-            memset(&_shaderStageImageCount[0], 0, sizeof(uint32_t) * (int)(Vulkan::ShaderStage::ShaderStageCount));
+            memset(&_shaderStageSamplerCount[0], 0, sizeof(uint32_t) * (int)(Vulkan::ShaderStage::ShaderStageCount));
+            memset(&_shaderStageImagesCount[0], 0, sizeof(uint32_t) * (int)(Vulkan::ShaderStage::ShaderStageCount));
         }
 
-        uint32_t totalImageCount() const;
+        uint32_t totalSamplerCount() const;
+        uint32_t totalImagesCount() const;
         uint32_t totalNumUniformBuffers() const;
-        void setShaderStageImageCount(Vulkan::ShaderStage stage, uint32_t count);
+        void setShaderStageSamplerCount(Vulkan::ShaderStage stage, uint32_t count);
+        void setShaderStageImagesCount(Vulkan::ShaderStage stage, uint32_t count);
         void addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, uint32_t size);
-        bool bindImageViewsAndSamplers(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, std::vector<VkImageView> imageViews, std::vector<VkSampler> samplers);
+        bool bindSamplers(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, std::vector<VkImageView> imageViews, std::vector<VkSampler> samplers);
+        bool bindImages(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, std::vector<VkImageView> imageViews);
     };
     typedef std::shared_ptr<EffectDescriptor> EffectDescriptorPtr;
 

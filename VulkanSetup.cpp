@@ -197,135 +197,156 @@ Vulkan::Context::Context()
 
 ///////////////////////////////////// Vulkan Effect Descriptor ///////////////////////////////////////////////////////////////////
 
-uint32_t Vulkan::EffectDescriptor::totalImagesCount() const
+namespace
+{
+    uint32_t numUniforms(const Vulkan::EffectDescriptor & effect)
+    {
+        uint32_t count = 0;
+        for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
+            count += (uint32_t)effect._uniforms[i].size();
+ 
+        return count;
+    }
+}
+
+uint32_t Vulkan::EffectDescriptor::totalTypeCount(VkDescriptorType type) const
 {
     uint32_t count = 0;
     for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
-        count += _shaderStageImagesCount[i];
+    {
+        for (int j = 0; j < (int)_uniforms[i].size(); j++)
+        {
+            if (_uniforms[i][j]._type == type)
+                count++;
+        }
+    }
 
     return count;
+}
+
+
+uint32_t Vulkan::EffectDescriptor::totalImagesCount() const
+{
+    return totalTypeCount(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 }
 
 
 uint32_t Vulkan::EffectDescriptor::totalSamplerCount() const
 {
-    uint32_t count = 0;
-    for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
-        count += _shaderStageSamplerCount[i];
-
-    return count;
+    return totalTypeCount(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 }
 
 uint32_t Vulkan::EffectDescriptor::totalNumUniformBuffers() const
 {
-    uint32_t count = 0;
-    for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
-        count +=  (uint32_t)_uniformBufferSizes[i].size();
-
-    return count;
+    return totalTypeCount(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 }
 
-void Vulkan::EffectDescriptor::setShaderStageSamplerCount(Vulkan::ShaderStage stage, uint32_t count)
+uint32_t Vulkan::EffectDescriptor::addUniformSampler(Vulkan::ShaderStage stage)
 {
-    _shaderStageSamplerCount[static_cast<int>(stage)] = count;
+    Vulkan::Uniform newUniform{};
+    newUniform._type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    newUniform._binding = numUniforms(*this)+1;
+    _uniforms[(int)stage].push_back(newUniform);
+    return newUniform._binding;
 }
 
-void Vulkan::EffectDescriptor::setShaderStageImagesCount(Vulkan::ShaderStage stage, uint32_t count)
+uint32_t Vulkan::EffectDescriptor::addUniformImage(Vulkan::ShaderStage stage)
 {
-    _shaderStageImagesCount[static_cast<int>(stage)] = count;
+    Vulkan::Uniform newUniform{};
+    newUniform._type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    newUniform._binding = numUniforms(*this) + 1;
+    _uniforms[(int)stage].push_back(newUniform);
+    return newUniform._binding;
 }
 
-void Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, uint32_t size)
+uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, uint32_t size)
 {
-    _uniformBufferSizes[static_cast<int>(stage)].push_back((uint32_t)sizeof(size));
-    _uniformBuffers[static_cast<int>(stage)].resize(context._rawImages.size() * _uniformBufferSizes[static_cast<int>(stage)].size());
+    Vulkan::Uniform newUniform{};
+    newUniform._type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    newUniform._binding = numUniforms(*this) + 1;
+    for (uint32_t i = 0; i < (uint32_t)context._rawImages.size(); i++)
+    {
+        UniformAggregate aggregate;
+        aggregate._buffer._size = size;
+        newUniform._frames.push_back(aggregate);
+    }
+
+    return newUniform._binding;
 }
 
-bool Vulkan::EffectDescriptor::bindImages(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, std::vector<VkImageView> imageViews)
+bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView)
 {
     const int index = static_cast<int>(shaderStage);
 
-    assert(imageViews.size() == _uniformBufferSizes[index].size());
-    if (imageViews.size() != _uniformBufferSizes[index].size())
+    assert(binding < _uniforms.size());
+    if (binding >= _uniforms->size())
         return false;
 
-    std::vector<VkWriteDescriptorSet> writes(_descriptorSets.size());
-    std::vector<VkDescriptorImageInfo> imageInfos(_descriptorSets.size());
+    assert(_uniforms[index][binding]._type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+    if (_uniforms[index][binding]._type != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+        return false;
 
-    for (size_t frame = 0; frame < context._rawImages.size(); frame++)
-    {
-        for (size_t i = 0; i < imageViews.size(); i++)
-        {
-            VkDescriptorImageInfo& imageInfo = imageInfos[i];
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = imageViews[i];
-            imageInfo.sampler = VK_NULL_HANDLE;
+    _uniforms[index][binding]._frames[context._currentFrame]._imageView = imageView;
 
-            VkWriteDescriptorSet writeSet = { };
-            writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeSet.descriptorCount = 1;
-            writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            writeSet.dstArrayElement = 0;
-            writeSet.dstBinding = static_cast<uint32_t>(i + totalNumUniformBuffers() + totalSamplerCount());
-            writeSet.dstSet = _descriptorSets[frame];
-            writeSet.pBufferInfo = VK_NULL_HANDLE;
-            writeSet.pImageInfo = &imageInfo;
-            writeSet.pNext = VK_NULL_HANDLE;
-            writeSet.pTexelBufferView = VK_NULL_HANDLE;
+    VkWriteDescriptorSet writes;
+    VkDescriptorImageInfo imageInfo;
 
-            writes[frame * imageViews.size() + i] = writeSet;
-        }
-    }
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView = imageView;
+    imageInfo.sampler = VK_NULL_HANDLE;
 
+    VkWriteDescriptorSet writeSet = { };
+    writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeSet.descriptorCount = 1;
+    writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    writeSet.dstArrayElement = 0;
+    writeSet.dstBinding = binding;
+    writeSet.dstSet = _uniforms[index][binding]._descriptorSet;
+    writeSet.pBufferInfo = VK_NULL_HANDLE;
+    writeSet.pImageInfo = &imageInfo;
+    writeSet.pNext = VK_NULL_HANDLE;
+    writeSet.pTexelBufferView = VK_NULL_HANDLE;
 
-    vkUpdateDescriptorSets(context._device, static_cast<uint32_t>(_descriptorSets.size()), &writes[0], 0, nullptr);
+    vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
 
     return true;
 }
 
-
-bool Vulkan::EffectDescriptor::bindSamplers(Vulkan::Context & context, Vulkan::ShaderStage shaderStage, std::vector<VkImageView> imageViews, std::vector<VkSampler> samplers)
+bool Vulkan::EffectDescriptor::bindSampler(Vulkan::Context & context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkSampler sampler)
 {
     const int index = static_cast<int>(shaderStage);
 
-    assert(imageViews.size() == samplers.size());
-    if (imageViews.size() != samplers.size())
+    assert(binding < _uniforms.size());
+    if (binding >= _uniforms->size())
         return false;
 
-    assert(imageViews.size() == _uniformBufferSizes[index].size());
-    if (imageViews.size() != _uniformBufferSizes[index].size())
+    assert(_uniforms[index][binding]._type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    if (_uniforms[index][binding]._type != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
         return false;
 
-    std::vector<VkWriteDescriptorSet> writes(_descriptorSets.size());
-    std::vector<VkDescriptorImageInfo> imageInfos(_descriptorSets.size());
+    _uniforms[index][binding]._frames[context._currentFrame]._imageView = imageView;
+    _uniforms[index][binding]._frames[context._currentFrame]._sampler = sampler;
 
-    for (size_t frame = 0; frame < context._rawImages.size(); frame++)
-    {
-        for (size_t i = 0; i < imageViews.size(); i++)
-        {
-            VkDescriptorImageInfo& imageInfo = imageInfos[i];
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = imageViews[i];
-            imageInfo.sampler = samplers[i];
+    VkWriteDescriptorSet writes;
+    VkDescriptorImageInfo imageInfo;
 
-            VkWriteDescriptorSet writeSet = { };
-            writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeSet.descriptorCount = 1;
-            writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            writeSet.dstArrayElement = 0;
-            writeSet.dstBinding = static_cast<uint32_t>(i + totalImagesCount());
-            writeSet.dstSet = _descriptorSets[frame];
-            writeSet.pBufferInfo = VK_NULL_HANDLE;
-            writeSet.pImageInfo = &imageInfo;
-            writeSet.pNext = VK_NULL_HANDLE;
-            writeSet.pTexelBufferView = VK_NULL_HANDLE;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView = imageView;
+    imageInfo.sampler = sampler;
 
-            writes[frame*imageViews.size() + i] = writeSet;
-        }
-    }
+    VkWriteDescriptorSet writeSet = { };
+    writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeSet.descriptorCount = 1;
+    writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writeSet.dstArrayElement = 0;
+    writeSet.dstBinding = binding;
+    writeSet.dstSet = _uniforms[index][binding]._descriptorSet;
+    writeSet.pBufferInfo = VK_NULL_HANDLE;
+    writeSet.pImageInfo = &imageInfo;
+    writeSet.pNext = VK_NULL_HANDLE;
+    writeSet.pTexelBufferView = VK_NULL_HANDLE;
 
-
-    vkUpdateDescriptorSets(context._device, static_cast<uint32_t>(_descriptorSets.size()), &writes[0], 0, nullptr);
+    vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
 
     return true;
 }

@@ -227,6 +227,21 @@ namespace Vulkan
     struct Context;
     typedef std::function<bool (AppDescriptor &, Context &, EffectDescriptor &)> RecordCommandBuffersFunction;
 
+    struct UniformAggregate
+    {
+        BufferDescriptor _buffer;
+        VkSampler _sampler;
+        VkImageView _imageView;
+    };
+
+    struct Uniform
+    {
+        VkDescriptorType _type;
+        VkDescriptorSet _descriptorSet;
+        uint32_t _binding;
+        std::vector<UniformAggregate> _frames;
+    };
+
     struct EffectDescriptor
     {
         VkPipeline _pipeline;
@@ -236,33 +251,28 @@ namespace Vulkan
         std::vector<MeshPtr> _meshes;
 
         VkDescriptorSetLayout _descriptorSetLayout;
-        std::vector<VkDescriptorSet> _descriptorSets;
-
         VkDescriptorPool _descriptorPool; // for image samplers
 
         UpdateUniformFunction _updateUniform = [](Vulkan::ShaderStage stage, unsigned int uniformIndex, std::vector<unsigned char>&) { return 0; };
-        std::vector<BufferDescriptor> _uniformBuffers[(int)(Vulkan::ShaderStage::ShaderStageCount)];
-        std::vector<uint32_t> _uniformBufferSizes[(int)(Vulkan::ShaderStage::ShaderStageCount)];
-        uint32_t _shaderStageSamplerCount[(int)(Vulkan::ShaderStage::ShaderStageCount)];
-        uint32_t _shaderStageImagesCount[(int)(Vulkan::ShaderStage::ShaderStageCount)];
+        std::vector<Uniform> _uniforms[(int)(Vulkan::ShaderStage::ShaderStageCount)];
 
         RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true; };
         std::string _name;
 
         EffectDescriptor()
         {
-            memset(&_shaderStageSamplerCount[0], 0, sizeof(uint32_t) * (int)(Vulkan::ShaderStage::ShaderStageCount));
-            memset(&_shaderStageImagesCount[0], 0, sizeof(uint32_t) * (int)(Vulkan::ShaderStage::ShaderStageCount));
         }
 
         uint32_t totalSamplerCount() const;
         uint32_t totalImagesCount() const;
         uint32_t totalNumUniformBuffers() const;
-        void setShaderStageSamplerCount(Vulkan::ShaderStage stage, uint32_t count);
-        void setShaderStageImagesCount(Vulkan::ShaderStage stage, uint32_t count);
-        void addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, uint32_t size);
-        bool bindSamplers(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, std::vector<VkImageView> imageViews, std::vector<VkSampler> samplers);
-        bool bindImages(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, std::vector<VkImageView> imageViews);
+        uint32_t totalTypeCount(VkDescriptorType type) const;
+        uint32_t addUniformSampler(Vulkan::ShaderStage stage);
+        uint32_t addUniformImage(Vulkan::ShaderStage stage);
+        uint32_t addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, uint32_t size);
+        bool bindSampler(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkSampler sampler);
+        bool bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView);
+
     };
     typedef std::shared_ptr<EffectDescriptor> EffectDescriptorPtr;
 

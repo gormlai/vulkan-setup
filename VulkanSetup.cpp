@@ -268,6 +268,18 @@ void Vulkan::EffectDescriptor::collectDescriptorSetLayouts(std::vector<VkDescrip
     }
 }
 
+uint32_t Vulkan::EffectDescriptor::collectUniformsOfType(VkDescriptorType type, Vulkan::ShaderStage stage, Uniform** result)
+{
+    uint32_t count = 0;
+    for (int j = 0; j < (int)_uniforms[(uint32_t)stage].size(); j++)
+    {
+        if (_uniforms[(uint32_t)stage][j]._type == type)
+            result[count++] = &_uniforms[(uint32_t)stage][j];
+    }
+
+    return count;
+}
+
 
 uint32_t Vulkan::EffectDescriptor::collectUniformsOfType(VkDescriptorType type, Uniform ** result)
 {
@@ -294,6 +306,18 @@ uint32_t Vulkan::EffectDescriptor::totalTypeCount(VkDescriptorType type) const
             if (_uniforms[i][j]._type == type)
                 count++;
         }
+    }
+
+    return count;
+}
+
+uint32_t Vulkan::EffectDescriptor::totalTypeCount(Vulkan::ShaderStage stage, VkDescriptorType type) const
+{
+    uint32_t count = 0;
+    for (int j = 0; j < (int)_uniforms[(uint32_t)stage].size(); j++)
+    {
+        if (_uniforms[(uint32_t)stage][j]._type == type)
+            count++;
     }
 
     return count;
@@ -2225,12 +2249,12 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
         {
             static std::vector<unsigned char> updateData;
 
-            const uint32_t uniformCount = effect->totalTypeCount(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+            const uint32_t uniformCount = effect->totalTypeCount((Vulkan::ShaderStage)stage, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
             static std::vector<Uniform*> uniforms(1);
             if (uniforms.size() < uniformCount)
                 uniforms.resize(2 * (uniformCount + 1)); // amortise resizing
 
-            effect->collectUniformsOfType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &uniforms[0]);
+            effect->collectUniformsOfType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, (Vulkan::ShaderStage)stage, &uniforms[0]);
             for (unsigned int uniformIndex = 0 ; uniformIndex < uniformCount ; uniformIndex++)
             {
                 Uniform* uniform = uniforms[uniformIndex];

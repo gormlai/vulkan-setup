@@ -369,27 +369,31 @@ bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::Shade
     if (uniform->_type != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
         return false;
 
-    uniform->_frames[context._currentFrame]._imageView = imageView;
+    for (UniformAggregate& aggregate : uniform->_frames)
+    {
+        aggregate._imageView = imageView;
 
-    VkDescriptorImageInfo imageInfo;
+        VkDescriptorImageInfo imageInfo;
 
-    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView = imageView;
-    imageInfo.sampler = VK_NULL_HANDLE;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        imageInfo.imageView = imageView;
+        imageInfo.sampler = VK_NULL_HANDLE;
 
-    VkWriteDescriptorSet writeSet = { };
-    writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeSet.descriptorCount = 1;
-    writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    writeSet.dstArrayElement = 0;
-    writeSet.dstBinding = binding;
-    writeSet.dstSet = uniform->_frames[context._currentFrame]._descriptorSet;
-    writeSet.pBufferInfo = VK_NULL_HANDLE;
-    writeSet.pImageInfo = &imageInfo;
-    writeSet.pNext = VK_NULL_HANDLE;
-    writeSet.pTexelBufferView = VK_NULL_HANDLE;
+        VkWriteDescriptorSet writeSet = { };
+        writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeSet.descriptorCount = 1;
+        writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        writeSet.dstArrayElement = 0;
+        writeSet.dstBinding = binding;
+        writeSet.dstSet = aggregate._descriptorSet;
+        writeSet.pBufferInfo = VK_NULL_HANDLE;
+        writeSet.pImageInfo = &imageInfo;
+        writeSet.pNext = VK_NULL_HANDLE;
+        writeSet.pTexelBufferView = VK_NULL_HANDLE;
 
-    vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
+        vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
+    }
+
 
     return true;
 }
@@ -412,7 +416,7 @@ bool Vulkan::EffectDescriptor::bindSampler(Vulkan::Context & context, Vulkan::Sh
 
         VkDescriptorImageInfo imageInfo;
 
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfo.imageView = imageView;
         imageInfo.sampler = sampler;
 
@@ -586,16 +590,16 @@ namespace
 		switch (severity)
 		{
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-			SDL_LogInfo(0, "%s\n", callbackData->pMessage);
+            SDL_LogInfo(0, "%s\n", callbackData->pMessage);
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-			SDL_LogWarn(0, "%s\n", callbackData->pMessage);
+            SDL_LogWarn(0, "%s\n", callbackData->pMessage);
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
             SDL_Log(0, "%s\n", callbackData->pMessage);
 			break;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-			SDL_LogError(0, "%s\n", callbackData->pMessage);
+            SDL_LogError(0, "%s\n", callbackData->pMessage);
 			break;
 		default:
 			SDL_Log(0, "%s\n", callbackData->pMessage);
@@ -747,20 +751,20 @@ bool Vulkan::transitionImageLayout(Vulkan::Context & context, VkImage image, VkF
         {
             switch (newLayout)
             {
-                case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-                    barrier.srcAccessMask = 0;
-                    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-                    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                    break;
-                case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-                    barrier.srcAccessMask = 0;
-                    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-                    destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-                    break;
-                default:
-                    return false;
+            case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+                break;
+            case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                break;
+            default:
+                return false;
             }
         }
             break;
@@ -772,7 +776,13 @@ bool Vulkan::transitionImageLayout(Vulkan::Context & context, VkImage image, VkF
                     barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
                     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
                     sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                    destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+                    break;
+                case VK_IMAGE_LAYOUT_GENERAL:
+                    barrier.srcAccessMask = 0;
+                    barrier.dstAccessMask = 0;
+                    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
                     break;
                 default:
                     return false;

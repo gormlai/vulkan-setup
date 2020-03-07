@@ -229,6 +229,7 @@ namespace Vulkan
 
     struct UniformAggregate
     {
+        VkDescriptorSet _descriptorSet;
         BufferDescriptor _buffer;
         VkSampler _sampler;
         VkImageView _imageView;
@@ -236,8 +237,8 @@ namespace Vulkan
 
     struct Uniform
     {
+        VkDescriptorSetLayout _descriptorSetLayout;
         VkDescriptorType _type;
-        VkDescriptorSet _descriptorSet;
         uint32_t _binding;
         std::vector<UniformAggregate> _frames;
     };
@@ -250,7 +251,6 @@ namespace Vulkan
         std::vector<VkCommandBuffer> _commandBuffers;
         std::vector<MeshPtr> _meshes;
 
-        VkDescriptorSetLayout _descriptorSetLayout;
         VkDescriptorPool _descriptorPool; // for image samplers
 
         UpdateUniformFunction _updateUniform = [](Vulkan::ShaderStage stage, unsigned int uniformIndex, std::vector<unsigned char>&) { return 0; };
@@ -266,10 +266,15 @@ namespace Vulkan
         uint32_t totalSamplerCount() const;
         uint32_t totalImagesCount() const;
         uint32_t totalNumUniformBuffers() const;
+        uint32_t totalNumUniforms() const;
         uint32_t totalTypeCount(VkDescriptorType type) const;
-        uint32_t addUniformSampler(Vulkan::ShaderStage stage);
-        uint32_t addUniformImage(Vulkan::ShaderStage stage);
+        uint32_t addUniformSampler(Vulkan::Context& context, Vulkan::ShaderStage stage);
+        uint32_t addUniformImage(Vulkan::Context& context, Vulkan::ShaderStage stage);
         uint32_t addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, uint32_t size);
+        uint32_t collectDescriptorSetsOfType(VkDescriptorType type, uint32_t frame, VkDescriptorSet* result);
+        uint32_t collectDescriptorSets(uint32_t frame, VkDescriptorSet* result);
+        void collectDescriptorSetLayouts(std::vector<VkDescriptorSetLayout> & layouts);
+        uint32_t collectUniformsOfType(VkDescriptorType type, Uniform** result);
         bool bindSampler(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkSampler sampler);
         bool bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView);
 

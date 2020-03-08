@@ -1907,8 +1907,8 @@ bool Vulkan::resetCommandBuffers(Context & context, std::vector<VkCommandBuffer>
 	{
 		if (!context._fences.empty())
 		{
-//			const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, std::numeric_limits<uint64_t>::max());
-            const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, 1);
+			const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, std::numeric_limits<uint64_t>::max());
+//            const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, 1);
 //            assert(waitForFencesResult == VK_SUCCESS);
         }
 

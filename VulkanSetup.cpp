@@ -20,16 +20,16 @@ namespace Vulkan
     bool createInstanceAndLoadExtensions(const AppDescriptor& appDesc, Context& context);
     bool createVulkanSurface(SDL_Window* window, Context& context);
     bool enumeratePhysicalDevices(AppDescriptor& appDesc, Context& context);
-    bool choosePhysicalDevice(AppDescriptor& appDesc, Context& vulkanContext);
+    bool choosePhysicalDevice(AppDescriptor& appDesc, Context& Context);
     bool lookupDeviceExtensions(AppDescriptor& appDesc);
     bool createDevice(AppDescriptor& appDesc, Context& context);
     bool createQueue(AppDescriptor& appDesc, Context& context);
     bool createSwapChain(AppDescriptor& appDesc, Context& context);
     bool createColorBuffers(Context& context);
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context);
-    bool createRenderPass(Context& vulkanContext, VkRenderPass* result, bool clearColorBuffer);
-    bool createDescriptorSetLayout(Context& vulkanContext, EffectDescriptor& effect);
-    bool createFrameBuffers(Context& vulkanContext);
+    bool createRenderPass(Context& Context, VkRenderPass* result, bool clearColorBuffer);
+    bool createDescriptorSetLayout(Context& Context, EffectDescriptor& effect);
+    bool createFrameBuffers(Context& Context);
     bool createPipelineCache(AppDescriptor& appDesc, Context& context);
     bool createCommandPool(AppDescriptor& appDesc, Context& context, VkCommandPool* result);
     bool recordStandardCommandBuffers(AppDescriptor& appDesc, Context& context);
@@ -1162,7 +1162,7 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppDescriptor & appDesc, Vulkan::C
 }
 
 // prioritise discrete over integrated
-bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, Context & vulkanContext) {
+bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, Context & Context) {
     bool foundDevice = false;
     unsigned int currentPhysicalDevice = 0;
     VkPhysicalDeviceProperties currentPhysicalProperties;
@@ -1188,11 +1188,11 @@ bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, Context & vulkanContex
         return false;
     
     appDesc._chosenPhysicalDevice = currentPhysicalDevice;
-    vulkanContext._physicalDevice = appDesc._physicalDevices[currentPhysicalDevice];
+    Context._physicalDevice = appDesc._physicalDevices[currentPhysicalDevice];
     SDL_LogInfo(0, "Chosen Vulkan Physical Device = %s. Driver version = %d\n", currentPhysicalProperties.deviceName, currentPhysicalProperties.driverVersion);
     
 	// get the device features, so we can check against them later on
-	vkGetPhysicalDeviceFeatures(vulkanContext._physicalDevice, &vulkanContext._physicalDeviceFeatures);
+	vkGetPhysicalDeviceFeatures(Context._physicalDevice, &Context._physicalDeviceFeatures);
 
     return true;
 }
@@ -1427,7 +1427,7 @@ bool Vulkan::createColorBuffers(Context & context)
     return true;
 }
 
-bool Vulkan::createRenderPass(Context & vulkanContext, VkRenderPass * result, bool clearColorBuffer)
+bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, bool clearColorBuffer)
 {
     VkAttachmentReference colorAttachmentReference;
     memset(&colorAttachmentReference, 0, sizeof(colorAttachmentReference));
@@ -1449,7 +1449,7 @@ bool Vulkan::createRenderPass(Context & vulkanContext, VkRenderPass * result, bo
 
     VkAttachmentDescription colorAttachment;
     memset(&colorAttachment, 0, sizeof(colorAttachment));
-    colorAttachment.format = vulkanContext._surfaceFormat.format;
+    colorAttachment.format = Context._surfaceFormat.format;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = clearColorBuffer ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1460,7 +1460,7 @@ bool Vulkan::createRenderPass(Context & vulkanContext, VkRenderPass * result, bo
 
 	VkAttachmentDescription depthAttachment;
 	memset(&depthAttachment, 0, sizeof(depthAttachment));
-	depthAttachment.format = findDepthFormat(vulkanContext, VK_IMAGE_TILING_OPTIMAL);
+	depthAttachment.format = findDepthFormat(Context, VK_IMAGE_TILING_OPTIMAL);
 	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	depthAttachment.loadOp = clearColorBuffer ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1495,7 +1495,7 @@ bool Vulkan::createRenderPass(Context & vulkanContext, VkRenderPass * result, bo
 	createInfo.pDependencies = &dependency;
     
 	VkRenderPass renderPass;
-    VkResult createRenderPassResult = vkCreateRenderPass(vulkanContext._device, &createInfo, nullptr, &renderPass);
+    VkResult createRenderPassResult = vkCreateRenderPass(Context._device, &createInfo, nullptr, &renderPass);
 	assert(createRenderPassResult == VK_SUCCESS);
 	if (createRenderPassResult != VK_SUCCESS)
         return false;
@@ -1505,30 +1505,30 @@ bool Vulkan::createRenderPass(Context & vulkanContext, VkRenderPass * result, bo
     return true;
 }
 
-bool Vulkan::createFrameBuffers(Context & vulkanContext)
+bool Vulkan::createFrameBuffers(Context & Context)
 {
-	for(unsigned int i=0 ; i < (unsigned int)vulkanContext._colorBuffers.size() ; i++ )
+	for(unsigned int i=0 ; i < (unsigned int)Context._colorBuffers.size() ; i++ )
     {
         VkFramebufferCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
         
-//        VkImageView attachments[] = { vulkanContext._colorBuffers[i], vulkanContext._depthImageViews[i] };
-        VkImageView attachments[] = { vulkanContext._colorBuffers[i]};
+//        VkImageView attachments[] = { Context._colorBuffers[i], Context._depthImageViews[i] };
+        VkImageView attachments[] = { Context._colorBuffers[i]};
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        createInfo.renderPass = vulkanContext._renderPass;
+        createInfo.renderPass = Context._renderPass;
         createInfo.attachmentCount = sizeof(attachments) / sizeof(VkImageView);
 		createInfo.pAttachments = &attachments[0];
-        createInfo.width = vulkanContext._swapChainSize.width;
-        createInfo.height = vulkanContext._swapChainSize.height;
+        createInfo.width = Context._swapChainSize.width;
+        createInfo.height = Context._swapChainSize.height;
 		createInfo.layers = 1;
         
         VkFramebuffer frameBuffer;
-        VkResult frameBufferCreationResult = vkCreateFramebuffer(vulkanContext._device, &createInfo, nullptr, &frameBuffer);
+        VkResult frameBufferCreationResult = vkCreateFramebuffer(Context._device, &createInfo, nullptr, &frameBuffer);
 		assert(frameBufferCreationResult == VK_SUCCESS);
 		if (frameBufferCreationResult != VK_SUCCESS)
             return false;
         
-        vulkanContext._frameBuffers.push_back(frameBuffer);
+        Context._frameBuffers.push_back(frameBuffer);
     }
     
     return true;

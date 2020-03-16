@@ -335,7 +335,6 @@ namespace Vulkan
 		const VulkanCamera & getCamera() { return _camera;  }
 
 	private:
-		friend bool update(AppDescriptor& appDesc, Context & context, uint32_t currentImage);
 		VulkanCamera _camera;
 
     };

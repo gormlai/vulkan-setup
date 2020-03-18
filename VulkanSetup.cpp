@@ -27,7 +27,7 @@ namespace Vulkan
     bool createSwapChain(AppDescriptor& appDesc, Context& context);
     bool createColorBuffers(Context& context);
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context);
-    bool createRenderPass(Context& Context, VkRenderPass* result, bool clearColorBuffer);
+    bool createRenderPass(Context& Context, VkRenderPass* result, RenderPassCustomizationCallback renderPassCreationCallback);
     bool createDescriptorSetLayout(Context& Context, EffectDescriptor& effect);
     bool createFrameBuffers(Context& Context);
     bool createPipelineCache(AppDescriptor& appDesc, Context& context);
@@ -1427,52 +1427,51 @@ bool Vulkan::createColorBuffers(Context & context)
     return true;
 }
 
-bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, bool clearColorBuffer)
+bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPassCustomizationCallback renderPassCreationCallback)
 {
-    VkAttachmentReference colorAttachmentReference;
+    VkRenderPassCreateInfoDescriptor renderPassInfoDescriptor;
+
+    VkAttachmentReference & colorAttachmentReference = renderPassInfoDescriptor._colorAttachmentReference;
     memset(&colorAttachmentReference, 0, sizeof(colorAttachmentReference));
     colorAttachmentReference.attachment = 0;
     colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-	VkAttachmentReference depthAttachmentReference;
+    VkAttachmentReference & depthAttachmentReference = renderPassInfoDescriptor._depthAttachmentReference;
 	memset(&depthAttachmentReference, 0, sizeof(depthAttachmentReference));
 	depthAttachmentReference.attachment = 1;
 	depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     
-    VkSubpassDescription subpassDescription;
+    VkSubpassDescription& subpassDescription = renderPassInfoDescriptor._subpassDescription;
     memset(&subpassDescription, 0, sizeof(subpassDescription));
     subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpassDescription.colorAttachmentCount = 1;
     subpassDescription.pColorAttachments = &colorAttachmentReference;
 //	subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
 
-    VkAttachmentDescription colorAttachment;
+    VkAttachmentDescription& colorAttachment = renderPassInfoDescriptor._colorAttachment;
     memset(&colorAttachment, 0, sizeof(colorAttachment));
     colorAttachment.format = Context._surfaceFormat.format;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = clearColorBuffer ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-	VkAttachmentDescription depthAttachment;
+    VkAttachmentDescription& depthAttachment = renderPassInfoDescriptor._depthAttachment;
 	memset(&depthAttachment, 0, sizeof(depthAttachment));
 	depthAttachment.format = findDepthFormat(Context, VK_IMAGE_TILING_OPTIMAL);
 	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-	depthAttachment.loadOp = clearColorBuffer ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-
-
-
-	VkSubpassDependency dependency;
+    VkSubpassDependency& dependency = renderPassInfoDescriptor._dependency;
 	memset(&dependency, 0, sizeof(dependency));
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 	dependency.dstSubpass = 0;
@@ -1480,20 +1479,23 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, bool cle
 	dependency.srcAccessMask = 0;
 	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
     
-    VkRenderPassCreateInfo createInfo;
+    VkRenderPassCreateInfo& createInfo = renderPassInfoDescriptor._createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
 //    VkAttachmentDescription attachmentDescriptions[] = { colorAttachment, depthAttachment };
-    VkAttachmentDescription attachmentDescriptions[] = { colorAttachment};
+    std::array<VkAttachmentDescription, 10> & attachmentDescriptions = renderPassInfoDescriptor._attachmentDescriptions;
+    attachmentDescriptions[0] = colorAttachment;
     createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    createInfo.attachmentCount = sizeof(attachmentDescriptions) / sizeof(VkAttachmentDescription);
+    createInfo.attachmentCount = 1;
 	createInfo.pAttachments = &attachmentDescriptions[0];
     createInfo.subpassCount = 1;
     createInfo.pSubpasses = &subpassDescription;
 	createInfo.dependencyCount = 1;
 	createInfo.pDependencies = &dependency;
-    
+
+    renderPassCreationCallback(renderPassInfoDescriptor); // give the user a chance to customize pipeline
+    attachmentDescriptions[0] = colorAttachment;
+
 	VkRenderPass renderPass;
     VkResult createRenderPassResult = vkCreateRenderPass(Context._device, &createInfo, nullptr, &renderPass);
 	assert(createRenderPassResult == VK_SUCCESS);
@@ -2391,8 +2393,8 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         SDL_LogError(0, "Failed to create color buffers\n");
         return false;
     }
-    
-    if (!createRenderPass(context, &context._renderPass, true))
+
+    if (!createRenderPass(context, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
     {
         SDL_LogError(0, "Failed to create standard render pass\n");
         return false;
@@ -2448,7 +2450,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-	if (!createRenderPass(context, &context._renderPass, true))
+	if (!createRenderPass(context, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
 	{
 		SDL_LogError(0, "Failed to create standard render pass\n");
 		return false;
@@ -2641,13 +2643,25 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Comp
     return true;
 }
 
-bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, const bool createPipeline, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect)
+bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, 
+    Context& context, 
+    const bool createPipeline, 
+    GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, 
+    RenderPassCustomizationCallback renderPassCreationCallback,
+    Vulkan::EffectDescriptor& effect)
 {
     if (!initEffectDescriptor(appDesc, context, effect))
     {
         SDL_LogError(0, "Failed to create pipeline\n");
         return false;
     }
+
+    if (!createRenderPass(context, &effect._renderPass, renderPassCreationCallback))
+    {
+        SDL_LogError(0, "Failed to create render pass for effect\n");
+        return false;
+    }
+
 
     if(createPipeline && !createGraphicsPipeline(appDesc, context, graphicsPipelineCreationCallback, effect))
     {

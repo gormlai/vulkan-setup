@@ -145,9 +145,28 @@ namespace Vulkan
     {
     };
 
+    struct VkRenderPassCreateInfoDescriptor
+    {
+        VkAttachmentReference _colorAttachmentReference;
+        VkAttachmentReference _depthAttachmentReference;
+        VkSubpassDescription _subpassDescription;
+        VkAttachmentDescription _colorAttachment;
+        VkAttachmentDescription _depthAttachment;
+        VkSubpassDependency _dependency;
+        VkRenderPassCreateInfo _createInfo;
+        std::array<VkAttachmentDescription,10> _attachmentDescriptions;
+
+        VkRenderPassCreateInfoDescriptor()
+        {
+            memset(this, 0, sizeof(*this));
+        }
+    };
+
         
     typedef std::function<void(VkGraphicsPipelineCreateInfoDescriptor &)> GraphicsPipelineCustomizationCallback;
     typedef std::function<void(VkComputePipelineCreateInfoDescriptor&)> ComputePipelineCustomizationCallback;
+    typedef std::function<void(VkRenderPassCreateInfoDescriptor&)> RenderPassCustomizationCallback;
+
 
     struct AppDescriptor
     {
@@ -253,6 +272,8 @@ namespace Vulkan
 
         VkDescriptorPool _descriptorPool; // for image samplers
 
+        VkRenderPass _renderPass; 
+
         UpdateUniformFunction _updateUniform = [](Vulkan::ShaderStage stage, unsigned int uniformIndex, std::vector<unsigned char>&) { return 0; };
         std::vector<Uniform> _uniforms[(int)(Vulkan::ShaderStage::ShaderStageCount)];
 
@@ -356,7 +377,12 @@ namespace Vulkan
 
     bool resetCommandBuffers(Context& context, std::vector<VkCommandBuffer>& commandBuffers);
     bool createShaderModules(AppDescriptor& appDesc, Context& context, std::vector<Shader>& shaders);
-    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, const bool createGraphicsPipeline, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+    bool initEffectDescriptor(AppDescriptor& appDesc, 
+        Context& context, 
+        const bool createGraphicsPipeline, 
+        GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, 
+        RenderPassCustomizationCallback renderPassCreationCallback,
+        Vulkan::EffectDescriptor& effect);
     bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
 
     bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc);

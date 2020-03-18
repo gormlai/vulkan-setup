@@ -2592,7 +2592,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
         return false;
     }
 
-    if (!createDescriptorPool(context, effect))
+    if (effect._descriptorPool==VK_NULL_HANDLE && !createDescriptorPool(context, effect))
     {
         SDL_LogError(0, "Failed to create descriptor pool\n");
         return false;
@@ -2641,7 +2641,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Comp
     return true;
 }
 
-bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect)
+bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, const bool createPipeline, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect)
 {
     if (!initEffectDescriptor(appDesc, context, effect))
     {
@@ -2649,7 +2649,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Grap
         return false;
     }
 
-    if(!createGraphicsPipeline(appDesc, context, graphicsPipelineCreationCallback, effect))
+    if(createPipeline && !createGraphicsPipeline(appDesc, context, graphicsPipelineCreationCallback, effect))
     {
         SDL_LogError(0, "Failed to create graphics pipeline\n");
         return false;

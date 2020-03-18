@@ -260,6 +260,7 @@ namespace Vulkan
         std::string _name;
 
         EffectDescriptor()
+            :_descriptorPool(VK_NULL_HANDLE)
         {
         }
 
@@ -355,7 +356,7 @@ namespace Vulkan
 
     bool resetCommandBuffers(Context& context, std::vector<VkCommandBuffer>& commandBuffers);
     bool createShaderModules(AppDescriptor& appDesc, Context& context, std::vector<Shader>& shaders);
-    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, const bool createGraphicsPipeline, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
     bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
 
     bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc);

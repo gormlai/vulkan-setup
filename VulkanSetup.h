@@ -373,12 +373,11 @@ namespace Vulkan
     };
 
     
-    bool addMesh(AppDescriptor& appDesc, 
+    bool initializeIndexAndVertexBuffers(AppDescriptor& appDesc, 
         Context& context,
         std::vector<unsigned char>& vertexData, 
         std::vector<unsigned char>& indexData, 
         void* userData, 
-        EffectDescriptor& effectDescriptor,
         Vulkan::Mesh& result);
 
 

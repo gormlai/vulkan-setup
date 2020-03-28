@@ -2339,12 +2339,11 @@ void Vulkan::clearMeshes(Context & context, EffectDescriptor & effect)
     effect._meshes.clear();
 }
 
-bool Vulkan::addMesh(AppDescriptor & appDesc, 
+bool Vulkan::initializeIndexAndVertexBuffers(AppDescriptor & appDesc, 
     Context & context, 
     std::vector<unsigned char> & vertexData, 
     std::vector<unsigned char> & indexData, 
     void * userData, 
-    EffectDescriptor & effectDescriptor, 
     Vulkan::Mesh & result)
 {
     Vulkan::Mesh mesh;

@@ -350,6 +350,20 @@ uint32_t Vulkan::EffectDescriptor::totalNumUniforms() const
 }
 
 
+bool Vulkan::EffectDescriptor::hasUniformWithBinding(int binding)
+{
+    for (std::vector<Uniform> uniformsAtStage : _uniforms)
+    {
+        for (auto uniform : uniformsAtStage)
+        {
+            if (binding == uniform._binding)
+                return true;
+        }
+    }
+    return false;
+}
+
+
 uint32_t Vulkan::EffectDescriptor::addUniformSampler(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, int binding)
 {
     Vulkan::Uniform newUniform{};

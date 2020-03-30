@@ -205,80 +205,44 @@ namespace
 {
     uint32_t numUniforms(const Vulkan::EffectDescriptor & effect)
     {
-        uint32_t count = 0;
-        for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
-            count += (uint32_t)effect._uniforms[i].size();
- 
-        return count;
+        return (uint32_t)effect._uniforms.size();
     }
 
     Vulkan::Uniform* findUniform(Vulkan::EffectDescriptor& effect, Vulkan::ShaderStage stage, uint32_t binding)
     {
         uint32_t index = (uint32_t)stage;
-        for (size_t i = 0; i < effect._uniforms[index].size(); i++)
+        for (size_t i = 0; i < effect._uniforms.size(); i++)
         {
-            Vulkan::Uniform* uniform = &effect._uniforms[index][i];
-            if (uniform->_binding == binding)
-                return uniform;
+            Vulkan::Uniform* uniform = &effect._uniforms[index];
+            for (Vulkan::ShaderStage existingStage : uniform->_stages)
+            {
+                if (existingStage == stage)
+                    return uniform;
+            }
         }
 
         return nullptr;
     }
 }
 
-uint32_t Vulkan::EffectDescriptor::collectDescriptorSetsOfType(VkDescriptorType type, uint32_t frame, VkDescriptorSet* result)
-{
-    uint32_t count = 0;
-    for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
-    {
-        for (int j = 0; j < (int)_uniforms[i].size(); j++)
-        {
-            if (_uniforms[i][j]._type == type)
-            {
-                Vulkan::UniformAggregate& aggregate = _uniforms[i][j]._frames[frame];
-                result[count++] = aggregate._descriptorSet;
-            }
-        }
-    }
-
-    return count;
-}
-
-uint32_t Vulkan::EffectDescriptor::collectDescriptorSets(uint32_t frame, VkDescriptorSet* result)
-{
-    uint32_t count = 0;
-    for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
-    {
-        for (int j = 0; j < (int)_uniforms[i].size(); j++)
-        {
-            Vulkan::UniformAggregate& aggregate = _uniforms[i][j]._frames[frame];
-            result[count++] = aggregate._descriptorSet;
-        }
-    }
-
-    return count;
-}
-
 
 void Vulkan::EffectDescriptor::collectDescriptorSetLayouts(std::vector<VkDescriptorSetLayout>& layouts)
 {
-    for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
-    {
-        for (int j = 0; j < (int)_uniforms[i].size(); j++)
-        {
-            Uniform & uniform = _uniforms[i][j];
-            layouts.push_back(uniform._descriptorSetLayout);
-        }
-    }
+    layouts.push_back(_descriptorSetLayout);
 }
 
 uint32_t Vulkan::EffectDescriptor::collectUniformsOfType(VkDescriptorType type, Vulkan::ShaderStage stage, Uniform** result)
 {
     uint32_t count = 0;
-    for (int j = 0; j < (int)_uniforms[(uint32_t)stage].size(); j++)
+    for (int j = 0; j < (int)_uniforms.size(); j++)
     {
-        if (_uniforms[(uint32_t)stage][j]._type == type)
-            result[count++] = &_uniforms[(uint32_t)stage][j];
+        for (Vulkan::ShaderStage shaderStage : _uniforms[j]._stages)
+        {
+            if (shaderStage == stage)
+            {
+                result[count++] = &_uniforms[j];
+            }
+        }
     }
 
     return count;
@@ -288,13 +252,10 @@ uint32_t Vulkan::EffectDescriptor::collectUniformsOfType(VkDescriptorType type, 
 uint32_t Vulkan::EffectDescriptor::collectUniformsOfType(VkDescriptorType type, Uniform ** result)
 {
     uint32_t count = 0;
-    for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
+    for (int j = 0; j < (int)_uniforms.size(); j++)
     {
-        for (int j = 0; j < (int)_uniforms[i].size(); j++)
-        {
-            if (_uniforms[i][j]._type == type)
-                result[count++] = &_uniforms[i][j];
-        }
+        if (_uniforms[j]._type == type)
+            result[count++] = &_uniforms[j];
     }
 
     return count;
@@ -303,13 +264,10 @@ uint32_t Vulkan::EffectDescriptor::collectUniformsOfType(VkDescriptorType type, 
 uint32_t Vulkan::EffectDescriptor::totalTypeCount(VkDescriptorType type) const
 {
     uint32_t count = 0;
-    for (int i = 0; i < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); i++)
+    for (int j = 0; j < (int)_uniforms.size(); j++)
     {
-        for (int j = 0; j < (int)_uniforms[i].size(); j++)
-        {
-            if (_uniforms[i][j]._type == type)
-                count++;
-        }
+        if (_uniforms[j]._type == type)
+            count++;
     }
 
     return count;
@@ -318,10 +276,15 @@ uint32_t Vulkan::EffectDescriptor::totalTypeCount(VkDescriptorType type) const
 uint32_t Vulkan::EffectDescriptor::totalTypeCount(Vulkan::ShaderStage stage, VkDescriptorType type) const
 {
     uint32_t count = 0;
-    for (int j = 0; j < (int)_uniforms[(uint32_t)stage].size(); j++)
+    for (int j = 0; j < (int)_uniforms.size(); j++)
     {
-        if (_uniforms[(uint32_t)stage][j]._type == type)
-            count++;
+        for (Vulkan::ShaderStage shaderStage : _uniforms[j]._stages)
+        {
+            if (shaderStage == stage)
+            {
+                count++;
+            }
+        }
     }
 
     return count;
@@ -349,73 +312,107 @@ uint32_t Vulkan::EffectDescriptor::totalNumUniforms() const
     return numUniforms(*this);
 }
 
-
-bool Vulkan::EffectDescriptor::hasUniformWithBinding(int binding)
+Vulkan::Uniform* Vulkan::EffectDescriptor::getUniformWithBinding(int binding)
 {
-    for (std::vector<Uniform> uniformsAtStage : _uniforms)
+    for (Vulkan::Uniform& uniform : _uniforms)
     {
-        for (auto uniform : uniformsAtStage)
-        {
-            if (binding == uniform._binding)
-                return true;
-        }
+        if (uniform._binding == binding)
+            return &uniform;
     }
-    return false;
+    return nullptr;
 }
 
 
 uint32_t Vulkan::EffectDescriptor::addUniformSampler(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, int binding)
 {
-    Vulkan::Uniform newUniform{};
-    newUniform._name = name;
-    newUniform._type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-
-    if (binding < 0)
-        newUniform._binding = numUniforms(*this);
+    Vulkan::Uniform* uniform = getUniformWithBinding(binding);
+    if (uniform != nullptr)
+    {
+        assert(uniform->_name == name);
+        assert(unifrom->_binding == binding);
+        uniform->_stages.push_back(stage);
+        return binding;
+    }
     else
-        newUniform._binding = binding;
+    {
+        Vulkan::Uniform newUniform{};
+        newUniform._name = name;
+        newUniform._type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        newUniform._frames.resize(context._rawImages.size());
+        newUniform._stages.push_back(stage);
 
-    newUniform._frames.resize(context._rawImages.size());
-    _uniforms[(int)stage].push_back(newUniform);
-    return newUniform._binding;
+        if (binding < 0)
+            newUniform._binding = numUniforms(*this);
+        else
+            newUniform._binding = binding;
+
+        _uniforms.push_back(newUniform);
+        return newUniform._binding;
+    }
+
 }
 
 uint32_t Vulkan::EffectDescriptor::addUniformImage(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, int binding)
 {
-    Vulkan::Uniform newUniform{};
-    newUniform._name = name;
-    newUniform._type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-
-    if (binding < 0)
-        newUniform._binding = numUniforms(*this);
+    Vulkan::Uniform* uniform = getUniformWithBinding(binding);
+    if (uniform != nullptr)
+    {
+        assert(uniform->_name == name);
+        assert(unifrom->_binding == binding);
+        uniform->_stages.push_back(stage);
+        return binding;
+    }
     else
-        newUniform._binding = binding;
+    {
+        Vulkan::Uniform newUniform{};
+        newUniform._name = name;
+        newUniform._type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        newUniform._frames.resize(context._rawImages.size());
+        newUniform._stages.push_back(stage);
 
-    newUniform._frames.resize(context._rawImages.size());
-    _uniforms[(int)stage].push_back(newUniform);
-    return newUniform._binding;
+        if (binding < 0)
+            newUniform._binding = numUniforms(*this);
+        else
+            newUniform._binding = binding;
+
+        _uniforms.push_back(newUniform);
+        return newUniform._binding;
+    }
+
 }
 
 uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, uint32_t size, int binding)
 {
-    Vulkan::Uniform newUniform{};
-    newUniform._name = name;
-    newUniform._type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-
-    if (binding < 0)
-        newUniform._binding = numUniforms(*this);
-    else
-        newUniform._binding = binding;
-
-    for (uint32_t i = 0; i < (uint32_t)context._rawImages.size(); i++)
+    Vulkan::Uniform* uniform = getUniformWithBinding(binding);
+    if (uniform != nullptr)
     {
-        UniformAggregate aggregate;
-        aggregate._buffer._size = size;
-        newUniform._frames.push_back(aggregate);
+        assert(uniform->_name == name);
+        assert(unifrom->_binding == binding);
+        uniform->_stages.push_back(stage);
+        return binding;
     }
-    _uniforms[(int)stage].push_back(newUniform);
+    else
+    {
+        Vulkan::Uniform newUniform{};
+        newUniform._name = name;
+        newUniform._type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        newUniform._stages.push_back(stage);
 
-    return newUniform._binding;
+        if (binding < 0)
+            newUniform._binding = numUniforms(*this);
+        else
+            newUniform._binding = binding;
+
+        for (uint32_t i = 0; i < (uint32_t)context._rawImages.size(); i++)
+        {
+            UniformAggregate aggregate;
+            aggregate._buffer._size = size;
+            newUniform._frames.push_back(aggregate);
+        }
+        _uniforms.push_back(newUniform);
+
+        return newUniform._binding;
+    }
 }
 
 bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView)
@@ -429,8 +426,9 @@ bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::Shade
     if (uniform->_type != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
         return false;
 
-    for (UniformAggregate& aggregate : uniform->_frames)
+    for(unsigned int frame=0 ; frame < uniform->_frames.size() ; frame++)
     {
+        UniformAggregate& aggregate = uniform->_frames[frame];
         aggregate._imageView = imageView;
 
         VkDescriptorImageInfo imageInfo;
@@ -445,7 +443,7 @@ bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::Shade
         writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         writeSet.dstArrayElement = 0;
         writeSet.dstBinding = binding;
-        writeSet.dstSet = aggregate._descriptorSet;
+        writeSet.dstSet = _descriptorSets[frame];
         writeSet.pBufferInfo = VK_NULL_HANDLE;
         writeSet.pImageInfo = &imageInfo;
         writeSet.pNext = VK_NULL_HANDLE;
@@ -469,8 +467,9 @@ bool Vulkan::EffectDescriptor::bindSampler(Vulkan::Context & context, Vulkan::Sh
     if (uniform->_type != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
         return false;
 
-    for (UniformAggregate& aggregate : uniform->_frames)
+    for (unsigned int frame = 0; frame < uniform->_frames.size(); frame++)
     {
+        UniformAggregate& aggregate = uniform->_frames[frame];
         aggregate._imageView = imageView;
         aggregate._sampler = sampler;
 
@@ -486,7 +485,7 @@ bool Vulkan::EffectDescriptor::bindSampler(Vulkan::Context & context, Vulkan::Sh
         writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         writeSet.dstArrayElement = 0;
         writeSet.dstBinding = binding;
-        writeSet.dstSet = aggregate._descriptorSet;
+        writeSet.dstSet = _descriptorSets[frame];
         writeSet.pBufferInfo = VK_NULL_HANDLE;
         writeSet.pImageInfo = &imageInfo;
         writeSet.pNext = VK_NULL_HANDLE;
@@ -1886,33 +1885,38 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
 
 bool Vulkan::createDescriptorSetLayout(Context & context, Vulkan::EffectDescriptor& effect)
 {
+    std::vector<VkDescriptorSetLayoutBinding> layouts;
 
-    for (unsigned int stage = 0; stage < static_cast<unsigned int>(Vulkan::ShaderStage::ShaderStageCount); stage++)
+    for (size_t i = 0; i < effect._uniforms.size(); i++)
     {
-        for (size_t i = 0; i < effect._uniforms[stage].size(); i++)
+
+        Uniform& uniform = effect._uniforms[i];
+
+        VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
+        descriptorSetLayoutBinding.binding = (uint32_t)uniform._binding;
+        descriptorSetLayoutBinding.descriptorCount = 1;
+        descriptorSetLayoutBinding.descriptorType = uniform._type;
+        descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+        bool found = false;
+
+        for (Vulkan::ShaderStage stage : uniform._stages)
         {
-            std::vector<VkDescriptorSetLayoutBinding> layouts;
-            Uniform & uniform = effect._uniforms[stage][i];
-
-            VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
-            descriptorSetLayoutBinding.binding = (uint32_t)uniform._binding;
-            descriptorSetLayoutBinding.descriptorCount = 1;
-            descriptorSetLayoutBinding.descriptorType = uniform._type;
-            descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
-            descriptorSetLayoutBinding.stageFlags = mapFromShaderStage(static_cast<Vulkan::ShaderStage>(stage));
-            layouts.push_back(descriptorSetLayoutBinding);
-
-            VkDescriptorSetLayoutCreateInfo createInfo = {};
-            createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            createInfo.bindingCount = (uint32_t)layouts.size();
-            createInfo.pBindings = layouts.empty() ? nullptr : &layouts[0];
-
-            VkResult creationResult = vkCreateDescriptorSetLayout(context._device, &createInfo, nullptr, &uniform._descriptorSetLayout);
-            assert(creationResult == VK_SUCCESS);
-            if (creationResult != VK_SUCCESS)
-                return false;
+            descriptorSetLayoutBinding.stageFlags |= mapFromShaderStage(stage);
         }
+
+        layouts.push_back(descriptorSetLayoutBinding);
+
     }
+
+    VkDescriptorSetLayoutCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    createInfo.bindingCount = (uint32_t)layouts.size();
+    createInfo.pBindings = layouts.empty() ? nullptr : &layouts[0];
+
+    VkResult creationResult = vkCreateDescriptorSetLayout(context._device, &createInfo, nullptr, &effect._descriptorSetLayout);
+    assert(creationResult == VK_SUCCESS);
+    if (creationResult != VK_SUCCESS)
+        return false;
 
     return true;
 
@@ -2199,50 +2203,47 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
     allocInfo.descriptorPool = effect._descriptorPool;
     allocInfo.descriptorSetCount = 1;
 
+    const uint32_t uniformCount = effect.totalNumUniforms();
+    static std::vector<Uniform*> uniforms(1);
+    if (uniforms.size() < uniformCount)
+        uniforms.resize(2 * (uniformCount + 1)); // amortise resizing
 
-    for (uint32_t stage = 0; stage < static_cast<int>(Vulkan::ShaderStage::ShaderStageCount); stage++)
+    std::vector<VkDescriptorSetLayout> descriptorSetLayouts(1, effect._descriptorSetLayout);
+    allocInfo.pSetLayouts = &descriptorSetLayouts[0];
+
+    effect._descriptorSets.resize(framesCount);
+    for (uint32_t frame = 0; frame < framesCount; frame++)
     {
-        const uint32_t uniformCount = effect.totalNumUniforms();
-        static std::vector<Uniform*> uniforms(1);
-        if (uniforms.size() < uniformCount)
-            uniforms.resize(2 * (uniformCount + 1)); // amortise resizing
+        VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &effect._descriptorSets[frame]);
+        assert(allocationResult == VK_SUCCESS);
+        if (allocationResult != VK_SUCCESS)
+            return false;
 
-        for (Uniform & uniform : effect._uniforms[stage])
-        {           
-            std::vector<VkDescriptorSetLayout> descriptorSetLayouts(1, uniform._descriptorSetLayout);
-            allocInfo.pSetLayouts = &descriptorSetLayouts[0];
-
-            for (uint32_t frame = 0; frame < framesCount; frame++)
+        for (Vulkan::Uniform& uniform : effect._uniforms)
+        {
+            if (uniform._type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
             {
+                VkDescriptorBufferInfo bufferInfo;
+                memset(&bufferInfo, 0, sizeof(bufferInfo));
+                bufferInfo.buffer = uniform._frames[frame]._buffer._buffer;
+                bufferInfo.offset = 0;
+                bufferInfo.range = uniform._frames[frame]._buffer._size;
 
-                VkResult allocationResult = vkAllocateDescriptorSets(context._device, &allocInfo, &uniform._frames[frame]._descriptorSet);
-                assert(allocationResult == VK_SUCCESS);
-                if (allocationResult != VK_SUCCESS)
-                    return false;
+                VkWriteDescriptorSet descriptorWrite = {};
+                descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrite.dstSet = effect._descriptorSets[frame];
+                descriptorWrite.dstBinding = uniform._binding;
+                descriptorWrite.dstArrayElement = 0;
+                descriptorWrite.descriptorType = uniform._type;
+                descriptorWrite.descriptorCount = 1;
+                descriptorWrite.pBufferInfo = &bufferInfo;
 
-                if (uniform._type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                {
-                    VkDescriptorBufferInfo bufferInfo;
-                    memset(&bufferInfo, 0, sizeof(bufferInfo));
-                    bufferInfo.buffer = uniform._frames[frame]._buffer._buffer;
-                    bufferInfo.offset = 0;
-                    bufferInfo.range = uniform._frames[frame]._buffer._size;
-
-                    VkWriteDescriptorSet descriptorWrite = {};
-                    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    descriptorWrite.dstSet = uniform._frames[frame]._descriptorSet;
-                    descriptorWrite.dstBinding = uniform._binding;
-                    descriptorWrite.dstArrayElement = 0;
-                    descriptorWrite.descriptorType = uniform._type;
-                    descriptorWrite.descriptorCount = 1;
-                    descriptorWrite.pBufferInfo = &bufferInfo;
-
-                    vkUpdateDescriptorSets(context._device, 1, &descriptorWrite, 0, nullptr);
-                }
+                vkUpdateDescriptorSets(context._device, 1, &descriptorWrite, 0, nullptr);
             }
-
         }
+
     }
+
 
     return true;
 }

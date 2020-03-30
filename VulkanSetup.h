@@ -252,7 +252,6 @@ namespace Vulkan
 
     struct UniformAggregate
     {
-        VkDescriptorSet _descriptorSet;
         BufferDescriptor _buffer;
         VkSampler _sampler;
         VkImageView _imageView;
@@ -260,12 +259,12 @@ namespace Vulkan
 
     struct Uniform
     {
-        VkDescriptorSetLayout _descriptorSetLayout;
         VkDescriptorType _type;
         uint32_t _binding;
         uint32_t _set;
         std::string _name;
         std::vector<UniformAggregate> _frames;
+        std::vector<ShaderStage> _stages;
 
         Uniform()
             :_binding(UINT32_MAX)
@@ -279,13 +278,15 @@ namespace Vulkan
         std::vector<Shader> _shaderModules;
         std::vector<VkCommandBuffer> _commandBuffers;
         std::vector<MeshPtr> _meshes;
+        std::vector<VkDescriptorSet> _descriptorSets;
+        VkDescriptorSetLayout _descriptorSetLayout;
 
         VkDescriptorPool _descriptorPool; // for image samplers
 
         VkRenderPass _renderPass; 
 
         UpdateUniformFunction _updateUniform = [](Vulkan::ShaderStage stage, unsigned int uniformIndex, std::vector<unsigned char>&) { return 0; };
-        std::vector<Uniform> _uniforms[(int)(Vulkan::ShaderStage::ShaderStageCount)];
+        std::vector<Uniform> _uniforms;
 
         RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true; };
         std::string _name;
@@ -301,15 +302,13 @@ namespace Vulkan
         uint32_t totalNumUniforms() const;
         uint32_t totalTypeCount(VkDescriptorType type) const;
         uint32_t totalTypeCount(Vulkan::ShaderStage stage, VkDescriptorType type) const;
-        bool hasUniformWithBinding(int binding);
         uint32_t addUniformSampler(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string & name, int binding= -1 );
         uint32_t addUniformImage(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, int binding = -1);
         uint32_t addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, uint32_t size, int binding = -1);
-        uint32_t collectDescriptorSetsOfType(VkDescriptorType type, uint32_t frame, VkDescriptorSet* result);
-        uint32_t collectDescriptorSets(uint32_t frame, VkDescriptorSet* result);
         void collectDescriptorSetLayouts(std::vector<VkDescriptorSetLayout> & layouts);
         uint32_t collectUniformsOfType(VkDescriptorType type, Uniform** result);
         uint32_t collectUniformsOfType(VkDescriptorType type, Vulkan::ShaderStage stage, Uniform** result);
+        Uniform* getUniformWithBinding(int binding);
 
         bool bindSampler(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkSampler sampler);
         bool bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView);

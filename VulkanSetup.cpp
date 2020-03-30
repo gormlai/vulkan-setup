@@ -329,7 +329,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformSampler(Vulkan::Context& context, V
     if (uniform != nullptr)
     {
         assert(uniform->_name == name);
-        assert(unifrom->_binding == binding);
+        assert(uniform->_binding == binding);
         uniform->_stages.push_back(stage);
         return binding;
     }
@@ -358,7 +358,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformImage(Vulkan::Context& context, Vul
     if (uniform != nullptr)
     {
         assert(uniform->_name == name);
-        assert(unifrom->_binding == binding);
+        assert(uniform->_binding == binding);
         uniform->_stages.push_back(stage);
         return binding;
     }
@@ -387,7 +387,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
     if (uniform != nullptr)
     {
         assert(uniform->_name == name);
-        assert(unifrom->_binding == binding);
+        assert(uniform->_binding == binding);
         uniform->_stages.push_back(stage);
         return binding;
     }

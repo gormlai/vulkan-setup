@@ -2284,27 +2284,23 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
 {
     for(EffectDescriptorPtr & effect : context._effects)
     {
-        for (uint32_t stage = 0; stage < static_cast<uint32_t>(Vulkan::ShaderStage::ShaderStageCount); stage++)
+        static std::vector<unsigned char> updateData;
+
+        const uint32_t uniformCount = effect->totalTypeCount(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        static std::vector<Uniform*> uniforms(1);
+        if (uniforms.size() < uniformCount)
+            uniforms.resize(2 * (uniformCount + 1)); // amortise resizing
+
+        effect->collectUniformsOfType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &uniforms[0]);
+        for (unsigned int uniformIndex = 0; uniformIndex < uniformCount; uniformIndex++)
         {
-            static std::vector<unsigned char> updateData;
-
-            const uint32_t uniformCount = effect->totalTypeCount((Vulkan::ShaderStage)stage, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-            static std::vector<Uniform*> uniforms(1);
-            if (uniforms.size() < uniformCount)
-                uniforms.resize(2 * (uniformCount + 1)); // amortise resizing
-
-            effect->collectUniformsOfType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, (Vulkan::ShaderStage)stage, &uniforms[0]);
-            for (unsigned int uniformIndex = 0 ; uniformIndex < uniformCount ; uniformIndex++)
-            {
-                Uniform* uniform = uniforms[uniformIndex];
-                unsigned int uniformUpdateSize = effect->_updateUniform(static_cast<Vulkan::ShaderStage>(stage), uniform->_binding, updateData);
-                if (uniformUpdateSize != 0)
-                    uniform->_frames[context._currentFrame]._buffer.fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
-            }
-
-            effect->_recordCommandBuffers(appDesc, context, *effect);
+            Uniform* uniform = uniforms[uniformIndex];
+            unsigned int uniformUpdateSize = effect->_updateUniform(*uniform, updateData);
+            if (uniformUpdateSize != 0)
+                uniform->_frames[context._currentFrame]._buffer.fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
         }
 
+        effect->_recordCommandBuffers(appDesc, context, *effect);
     }
     
 }

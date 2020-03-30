@@ -214,7 +214,8 @@ namespace Vulkan
     };
     
     struct Mesh;
-    typedef std::function<unsigned int (Vulkan::ShaderStage stage, unsigned int uniformIndex, std::vector<unsigned char> &)> UpdateUniformFunction;
+    struct Uniform;
+    typedef std::function<unsigned int (const Vulkan::Uniform & uniform, std::vector<unsigned char> &)> UpdateUniformFunction;
 
 	struct Mesh
 	{
@@ -285,7 +286,7 @@ namespace Vulkan
 
         VkRenderPass _renderPass; 
 
-        UpdateUniformFunction _updateUniform = [](Vulkan::ShaderStage stage, unsigned int uniformIndex, std::vector<unsigned char>&) { return 0; };
+        UpdateUniformFunction _updateUniform = [](const Vulkan::Uniform& uniform, std::vector<unsigned char>&) { return 0; };
         std::vector<Uniform> _uniforms;
 
         RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true; };

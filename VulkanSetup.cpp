@@ -717,7 +717,7 @@ bool Vulkan::createImage(Vulkan::Context & context,
     const VkResult result = vkCreateImage(context._device, &createInfo, VK_NULL_HANDLE, &resultImage);
     if (result != VK_SUCCESS)
         return false;
-
+    /*
     VkMemoryRequirements imageMemoryRequirements;
     vkGetImageMemoryRequirements(context._device, resultImage, &imageMemoryRequirements);
 
@@ -732,7 +732,7 @@ bool Vulkan::createImage(Vulkan::Context & context,
     }
 
     vkBindImageMemory(context._device, resultImage, imageMemory, 0);
-
+    */
     return true;
 }
 
@@ -1414,7 +1414,7 @@ bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context)
 		if(!createImageView(context, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, depthImageView))
 			continue;
 
-		if (!transitionImageLayout(context, depthImage, depthFormat, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
+		if (!transitionImageLayout(context, depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
 			continue;
 
 		context._depthImages[i] = depthImage;
@@ -1481,7 +1481,7 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPa
     subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpassDescription.colorAttachmentCount = 1;
     subpassDescription.pColorAttachments = &colorAttachmentReference;
-//	subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
+	subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
 
     VkAttachmentDescription& colorAttachment = renderPassInfoDescriptor._colorAttachment;
     memset(&colorAttachment, 0, sizeof(colorAttachment));
@@ -1516,11 +1516,11 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPa
     
     VkRenderPassCreateInfo& createInfo = renderPassInfoDescriptor._createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
-//    VkAttachmentDescription attachmentDescriptions[] = { colorAttachment, depthAttachment };
     std::array<VkAttachmentDescription, 10> & attachmentDescriptions = renderPassInfoDescriptor._attachmentDescriptions;
     attachmentDescriptions[0] = colorAttachment;
+    attachmentDescriptions[0] = depthAttachment;
     createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    createInfo.attachmentCount = 1;
+    createInfo.attachmentCount = 2;
 	createInfo.pAttachments = &attachmentDescriptions[0];
     createInfo.subpassCount = 1;
     createInfo.pSubpasses = &subpassDescription;
@@ -1529,6 +1529,11 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPa
 
     renderPassCreationCallback(renderPassInfoDescriptor); // give the user a chance to customize pipeline
     attachmentDescriptions[0] = colorAttachment;
+    createInfo.attachmentCount = 1;
+    if (subpassDescription.pDepthStencilAttachment != nullptr) {
+        attachmentDescriptions[1] = depthAttachment;
+        createInfo.attachmentCount = 2;
+    }
 
 	VkRenderPass renderPass;
     VkResult createRenderPassResult = vkCreateRenderPass(Context._device, &createInfo, nullptr, &renderPass);
@@ -1548,8 +1553,7 @@ bool Vulkan::createFrameBuffers(Context & Context)
         VkFramebufferCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
         
-//        VkImageView attachments[] = { Context._colorBuffers[i], Context._depthImageViews[i] };
-        VkImageView attachments[] = { Context._colorBuffers[i]};
+        VkImageView attachments[] = { Context._colorBuffers[i], Context._depthImageViews[i] };
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = Context._renderPass;
         createInfo.attachmentCount = sizeof(attachments) / sizeof(VkImageView);
@@ -1773,7 +1777,7 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS;
     depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
     depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
-//    createInfo.pDepthStencilState = &depthStencilCreateInfo;
+    createInfo.pDepthStencilState = &depthStencilCreateInfo;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachmentCreateInfo;
     memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));
@@ -2412,13 +2416,13 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         return false;
     }
 
-    /*
+    
 	if (!createDepthBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");
 		return false;
 	}
-    */
+    
 
 	if (!createFrameBuffers(context))
 	{
@@ -2468,12 +2472,12 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
         return false;
     }
     
-    /*
+    
 	if (!createDepthBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");
 		return false;
-	}*/
+	}
 
 	if (!createFrameBuffers(context))
 	{

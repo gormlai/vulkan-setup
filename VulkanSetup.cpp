@@ -36,7 +36,6 @@ namespace Vulkan
     std::vector<VkFence> createFences(Context& context);
     std::vector<VkSemaphore> createSemaphores(Context& context);
     bool createSemaphores(AppDescriptor& appDesc, Context& context);
-    bool createVertexOrIndexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferDescriptor& result, BufferType type);
     bool createIndexAndVertexBuffer(AppDescriptor& appDesc, Context& context, std::vector<unsigned char>& vertexData, std::vector<unsigned char>& indexData, void* userData, Vulkan::Mesh& result);
     bool createDescriptorPool(Context& context, EffectDescriptor& effect);
     bool createDescriptorSet(AppDescriptor& appDesc, Context& context, EffectDescriptor& effect);
@@ -2078,7 +2077,7 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     return true;
 }
 
-bool Vulkan::createVertexOrIndexBuffer(Context & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type)
+bool Vulkan::createIndexOrVertexBuffer(Context & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type)
 {
     
     BufferDescriptor stagingBufferDescriptor;
@@ -2116,7 +2115,7 @@ bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & conte
         // index buffer
         const void * data = indexData.data();
         const VkDeviceSize bufferSize =  indexData.size();
-        if (!createVertexOrIndexBuffer(context, data, bufferSize, indexBuffer, BufferType::Index))
+        if (!createIndexOrVertexBuffer(context, data, bufferSize, indexBuffer, BufferType::Index))
             return false;
     }
     
@@ -2124,13 +2123,13 @@ bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & conte
         // vertex buffer
         const void * data = vertexData.data();
         const VkDeviceSize bufferSize = vertexData.size();
-        if (!createVertexOrIndexBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex))
+        if (!createIndexOrVertexBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex))
             return false;
     }
-    
-    result._indexBuffer = indexBuffer;
-    result._vertexBuffer = vertexBuffer;
-    result._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
+
+    result.setIndexBuffer(indexBuffer);
+    result.setVertexBuffer(vertexBuffer);
+    result._numPrimitives = (unsigned int)indexData.size() / sizeof(uint16_t);
     result._userData = userData;
     
     return true;
@@ -2248,38 +2247,6 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
     return true;
 }
 
-
-/*
-void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, unsigned int bufferIndex, uint32_t meshIndex)
-{
-    Mesh & mesh = context._vulkanMeshes[meshIndex];
-    
-    UniformBufferObject ubo = mesh._transformation;
-
-	const VulkanCamera & cam = context.getCamera();
-	ubo._view = glm::lookAt(cam._position, cam._lookat, cam._up);
-	ubo._projection = glm::perspective(glm::radians(45.0f), context._swapChainSize.width / (float)context._swapChainSize.height, 0.1f, 1000.0f);
-
-	glm::mat4 concatMat = ubo._projection * ubo._view * ubo._model;
-	glm::vec3 result = concatMat * glm::vec4{0,0,0, 1};
-    
-    // set lights
-    ubo._lights[0] = glm::vec4{0,0,0,0};
-    ubo._numLights = 1;
-
-    void* data = nullptr;
-    const VkResult mapMemoryResult = vkMapMemory(context._device,
-                mesh._uniformBuffers[bufferIndex]._memory,
-                0,
-                sizeof(ubo),
-                0, &data);
-	assert(mapMemoryResult == VK_SUCCESS);
-    
-    memcpy(data, &ubo, sizeof(ubo));
-    vkUnmapMemory(context._device, context._vulkanMeshes[meshIndex]._uniformBuffers[bufferIndex]._memory);
-}
-*/
-
 void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t currentImage)
 {
     for(EffectDescriptorPtr & effect : context._effects)
@@ -2307,8 +2274,8 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
 
 void Vulkan::destroyMesh(Context & context, Mesh& mesh)
 {
-	destroyBufferDescriptor(context, mesh._vertexBuffer);
-	destroyBufferDescriptor(context, mesh._indexBuffer);
+//	destroyBufferDescriptor(context, mesh._vertexBuffer);
+//	destroyBufferDescriptor(context, mesh._indexBuffer);
 //	for(auto uniformBuffer : mesh._uniformBuffers)
 //		destroyBufferDescriptor(context, uniformBuffer);
 //	mesh._uniformBuffers.clear();

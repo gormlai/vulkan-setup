@@ -219,17 +219,41 @@ namespace Vulkan
 
 	struct Mesh
 	{
-		BufferDescriptor _vertexBuffer;
-		BufferDescriptor _indexBuffer;
-
-		unsigned int _numIndices;
+		unsigned int _numPrimitives;
         void * _userData;
         
-		Mesh()
-            :_numIndices(0)
+        BufferDescriptor& getVertexBuffer() {
+            return _buffers[0];
+        }
+
+        BufferDescriptor& getIndexBuffer() {
+            return _buffers[1];
+        }
+
+        BufferDescriptor& getInstanceBuffer() {
+            return _buffers[2];
+        }
+
+        void setVertexBuffer(BufferDescriptor& vertexBuffer) {
+            _buffers[0] = vertexBuffer;
+        }
+
+        void setIndexBuffer(BufferDescriptor& indexBuffer) {
+            _buffers[1] = indexBuffer;
+        }
+
+        void setInstanceBuffer(BufferDescriptor& instanceBuffer) {
+            _buffers[2] = instanceBuffer;
+        }
+
+        Mesh()
+            :_numPrimitives(0)
             ,_userData(nullptr)
 		{
 		}
+
+    private:
+        BufferDescriptor _buffers[3];
 
 	};
     typedef std::shared_ptr<Mesh> MeshPtr;
@@ -379,6 +403,7 @@ namespace Vulkan
         std::vector<unsigned char>& indexData, 
         void* userData, 
         Vulkan::Mesh& result);
+    bool createIndexOrVertexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferDescriptor& result, BufferType type);
 
 
     bool handleVulkanSetup(AppDescriptor& appDesc, Context& context);

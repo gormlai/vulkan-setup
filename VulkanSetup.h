@@ -436,7 +436,7 @@ namespace Vulkan
     bool createImage(Vulkan::Context& context, const T* pixels, const unsigned int width, const unsigned int height, const unsigned int depth, VkFormat format, VkImage& result)
     {
         Vulkan::BufferDescriptor stagingBuffer;
-        const VkDeviceSize size = sizeof(T) * width * height;
+        const VkDeviceSize size = sizeof(T) * width * height * depth;
         if (!Vulkan::createBuffer(context,
             size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,

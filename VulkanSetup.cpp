@@ -585,7 +585,8 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
             VkQueue queue,
             VkImage image,
             unsigned int width,
-            unsigned int height)
+            unsigned int height,
+            unsigned int depth)
 {
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -613,7 +614,7 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
     region.imageOffset = VkOffset3D{0, 0, 0};
-    region.imageExtent = VkExtent3D{width, height, 1};
+    region.imageExtent = VkExtent3D{width, height, depth};
 
     vkCmdCopyBufferToImage(commandBuffer, _buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 

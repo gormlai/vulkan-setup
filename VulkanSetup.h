@@ -210,7 +210,8 @@ namespace Vulkan
                     VkQueue queue,
                     VkImage image,
                     unsigned int width,
-                    unsigned int height);
+                    unsigned int height,
+                    unsigned int depth);
     };
     
     struct Mesh;
@@ -430,6 +431,77 @@ namespace Vulkan
                  VkImageTiling requiredTiling,
                  VkImageUsageFlags requiredUsage,
                      VkImage& resultImage);
+
+    template<typename T>
+    bool createImage(Vulkan::Context& context, const T* pixels, const unsigned int width, const unsigned int height, const unsigned int depth, VkFormat format, VkImage& result)
+    {
+        Vulkan::BufferDescriptor stagingBuffer;
+        const VkDeviceSize size = sizeof(T) * width * height;
+        if (!Vulkan::createBuffer(context,
+            size,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer))
+        {
+            SDL_LogError(0, "createImage - Failed to create staging buffer for image");
+            return false;
+        }
+
+        if (!stagingBuffer.fill(context._device, reinterpret_cast<const void*>(pixels), size))
+        {
+            SDL_LogError(0, "createImage - Failed to fill staging buffer");
+            return false;
+        }
+
+        if (!Vulkan::createImage(context,
+            width,
+            height,
+            depth,
+            format,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+            result))
+        {
+            SDL_LogError(0, "createImage - Failed to create image");
+            return false;
+        }
+
+        if (!Vulkan::transitionImageLayout(context, result,
+            format,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL))
+        {
+            SDL_LogError(0, "createImage - transitionImageLayout : VK_IMAGE_LAYOUT_UNDEFINED -> VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ");
+            return false;
+        }
+
+        if (!stagingBuffer.copyTo(context._device,
+            context._commandPool,
+            context._graphicsQueue,
+            result,
+            width,
+            height, 
+            depth))
+        {
+            SDL_LogError(0, "createImage - copyData");
+            return false;
+        }
+
+
+        if (!Vulkan::transitionImageLayout(context,
+            result,
+            format,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_GENERAL))
+        {
+            SDL_LogError(0, "createImage - transitionImageLayout : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> VK_IMAGE_LAYOUT_GENERAL ");
+            return false;
+        }
+
+        return true;
+    }
+
+
 
     bool createImageView(Vulkan::Context& context,
         VkImage image,

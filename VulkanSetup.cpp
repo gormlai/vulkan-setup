@@ -209,15 +209,17 @@ namespace
 
     Vulkan::Uniform* findUniform(Vulkan::EffectDescriptor& effect, Vulkan::ShaderStage stage, uint32_t binding)
     {
-        uint32_t index = (uint32_t)stage;
-        for (size_t i = 0; i < effect._uniforms.size(); i++)
+        for (Vulkan::Uniform & uniform : effect._uniforms)
         {
-            Vulkan::Uniform* uniform = &effect._uniforms[index];
-            for (Vulkan::ShaderStage existingStage : uniform->_stages)
+            if (uniform._binding == binding)
             {
-                if (existingStage == stage)
-                    return uniform;
+                for (Vulkan::ShaderStage existingStage : uniform._stages)
+                {
+                    if (existingStage == stage)
+                        return &uniform;
+                }
             }
+
         }
 
         return nullptr;
@@ -466,33 +468,29 @@ bool Vulkan::EffectDescriptor::bindSampler(Vulkan::Context & context, Vulkan::Sh
     if (uniform->_type != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
         return false;
 
-    for (unsigned int frame = 0; frame < uniform->_frames.size(); frame++)
-    {
-        UniformAggregate& aggregate = uniform->_frames[frame];
-        aggregate._imageView = imageView;
-        aggregate._sampler = sampler;
+    UniformAggregate& aggregate = uniform->_frames[context._currentFrame];
+    aggregate._imageView = imageView;
+    aggregate._sampler = sampler;
 
-        VkDescriptorImageInfo imageInfo;
+    VkDescriptorImageInfo imageInfo;
 
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        imageInfo.imageView = imageView;
-        imageInfo.sampler = sampler;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    imageInfo.imageView = imageView;
+    imageInfo.sampler = sampler;
 
-        VkWriteDescriptorSet writeSet = { };
-        writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSet.descriptorCount = 1;
-        writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writeSet.dstArrayElement = 0;
-        writeSet.dstBinding = binding;
-        writeSet.dstSet = _descriptorSets[frame];
-        writeSet.pBufferInfo = VK_NULL_HANDLE;
-        writeSet.pImageInfo = &imageInfo;
-        writeSet.pNext = VK_NULL_HANDLE;
-        writeSet.pTexelBufferView = VK_NULL_HANDLE;
+    VkWriteDescriptorSet writeSet = { };
+    writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeSet.descriptorCount = 1;
+    writeSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writeSet.dstArrayElement = 0;
+    writeSet.dstBinding = binding;
+    writeSet.dstSet = _descriptorSets[context._currentFrame];
+    writeSet.pBufferInfo = VK_NULL_HANDLE;
+    writeSet.pImageInfo = &imageInfo;
+    writeSet.pNext = VK_NULL_HANDLE;
+    writeSet.pTexelBufferView = VK_NULL_HANDLE;
 
-        vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
-    }
-
+    vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
 
     return true;
 }
@@ -685,7 +683,24 @@ namespace
 	}
 }
 
-// TODO - this method leaks device memory
+bool Vulkan::allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory & memory)
+{
+    VkMemoryRequirements imageMemoryRequirements;
+    vkGetImageMemoryRequirements(context._device, image, &imageMemoryRequirements);
+
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = imageMemoryRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(context, imageMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    if (vkAllocateMemory(context._device, &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+        return false;
+    }
+
+    vkBindImageMemory(context._device, image, memory, 0);
+    return true;
+}
+
 bool Vulkan::createImage(Vulkan::Context & context,
                  unsigned int width,
                  unsigned int height,
@@ -718,26 +733,86 @@ bool Vulkan::createImage(Vulkan::Context & context,
     const VkResult result = vkCreateImage(context._device, &createInfo, VK_NULL_HANDLE, &resultImage);
     if (result != VK_SUCCESS)
         return false;
-    /*
-    VkMemoryRequirements imageMemoryRequirements;
-    vkGetImageMemoryRequirements(context._device, resultImage, &imageMemoryRequirements);
 
-    VkMemoryAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = imageMemoryRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(context, imageMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    VkDeviceMemory imageMemory;
-    if (vkAllocateMemory(context._device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate image memory!");
-    }
-
-    vkBindImageMemory(context._device, resultImage, imageMemory, 0);
-    */
     return true;
 }
 
-bool Vulkan::createImageView(Vulkan::Context& context, VkImage image, VkFormat requiredFormat, VkImageAspectFlags requiredAspectFlags, VkImageView& result)
+bool Vulkan::createImage(Vulkan::Context& context, const void* pixels, const unsigned int pixelSize, const unsigned int width, const unsigned int height, const unsigned int depth, VkFormat format, VkImage& result, VkDeviceMemory& imageMemory)
+{
+    Vulkan::BufferDescriptor stagingBuffer;
+    const VkDeviceSize size = pixelSize * width * height * depth;
+    if (!Vulkan::createBuffer(context,
+        size,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        stagingBuffer))
+    {
+        SDL_LogError(0, "createImage - Failed to create staging buffer for image");
+        return false;
+    }
+
+    if (!stagingBuffer.fill(context._device, reinterpret_cast<const void*>(pixels), size))
+    {
+        SDL_LogError(0, "createImage - Failed to fill staging buffer");
+        return false;
+    }
+
+    if (!Vulkan::createImage(context,
+        width,
+        height,
+        depth,
+        format,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+        result))
+    {
+        SDL_LogError(0, "createImage - Failed to create image");
+        return false;
+    }
+
+    if (!Vulkan::allocateAndBindImageMemory(context, result, imageMemory))
+    {
+        SDL_LogError(0, "createImage - Failed to allocate imageMemory");
+        return false;
+    }
+
+    if (!Vulkan::transitionImageLayout(context, result,
+        format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL))
+    {
+        SDL_LogError(0, "createImage - transitionImageLayout : VK_IMAGE_LAYOUT_UNDEFINED -> VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ");
+        return false;
+    }
+
+    if (!stagingBuffer.copyTo(context._device,
+        context._commandPool,
+        context._graphicsQueue,
+        result,
+        width,
+        height,
+        depth))
+    {
+        SDL_LogError(0, "createImage - copyData");
+        return false;
+    }
+
+
+    if (!Vulkan::transitionImageLayout(context,
+        result,
+        format,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL))
+    {
+        SDL_LogError(0, "createImage - transitionImageLayout : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> VK_IMAGE_LAYOUT_GENERAL ");
+        return false;
+    }
+
+    return true;
+}
+
+
+bool Vulkan::createImageView(Vulkan::Context& context, VkImage image, VkFormat requiredFormat, VkImageAspectFlags requiredAspectFlags, VkImageViewType imageViewType, VkImageView& result)
 {
     VkImageViewCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
@@ -745,7 +820,7 @@ bool Vulkan::createImageView(Vulkan::Context& context, VkImage image, VkFormat r
     createInfo.pNext = NULL;
     createInfo.flags = 0;
     createInfo.image = image;
-    createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    createInfo.viewType = imageViewType;
     createInfo.format = requiredFormat;
     createInfo.components = VkComponentMapping{ VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
     createInfo.subresourceRange.aspectMask = requiredAspectFlags;
@@ -1412,7 +1487,7 @@ bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context)
 		if (!allocateImageMemory(context, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory))
 			continue;
 
-		if(!createImageView(context, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, depthImageView))
+		if(!createImageView(context, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D, depthImageView))
 			continue;
 
 		if (!transitionImageLayout(context, depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
@@ -2674,4 +2749,35 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc,
     }
 
     return true;
+}
+
+bool Vulkan::createSampler(Vulkan::Context& context, VkSampler& sampler, VkSamplerCreateInfo & samplerCreateInfo)
+{
+    VkResult createSamplerResult = vkCreateSampler(context._device, &samplerCreateInfo, VK_NULL_HANDLE, &sampler);
+    assert(createSamplerResult == VK_SUCCESS);
+
+    return createSamplerResult == VK_SUCCESS;
+}
+
+bool Vulkan::createSampler(Vulkan::Context& context, VkSampler& sampler)
+{
+    VkSamplerCreateInfo samplerCreateInfo = { };
+    samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+    samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+    samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCreateInfo.anisotropyEnable = VK_FALSE;
+    samplerCreateInfo.maxAnisotropy = 1;
+    samplerCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+    samplerCreateInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerCreateInfo.compareEnable = VK_FALSE;
+    samplerCreateInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerCreateInfo.mipLodBias = 0;
+    samplerCreateInfo.minLod = 0.0f;
+    samplerCreateInfo.maxLod = 0.0f;
+
+    return Vulkan::createSampler(context, sampler, samplerCreateInfo);
 }

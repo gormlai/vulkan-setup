@@ -2783,7 +2783,7 @@ bool Vulkan::createSampler(Vulkan::Context& context, VkSampler& sampler)
     return Vulkan::createSampler(context, sampler, samplerCreateInfo);
 }
 
-void setAllocationCallbacks(VkAllocationCallbacks *  allocationCallbacks)
+void Vulkan::setAllocationCallbacks(VkAllocationCallbacks *  allocationCallbacks)
 {
     Vulkan::g_allocationCallbacks = allocationCallbacks;
 }

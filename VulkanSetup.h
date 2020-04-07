@@ -220,7 +220,7 @@ namespace Vulkan
 
 	struct Mesh
 	{
-		unsigned int _numPrimitives;
+		unsigned int _numIndices;
         void * _userData;
         
         BufferDescriptor& getVertexBuffer() {
@@ -248,7 +248,7 @@ namespace Vulkan
         }
 
         Mesh()
-            :_numPrimitives(0)
+            :_numIndices(0)
             ,_userData(nullptr)
 		{
 		}
@@ -453,6 +453,7 @@ namespace Vulkan
 
     bool createSampler(Vulkan::Context& context, VkSampler& sampler, VkSamplerCreateInfo & samplerCreateInfo);
     bool createSampler(Vulkan::Context& context, VkSampler& sampler);
+    void setAllocationCallbacks(VkAllocationCallbacks * allocationCallbacks);
 }
 
 #endif

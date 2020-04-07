@@ -48,6 +48,7 @@ namespace Vulkan
     bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
     bool createComputePipeline(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
 
+    VkAllocationCallbacks * g_allocationCallbacks = nullptr;
 }
 
 ///////////////////////////////////// Vulkan Variable ///////////////////////////////////////////////////////////////////
@@ -173,7 +174,7 @@ namespace
         allocInfo.allocationSize = memRequirements.size;
         allocInfo.memoryTypeIndex = findMemoryType(context, memRequirements.memoryTypeBits, requiredProperties);
 
-        const VkResult allocationMemoryResult = vkAllocateMemory(context._device, &allocInfo, VK_NULL_HANDLE, &result);
+        const VkResult allocationMemoryResult = vkAllocateMemory(context._device, &allocInfo, Vulkan::g_allocationCallbacks, &result);
         if (allocationMemoryResult != VK_SUCCESS)
             return false;
 
@@ -693,7 +694,7 @@ bool Vulkan::allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image
     allocInfo.allocationSize = imageMemoryRequirements.size;
     allocInfo.memoryTypeIndex = findMemoryType(context, imageMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    if (vkAllocateMemory(context._device, &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+    if (vkAllocateMemory(context._device, &allocInfo, Vulkan::g_allocationCallbacks, &memory) != VK_SUCCESS) {
         return false;
     }
 
@@ -2135,7 +2136,7 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     allocInfo.memoryTypeIndex = (uint32_t)memType;
     
     VkDeviceMemory vertexBufferMemory;
-	const VkResult allocateMemoryResult = vkAllocateMemory(context._device, &allocInfo, nullptr, &vertexBufferMemory);
+	const VkResult allocateMemoryResult = vkAllocateMemory(context._device, &allocInfo, Vulkan::g_allocationCallbacks, &vertexBufferMemory);
 	assert(allocateMemoryResult == VK_SUCCESS);
 	if (allocateMemoryResult != VK_SUCCESS)
     {
@@ -2209,7 +2210,7 @@ bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & conte
 
     result.setIndexBuffer(indexBuffer);
     result.setVertexBuffer(vertexBuffer);
-    result._numPrimitives = (unsigned int)indexData.size() / sizeof(uint16_t);
+    result._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
     result._userData = userData;
     
     return true;
@@ -2780,4 +2781,9 @@ bool Vulkan::createSampler(Vulkan::Context& context, VkSampler& sampler)
     samplerCreateInfo.maxLod = 0.0f;
 
     return Vulkan::createSampler(context, sampler, samplerCreateInfo);
+}
+
+void setAllocationCallbacks(VkAllocationCallbacks *  allocationCallbacks)
+{
+    Vulkan::g_allocationCallbacks = allocationCallbacks;
 }

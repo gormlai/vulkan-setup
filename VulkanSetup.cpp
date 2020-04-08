@@ -2373,10 +2373,8 @@ void Vulkan::destroyBufferDescriptor(Context & context, BufferDescriptor& descri
 void Vulkan::clearMeshes(Context & context, EffectDescriptor & effect)
 {
 	resetCommandBuffers(context, effect._commandBuffers);
-	for(auto mesh : effect._meshes)
-		destroyMesh(context, *mesh);
+//		destroyMesh(context, *mesh);
 
-    effect._meshes.clear();
 }
 
 bool Vulkan::initializeIndexAndVertexBuffers(AppDescriptor & appDesc, 

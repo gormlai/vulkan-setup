@@ -304,7 +304,6 @@ namespace Vulkan
         VkPipelineLayout _pipelineLayout;
         std::vector<Shader> _shaderModules;
         std::vector<VkCommandBuffer> _commandBuffers;
-        std::vector<MeshPtr> _meshes;
         std::vector<VkDescriptorSet> _descriptorSets;
         VkDescriptorSetLayout _descriptorSetLayout;
 

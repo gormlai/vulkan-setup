@@ -53,8 +53,6 @@ namespace Vulkan
     bool createComputePipeline(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
 
     static VmaAllocator g_allocator;
-
-    VkAllocationCallbacks * g_allocationCallbacks = nullptr;
 }
 
 ///////////////////////////////////// Vulkan Variable ///////////////////////////////////////////////////////////////////
@@ -180,7 +178,7 @@ namespace
         allocInfo.allocationSize = memRequirements.size;
         allocInfo.memoryTypeIndex = findMemoryType(context, memRequirements.memoryTypeBits, requiredProperties);
 
-        const VkResult allocationMemoryResult = vkAllocateMemory(context._device, &allocInfo, Vulkan::g_allocationCallbacks, &result);
+        const VkResult allocationMemoryResult = vkAllocateMemory(context._device, &allocInfo, nullptr, &result);
         if (allocationMemoryResult != VK_SUCCESS)
             return false;
 
@@ -700,7 +698,7 @@ bool Vulkan::allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image
     allocInfo.allocationSize = imageMemoryRequirements.size;
     allocInfo.memoryTypeIndex = findMemoryType(context, imageMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    if (vkAllocateMemory(context._device, &allocInfo, Vulkan::g_allocationCallbacks, &memory) != VK_SUCCESS) {
+    if (vkAllocateMemory(context._device, &allocInfo, nullptr, &memory) != VK_SUCCESS) {
         return false;
     }
 
@@ -2796,7 +2794,3 @@ bool Vulkan::createSampler(Vulkan::Context& context, VkSampler& sampler)
     return Vulkan::createSampler(context, sampler, samplerCreateInfo);
 }
 
-void Vulkan::setAllocationCallbacks(VkAllocationCallbacks *  allocationCallbacks)
-{
-//    Vulkan::g_allocationCallbacks = allocationCallbacks;
-}

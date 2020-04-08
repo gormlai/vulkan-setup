@@ -454,7 +454,6 @@ namespace Vulkan
 
     bool createSampler(Vulkan::Context& context, VkSampler& sampler, VkSamplerCreateInfo & samplerCreateInfo);
     bool createSampler(Vulkan::Context& context, VkSampler& sampler);
-    void setAllocationCallbacks(VkAllocationCallbacks * allocationCallbacks);
 }
 
 #endif

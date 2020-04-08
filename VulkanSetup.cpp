@@ -5,12 +5,15 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
+
 ////////////////////////////////////// Vulkan method declarations ///////////////////////////////////////////////////////
 
 namespace Vulkan
 {
     void clearMeshes(Context& context, EffectDescriptor& effect);
-    void destroyMesh(Context& context, Mesh& mesh);
+    void destroyMesh(Context& context, Mesh& mesh); 
     void destroyBufferDescriptor(Context& context, BufferDescriptor& descriptor);
 
     bool setupDebugCallback(Context& context);
@@ -44,9 +47,12 @@ namespace Vulkan
     bool createSwapChainDependents(AppDescriptor& appDesc, Context& context);
     bool cleanupSwapChain(AppDescriptor& appDesc, Context& context);
     bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulkan::EffectDescriptor& effect);
+    bool setupAllocator(Context& context);
 
     bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
     bool createComputePipeline(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+
+    static VmaAllocator g_allocator;
 
     VkAllocationCallbacks * g_allocationCallbacks = nullptr;
 }
@@ -523,8 +529,8 @@ Vulkan::AppDescriptor::AppDescriptor()
 
 bool Vulkan::BufferDescriptor::fill(VkDevice device, const void * srcData, VkDeviceSize amount)
 {
-    void * data = nullptr;
-	const VkResult mapResult = vkMapMemory(device, _memory, 0, amount, 0, &data);
+    void* data = nullptr;
+	const VkResult mapResult = vmaMapMemory(g_allocator, _memory, &data);
 	assert(mapResult == VK_SUCCESS);
     if(mapResult != VK_SUCCESS)
     {
@@ -533,7 +539,7 @@ bool Vulkan::BufferDescriptor::fill(VkDevice device, const void * srcData, VkDev
     }
     
     memcpy(data, srcData, amount);
-    vkUnmapMemory(device, _memory);
+    vmaUnmapMemory(g_allocator, _memory);
     return true;
 }
 
@@ -2110,50 +2116,41 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     createInfo.size = size;
     createInfo.usage = usage;
     createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    
+ 
+    VmaAllocationCreateInfo allocCreateInfo = {};
+    allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+/*    if(usage & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+        allocCreateInfo.usage |= VMA_MEMORY_USAGE
+
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT = 0x00000001,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT = 0x00000002,
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT = 0x00000004,
+        VK_MEMORY_PROPERTY_HOST_CACHED_BIT = 0x00000008,
+        VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT = 0x00000010,
+        VK_MEMORY_PROPERTY_PROTECTED_BIT = 0x00000020,
+        VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD = 0x00000040,
+        VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD = 0x00000080,
+        VK_MEMORY_PROPERTY_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+        */
+
+    allocCreateInfo.requiredFlags = properties;
+    allocCreateInfo.preferredFlags = properties;
+
+
     VkBuffer vertexBuffer;
-	const VkResult createBufferResult = vkCreateBuffer(context._device, &createInfo, nullptr, &vertexBuffer);
+    VmaAllocationInfo allocInfo = {};
+    VmaAllocation allocation;
+    const VkResult createBufferResult = vmaCreateBuffer(g_allocator, &createInfo, &allocCreateInfo, &vertexBuffer, &allocation, nullptr);
+//    vkCreateBuffer(context._device, &createInfo, nullptr, &vertexBuffer);
 	assert(createBufferResult == VK_SUCCESS);
     if(createBufferResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to create vertex buffer\n");
         return false;
-    }
-    
-    VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(context._device, vertexBuffer, &memRequirements);
-    int memType = findMemoryType(context, memRequirements.memoryTypeBits, properties);
-    if(memType<0)
-    {
-        SDL_LogError(0, "Required type of memory not available for this vertex buffer\n");
-        return false;
-    }
-    
-    VkMemoryAllocateInfo allocInfo;
-    memset(&allocInfo, 0, sizeof(VkMemoryAllocateInfo));
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = (uint32_t)memType;
-    
-    VkDeviceMemory vertexBufferMemory;
-	const VkResult allocateMemoryResult = vkAllocateMemory(context._device, &allocInfo, Vulkan::g_allocationCallbacks, &vertexBufferMemory);
-	assert(allocateMemoryResult == VK_SUCCESS);
-	if (allocateMemoryResult != VK_SUCCESS)
-    {
-        SDL_LogError(0, "Failed to allocate memory necessary for the vertex buffer\n");
-        return false;
-    }
-    
-	const VkResult bindBufferResult = vkBindBufferMemory(context._device, vertexBuffer, vertexBufferMemory, 0);
-	assert(bindBufferResult == VK_SUCCESS);
-	if (bindBufferResult != VK_SUCCESS)
-    {
-        SDL_LogError(0, "Failed to bind vertex buffer memory\n");
-        return false;
-    }
+    }    
     
     bufDesc._buffer = vertexBuffer;
-    bufDesc._memory = vertexBufferMemory;
+    bufDesc._memory = allocation;
     bufDesc._size = (unsigned int)size;
     return true;
 }
@@ -2370,7 +2367,7 @@ void Vulkan::destroyMesh(Context & context, Mesh& mesh)
 
 void Vulkan::destroyBufferDescriptor(Context & context, BufferDescriptor& descriptor)
 {
-	vkFreeMemory(context._device, descriptor._memory, VK_NULL_HANDLE);
+//	vkFreeMemory(context._device, descriptor._memory, VK_NULL_HANDLE);
 	vkDestroyBuffer(context._device, descriptor._buffer, VK_NULL_HANDLE);
 }
 
@@ -2400,6 +2397,16 @@ bool Vulkan::initializeIndexAndVertexBuffers(AppDescriptor & appDesc,
 
 
     result = mesh;
+    return true;
+}
+
+bool Vulkan::setupAllocator(Context& context)
+{
+    static VmaAllocatorCreateInfo allocatorInfo = {};
+    allocatorInfo.physicalDevice = context._physicalDevice;
+    allocatorInfo.device = context._device;
+
+    vmaCreateAllocator(&allocatorInfo, &g_allocator);
     return true;
 }
 
@@ -2459,6 +2466,12 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
     if (!createQueue(appDesc, context))
     {
         SDL_LogError(0, "Failed to create queue!");
+        return false;
+    }
+
+    if (!setupAllocator(context))
+    {
+        SDL_LogError(0, "Failed to setup allocator!");
         return false;
     }
     
@@ -2785,5 +2798,5 @@ bool Vulkan::createSampler(Vulkan::Context& context, VkSampler& sampler)
 
 void Vulkan::setAllocationCallbacks(VkAllocationCallbacks *  allocationCallbacks)
 {
-    Vulkan::g_allocationCallbacks = allocationCallbacks;
+//    Vulkan::g_allocationCallbacks = allocationCallbacks;
 }

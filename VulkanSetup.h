@@ -18,6 +18,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
 #include <glm/gtx/rotate_vector.hpp>
+#include "vk_mem_alloc.h"
 
 /*
  LICENSE - this file is public domain
@@ -188,7 +189,7 @@ namespace Vulkan
     struct BufferDescriptor
     {
         VkBuffer _buffer;
-        VkDeviceMemory _memory;
+        VmaAllocation _memory;
         unsigned int _size;
 
         BufferDescriptor()

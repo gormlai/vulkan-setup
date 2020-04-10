@@ -2184,9 +2184,7 @@ bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & conte
     BufferDescriptor indexBuffer;
     BufferDescriptor vertexBuffer;
 
-    if(indexData.empty() || vertexData.empty())
-        return false;
-    
+    if(!indexData.empty())
     {
         // index buffer
         const void * data = indexData.data();
@@ -2194,7 +2192,8 @@ bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & conte
         if (!createIndexOrVertexBuffer(context, data, bufferSize, indexBuffer, BufferType::Index))
             return false;
     }
-    
+
+    if(!vertexData.empty())
     {
         // vertex buffer
         const void * data = vertexData.data();
@@ -2205,7 +2204,12 @@ bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & conte
 
     result.setIndexBuffer(indexBuffer);
     result.setVertexBuffer(vertexBuffer);
-    result._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
+
+    if(!indexData.empty()) // this is an indexed mesh
+        result._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
+    else
+        result._numIndices = 0; // this mesh probably doesn't have any indices - but we have no way of knowing the number of vertices from here
+
     result._userData = userData;
     
     return true;

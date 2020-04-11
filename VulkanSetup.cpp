@@ -8,6 +8,8 @@
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 
+#include <map>
+
 ////////////////////////////////////// Vulkan method declarations ///////////////////////////////////////////////////////
 
 namespace Vulkan
@@ -51,6 +53,7 @@ namespace Vulkan
 
     bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
     bool createComputePipeline(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc);
 
     static VmaAllocator g_allocator;
 }
@@ -524,18 +527,27 @@ Vulkan::AppDescriptor::AppDescriptor()
 
 ///////////////////////////////////// Vulkan BufferDescriptor ///////////////////////////////////////////////////////////////////
 
+namespace
+{
+    constexpr unsigned int g_persistentBufferSize = 32 * 1024 * 1024;
 
-bool Vulkan::BufferDescriptor::fill(VkDevice device, const void * srcData, VkDeviceSize amount)
+    typedef std::pair< VkBufferUsageFlags, VkMemoryPropertyFlags> PersistentBufferKey;
+    typedef std::map<PersistentBufferKey,Vulkan::PersistentBufferPtr> PersistentBufferMap;
+    PersistentBufferMap g_persistentBuffers;
+
+}
+
+bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount)
 {
     void* data = nullptr;
-	const VkResult mapResult = vmaMapMemory(g_allocator, _memory, &data);
-	assert(mapResult == VK_SUCCESS);
-    if(mapResult != VK_SUCCESS)
+    const VkResult mapResult = vmaMapMemory(g_allocator, _memory, &data);
+    assert(mapResult == VK_SUCCESS);
+    if (mapResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to map vertex buffer memory\n");
         return false;
     }
-    
+
     memcpy(data, srcData, amount);
     vmaUnmapMemory(g_allocator, _memory);
     return true;
@@ -637,6 +649,37 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     return true;
 }
+
+///////////////////////////////////// Vulkan PersistentBuffer ///////////////////////////////////////////////////////////////////
+
+bool Vulkan::PersistentBuffer::copyFrom(VkDevice device, const void* srcData, VkDeviceSize amount)
+{
+    if (_offset + (VkDeviceSize)amount > _size)
+        return false;
+
+    unsigned char* dstData = reinterpret_cast<unsigned char*>(_allocInfo.pMappedData);
+    void* fPointer = reinterpret_cast<void*>(dstData + _offset);
+    memcpy(fPointer, srcData, amount);
+    _offset += amount;
+    return true;
+}
+
+bool Vulkan::PersistentBuffer::startFrame()
+{
+    for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers)
+        keyValue.second->_offset = 0;
+
+    return true;
+}
+
+bool Vulkan::PersistentBuffer::submitFrame()
+{
+    for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers) {
+        vmaFlushAllocation(g_allocator, keyValue.second->_memory, 0, keyValue.second->_offset);
+    }
+    return true;
+}
+
 
 
 ///////////////////////////////////// Vulkan Methods ///////////////////////////////////////////////////////////////////
@@ -756,7 +799,7 @@ bool Vulkan::createImage(Vulkan::Context& context, const void* pixels, const uns
         return false;
     }
 
-    if (!stagingBuffer.fill(context._device, reinterpret_cast<const void*>(pixels), size))
+    if (!stagingBuffer.copyFrom(context._device, reinterpret_cast<const void*>(pixels), size))
     {
         SDL_LogError(0, "createImage - Failed to fill staging buffer");
         return false;
@@ -2106,90 +2149,108 @@ bool Vulkan::createSemaphores(AppDescriptor & appDesc, Context & context)
     && !context._imageAvailableSemaphores.empty();
 }
 
+Vulkan::BufferDescriptorPtr Vulkan::createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
+{
+    Vulkan::BufferDescriptorPtr buffer(new Vulkan::BufferDescriptor());
+    if (!createBuffer(context, size, usage, properties, *buffer))
+        return Vulkan::BufferDescriptorPtr();
+
+    return buffer;
+}
+
+Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
+{
+    PersistentBufferMap::iterator it = g_persistentBuffers.find(PersistentBufferKey(usage, properties));
+    if (it == g_persistentBuffers.end())
+    {
+        Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer());
+        if (!createBuffer(context, size, usage, properties, *pBuffer))
+            return Vulkan::PersistentBufferPtr();
+        g_persistentBuffers[PersistentBufferKey(usage, properties)] = pBuffer;
+        return pBuffer;
+    }
+    else
+        return it->second;
+}
+
+
 bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc)
 {
     VkBufferCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkBufferCreateInfo));
     createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    createInfo.size = size;
+    createInfo.size = bufDesc.isPersistentlyMapped() ? g_persistentBufferSize : size;
     createInfo.usage = usage;
     createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
- 
+
     VmaAllocationCreateInfo allocCreateInfo = {};
     allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-/*    if(usage & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-        allocCreateInfo.usage |= VMA_MEMORY_USAGE
-
-    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT = 0x00000001,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT = 0x00000002,
-        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT = 0x00000004,
-        VK_MEMORY_PROPERTY_HOST_CACHED_BIT = 0x00000008,
-        VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT = 0x00000010,
-        VK_MEMORY_PROPERTY_PROTECTED_BIT = 0x00000020,
-        VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD = 0x00000040,
-        VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD = 0x00000080,
-        VK_MEMORY_PROPERTY_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
-        */
+    if (bufDesc.isPersistentlyMapped())
+        allocCreateInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
     allocCreateInfo.requiredFlags = properties;
     allocCreateInfo.preferredFlags = properties;
 
-
     VkBuffer vertexBuffer;
     VmaAllocationInfo allocInfo = {};
     VmaAllocation allocation;
-    const VkResult createBufferResult = vmaCreateBuffer(g_allocator, &createInfo, &allocCreateInfo, &vertexBuffer, &allocation, nullptr);
-//    vkCreateBuffer(context._device, &createInfo, nullptr, &vertexBuffer);
-	assert(createBufferResult == VK_SUCCESS);
-    if(createBufferResult != VK_SUCCESS)
+    const VkResult createBufferResult = vmaCreateBuffer(g_allocator, &createInfo, &allocCreateInfo, &vertexBuffer, &allocation, &allocInfo);
+    //    vkCreateBuffer(context._device, &createInfo, nullptr, &vertexBuffer);
+    assert(createBufferResult == VK_SUCCESS);
+    if (createBufferResult != VK_SUCCESS)
     {
         SDL_LogError(0, "Failed to create vertex buffer\n");
         return false;
-    }    
-    
+    }
+
     bufDesc._buffer = vertexBuffer;
     bufDesc._memory = allocation;
-    bufDesc._size = (unsigned int)size;
+    bufDesc._size = (unsigned int)createInfo.size;
+    if (bufDesc.isPersistentlyMapped()) {
+        Vulkan::PersistentBuffer& pBuffer = (Vulkan::PersistentBuffer&)bufDesc;
+        pBuffer._allocInfo = allocInfo;
+    }
     return true;
 }
 
-bool Vulkan::createIndexOrVertexBuffer(Context & context, const void * srcData, VkDeviceSize bufferSize, BufferDescriptor & result, BufferType type)
-{
-    
-    BufferDescriptor stagingBufferDescriptor;
+
+
+Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context, const void * srcData, VkDeviceSize bufferSize, BufferType type)
+{    
+    Vulkan::BufferDescriptor stagingBufferDescriptor;
     if(!createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBufferDescriptor))
     {
-        SDL_LogError(0, "Failed to crete buffer of size %d bytes\n", (int)bufferSize);
-        return false;
+        SDL_LogError(0, "Failed to create buffer of size %d bytes\n", (int)bufferSize);
+        return Vulkan::BufferDescriptorPtr();
     }
     
-    BufferDescriptor vertexBufferDescriptor;
-    if(!createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | ((type == BufferType::Vertex) ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT) , VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBufferDescriptor))
+    Vulkan::BufferDescriptorPtr vertexBufferDescriptor = createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | ((type == BufferType::Vertex) ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if(vertexBufferDescriptor==nullptr)
     {
-        SDL_LogError(0, "Failed to crete buffer of size %d bytes\n", (int)bufferSize);
-        return false;
+        SDL_LogError(0, "Failed to create buffer of size %d bytes\n", (int)bufferSize);
+        return Vulkan::BufferDescriptorPtr();
     }
     
-    stagingBufferDescriptor.fill(context._device, srcData, bufferSize);
-    vertexBufferDescriptor.copyFrom(context._device, context._commandPool, context._graphicsQueue, stagingBufferDescriptor, bufferSize);
+    stagingBufferDescriptor.copyFrom(context._device, srcData, bufferSize);
+    vertexBufferDescriptor->copyFrom(context._device, context._commandPool, context._graphicsQueue, stagingBufferDescriptor, bufferSize);
     
-    result = vertexBufferDescriptor;
 	destroyBufferDescriptor(context, stagingBufferDescriptor);
-    return true;
+    return vertexBufferDescriptor;
     
 }
 
 bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData, Vulkan::Mesh & result)
 {
-    BufferDescriptor indexBuffer;
-    BufferDescriptor vertexBuffer;
+    BufferDescriptorPtr indexBuffer;
+    BufferDescriptorPtr vertexBuffer;
 
     if(!indexData.empty())
     {
         // index buffer
         const void * data = indexData.data();
         const VkDeviceSize bufferSize =  indexData.size();
-        if (!createIndexOrVertexBuffer(context, data, bufferSize, indexBuffer, BufferType::Index))
+        indexBuffer = createIndexOrVertexBuffer(context, data, bufferSize, BufferType::Index);
+        if (indexBuffer == nullptr)
             return false;
     }
 
@@ -2198,7 +2259,8 @@ bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & conte
         // vertex buffer
         const void * data = vertexData.data();
         const VkDeviceSize bufferSize = vertexData.size();
-        if (!createIndexOrVertexBuffer(context, data, bufferSize, vertexBuffer, BufferType::Vertex))
+        vertexBuffer = createIndexOrVertexBuffer(context, data, bufferSize, BufferType::Vertex);
+        if (vertexBuffer==nullptr)
             return false;
     }
 
@@ -2344,7 +2406,7 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
             Uniform* uniform = uniforms[uniformIndex];
             unsigned int uniformUpdateSize = effect->_updateUniform(*uniform, updateData);
             if (uniformUpdateSize != 0)
-                uniform->_frames[context._currentFrame]._buffer.fill(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
+                uniform->_frames[context._currentFrame]._buffer.copyFrom(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
         }
 
         effect->_recordCommandBuffers(appDesc, context, *effect);

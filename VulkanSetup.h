@@ -191,15 +191,24 @@ namespace Vulkan
         VkBuffer _buffer;
         VmaAllocation _memory;
         unsigned int _size;
-
+  
         BufferDescriptor()
             :_buffer(VK_NULL_HANDLE)
-            ,_memory(VK_NULL_HANDLE)
-            ,_size(0)
+            , _memory(VK_NULL_HANDLE)
+            , _size(0)
         {
         }
-        
-        bool fill(VkDevice device, const void * srcData, VkDeviceSize amount);
+
+        BufferDescriptor(bool persistentlyMapped)
+            :_buffer(VK_NULL_HANDLE)
+            , _memory(VK_NULL_HANDLE)
+            , _size(0)
+        {
+        }
+
+
+        virtual bool isPersistentlyMapped() const { return false; }
+        virtual bool copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount);
         bool copyFrom(VkDevice device,
                       VkCommandPool commandPool,
                       VkQueue queue,
@@ -213,7 +222,29 @@ namespace Vulkan
                     unsigned int width,
                     unsigned int height,
                     unsigned int depth);
+
+    private:
+
     };
+    typedef std::shared_ptr<BufferDescriptor> BufferDescriptorPtr;
+
+    struct PersistentBuffer : public Vulkan::BufferDescriptor
+    {
+        unsigned int _offset;
+        VmaAllocationInfo _allocInfo;
+
+        PersistentBuffer()
+            :_offset(0) {}
+
+        static bool startFrame();
+        static bool submitFrame();
+
+
+        bool isPersistentlyMapped() const override { return true; }
+        bool copyFrom(VkDevice device, const void* srcData, VkDeviceSize amount) override;
+
+    };
+    typedef std::shared_ptr<PersistentBuffer> PersistentBufferPtr;
     
     struct Mesh;
     struct Uniform;
@@ -224,38 +255,40 @@ namespace Vulkan
 		unsigned int _numIndices;
         void * _userData;
         
-        BufferDescriptor& getVertexBuffer() {
+        BufferDescriptorPtr getVertexBuffer() {
             return _buffers[0];
         }
 
-        BufferDescriptor& getIndexBuffer() {
+        BufferDescriptorPtr getIndexBuffer() {
             return _buffers[1];
         }
 
-        BufferDescriptor& getInstanceBuffer() {
-            return _buffers[2];
+        PersistentBufferPtr getInstanceBuffer() {
+            return _instanceBuffer;
         }
 
-        void setVertexBuffer(BufferDescriptor& vertexBuffer) {
+        void setVertexBuffer(BufferDescriptorPtr vertexBuffer) {
             _buffers[0] = vertexBuffer;
         }
 
-        void setIndexBuffer(BufferDescriptor& indexBuffer) {
+        void setIndexBuffer(BufferDescriptorPtr indexBuffer) {
             _buffers[1] = indexBuffer;
         }
 
-        void setInstanceBuffer(BufferDescriptor& instanceBuffer) {
-            _buffers[2] = instanceBuffer;
+        void setInstanceBuffer(PersistentBufferPtr instanceBuffer) {
+            _instanceBuffer = instanceBuffer;
         }
 
         Mesh()
             :_numIndices(0)
             ,_userData(nullptr)
+            ,_instanceBuffer(nullptr)
 		{
 		}
 
     private:
-        BufferDescriptor _buffers[3];
+        BufferDescriptorPtr _buffers[2];
+        PersistentBufferPtr _instanceBuffer;
 
 	};
     typedef std::shared_ptr<Mesh> MeshPtr;
@@ -404,7 +437,7 @@ namespace Vulkan
         std::vector<unsigned char>& indexData, 
         void* userData, 
         Vulkan::Mesh& result);
-    bool createIndexOrVertexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferDescriptor& result, BufferType type);
+    BufferDescriptorPtr createIndexOrVertexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferType type);
 
 
     bool handleVulkanSetup(AppDescriptor& appDesc, Context& context);
@@ -421,7 +454,8 @@ namespace Vulkan
         Vulkan::EffectDescriptor& effect);
     bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
 
-    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc);
+    BufferDescriptorPtr createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+    PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
 
     bool allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory& memory);
     bool createImage(Vulkan::Context& context,

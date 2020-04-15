@@ -331,8 +331,7 @@ Vulkan::Uniform* Vulkan::EffectDescriptor::getUniformWithBinding(int binding)
     return nullptr;
 }
 
-
-uint32_t Vulkan::EffectDescriptor::addUniformSampler(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, int binding)
+uint32_t Vulkan::EffectDescriptor::addUniformSamplerOrImage(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, VkDescriptorType type, int binding)
 {
     Vulkan::Uniform* uniform = getUniformWithBinding(binding);
     if (uniform != nullptr)
@@ -346,7 +345,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformSampler(Vulkan::Context& context, V
     {
         Vulkan::Uniform newUniform{};
         newUniform._name = name;
-        newUniform._type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        newUniform._type = type;
         newUniform._frames.resize(context._rawImages.size());
         newUniform._stages.push_back(stage);
 
@@ -358,36 +357,17 @@ uint32_t Vulkan::EffectDescriptor::addUniformSampler(Vulkan::Context& context, V
         _uniforms.push_back(newUniform);
         return newUniform._binding;
     }
+}
 
+
+uint32_t Vulkan::EffectDescriptor::addUniformSampler(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, int binding)
+{
+    return addUniformSamplerOrImage(context, stage, name, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, binding);
 }
 
 uint32_t Vulkan::EffectDescriptor::addUniformImage(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, int binding)
 {
-    Vulkan::Uniform* uniform = getUniformWithBinding(binding);
-    if (uniform != nullptr)
-    {
-        assert(uniform->_name == name);
-        assert(uniform->_binding == binding);
-        uniform->_stages.push_back(stage);
-        return binding;
-    }
-    else
-    {
-        Vulkan::Uniform newUniform{};
-        newUniform._name = name;
-        newUniform._type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        newUniform._frames.resize(context._rawImages.size());
-        newUniform._stages.push_back(stage);
-
-        if (binding < 0)
-            newUniform._binding = numUniforms(*this);
-        else
-            newUniform._binding = binding;
-
-        _uniforms.push_back(newUniform);
-        return newUniform._binding;
-    }
-
+    return addUniformSamplerOrImage(context, stage, name, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, binding);
 }
 
 uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, uint32_t size, int binding)

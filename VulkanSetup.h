@@ -361,6 +361,7 @@ namespace Vulkan
         uint32_t totalNumUniforms() const;
         uint32_t totalTypeCount(VkDescriptorType type) const;
         uint32_t totalTypeCount(Vulkan::ShaderStage stage, VkDescriptorType type) const;
+        uint32_t addUniformSamplerOrImage(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, VkDescriptorType type, int binding = -1);
         uint32_t addUniformSampler(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string & name, int binding= -1 );
         uint32_t addUniformImage(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, int binding = -1);
         uint32_t addUniformBuffer(Vulkan::Context& context, Vulkan::ShaderStage stage, const std::string& name, uint32_t size, int binding = -1);

@@ -312,9 +312,15 @@ namespace Vulkan
 
     struct UniformAggregate
     {
+        VkBufferView _bufferView;
         BufferDescriptor _buffer;
         VkSampler _sampler;
         VkImageView _imageView;
+
+        UniformAggregate()
+            :_bufferView(VK_NULL_HANDLE)
+            , _sampler(VK_NULL_HANDLE)
+            , _imageView(VK_NULL_HANDLE) {}
     };
 
     struct Uniform
@@ -370,6 +376,7 @@ namespace Vulkan
         uint32_t collectUniformsOfType(VkDescriptorType type, Vulkan::ShaderStage stage, Uniform** result);
         Uniform* getUniformWithBinding(int binding);
 
+        bool bindTexelBuffer(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkBufferView bufferView, VkBuffer buffer);
         bool bindSampler(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkSampler sampler);
         bool bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView);
 
@@ -457,6 +464,8 @@ namespace Vulkan
 
     BufferDescriptorPtr createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
     PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+
+    bool createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkBufferView& result);
 
     bool allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory& memory);
     bool createImage(Vulkan::Context& context,

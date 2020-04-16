@@ -404,6 +404,47 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
     }
 }
 
+bool Vulkan::EffectDescriptor::bindTexelBuffer(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkBufferView bufferView, VkBuffer buffer)
+{
+    Uniform* uniform = findUniform(*this, shaderStage, binding);
+    assert(uniform != nullptr);
+    if (uniform == nullptr)
+        return false;
+
+    assert(uniform->_type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
+    if (uniform->_type != VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER)
+        return false;
+
+    for (unsigned int frame = 0; frame < uniform->_frames.size(); frame++)
+    {
+        UniformAggregate& aggregate = uniform->_frames[frame];
+        aggregate._bufferView = bufferView;
+
+        VkDescriptorBufferInfo texelBufferInfo = {};
+        texelBufferInfo.buffer = buffer;
+        texelBufferInfo.offset = 0;
+        texelBufferInfo.range = uniform->_frames[frame]._buffer._size;
+
+        VkWriteDescriptorSet writeSet = { };
+        writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeSet.descriptorCount = 1;
+        writeSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+        writeSet.dstArrayElement = 0;
+        writeSet.dstBinding = binding;
+        writeSet.dstSet = _descriptorSets[frame];
+        writeSet.pBufferInfo = &texelBufferInfo;
+        writeSet.pImageInfo = VK_NULL_HANDLE;
+        writeSet.pNext = VK_NULL_HANDLE;
+        writeSet.pTexelBufferView = &bufferView;
+
+        vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
+    }
+
+
+    return true;
+}
+
+
 bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView)
 {
     Uniform* uniform = findUniform(*this, shaderStage, binding);
@@ -640,7 +681,7 @@ bool Vulkan::PersistentBuffer::copyFrom(VkDevice device, const void* srcData, Vk
     unsigned char* dstData = reinterpret_cast<unsigned char*>(_allocInfo.pMappedData);
     void* fPointer = reinterpret_cast<void*>(dstData + _offset);
     memcpy(fPointer, srcData, amount);
-    _offset += amount;
+    _offset += (unsigned int)amount;
     return true;
 }
 
@@ -2128,6 +2169,26 @@ bool Vulkan::createSemaphores(AppDescriptor & appDesc, Context & context)
     && context._imageAvailableSemaphores.size() == context._fences.size()
     && !context._imageAvailableSemaphores.empty();
 }
+
+bool Vulkan::createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkBufferView& result)
+{
+    VkBufferViewCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
+    createInfo.pNext = NULL;
+    createInfo.buffer = buffer;
+    createInfo.format = requiredFormat;
+    createInfo.offset = 0;
+    createInfo.range = size;
+    VkResult success = vkCreateBufferView(context._device, &createInfo, NULL, &result);
+    assert(success == VK_SUCCESS);
+    if (success != VK_SUCCESS)
+    {
+        SDL_LogError(0, "Failed to create bufferView of Format %d\n", requiredFormat);
+        return false;
+    }
+    return true;
+}
+
 
 Vulkan::BufferDescriptorPtr Vulkan::createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
 {

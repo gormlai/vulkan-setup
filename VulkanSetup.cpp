@@ -346,7 +346,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformSamplerOrImage(Vulkan::Context& con
         Vulkan::Uniform newUniform{};
         newUniform._name = name;
         newUniform._type = type;
-        newUniform._frames.resize(context._rawImages.size());
+        newUniform._frames.resize(context._colorBuffers.size());
         newUniform._stages.push_back(stage);
 
         if (binding < 0)
@@ -392,7 +392,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
         else
             newUniform._binding = binding;
 
-        for (uint32_t i = 0; i < (uint32_t)context._rawImages.size(); i++)
+        for (uint32_t i = 0; i < (uint32_t)context._colorBuffers.size(); i++)
         {
             UniformAggregate aggregate;
             aggregate._buffer._size = size;
@@ -1523,8 +1523,8 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
 	if (getVkImageCountFromSwapChainResult != VK_SUCCESS || vkImageCount == 0)
         return false;
     
-    context._rawImages.resize(vkImageCount);
-    VkResult getSwapChainImagesResult = vkGetSwapchainImagesKHR(context._device, context._swapChain, &vkImageCount, &context._rawImages[0]);
+    context._colorBuffers.resize(vkImageCount);
+    VkResult getSwapChainImagesResult = vkGetSwapchainImagesKHR(context._device, context._swapChain, &vkImageCount, &context._colorBuffers[0]);
 	assert(getSwapChainImagesResult == VK_SUCCESS);
 
     return true;
@@ -1535,9 +1535,9 @@ bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context)
 	constexpr VkImageTiling requiredTiling = VK_IMAGE_TILING_OPTIMAL;
 
 	VkFormat depthFormat = findDepthFormat(context, requiredTiling);
-	context._depthImageViews.resize(context._rawImages.size());
-	context._depthImages.resize(context._rawImages.size());
-	context._depthMemory.resize(context._rawImages.size());
+	context._depthImageViews.resize(context._colorBuffers.size());
+	context._depthImages.resize(context._colorBuffers.size());
+	context._depthMemory.resize(context._colorBuffers.size());
 	for (unsigned int i = 0; i < (unsigned int)context._depthImageViews.size(); i++)
 	{
 		VkImage depthImage;
@@ -1573,7 +1573,7 @@ bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context)
 
 bool Vulkan::createColorBuffers(Context & context)
 {
-    for (VkImage & image : context._rawImages)
+    for (VkImage & image : context._colorBuffers)
     {
         VkImageViewCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
@@ -1600,7 +1600,7 @@ bool Vulkan::createColorBuffers(Context & context)
         if (imageViewCreationResult != VK_SUCCESS)
             return false;
         
-        context._colorBuffers.push_back(imageView);
+        context._colorBufferViews.push_back(imageView);
     }
     
     return true;
@@ -1693,12 +1693,12 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPa
 
 bool Vulkan::createFrameBuffers(Context & Context)
 {
-	for(unsigned int i=0 ; i < (unsigned int)Context._colorBuffers.size() ; i++ )
+	for(unsigned int i=0 ; i < (unsigned int)Context._colorBufferViews.size() ; i++ )
     {
         VkFramebufferCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
         
-        VkImageView attachments[] = { Context._colorBuffers[i], Context._depthImageViews[i] };
+        VkImageView attachments[] = { Context._colorBufferViews[i], Context._depthImageViews[i] };
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = Context._renderPass;
         createInfo.attachmentCount = sizeof(attachments) / sizeof(VkImageView);
@@ -2344,21 +2344,21 @@ bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
     if (effect.totalNumUniformBuffers() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalNumUniformBuffers() * context._rawImages.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalNumUniformBuffers() * context._colorBuffers.size());
         poolIndex++;
     }
 
     if (effect.totalSamplerCount() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalSamplerCount() * context._rawImages.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalSamplerCount() * context._colorBuffers.size());
         poolIndex++;
     }
 
     if (effect.totalImagesCount() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalImagesCount() * context._rawImages.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalImagesCount() * context._colorBuffers.size());
         poolIndex++;
     }
 
@@ -2366,7 +2366,7 @@ bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = poolIndex;
 	poolInfo.pPoolSizes = &poolSizes[0];
-    poolInfo.maxSets = static_cast<uint32_t>(effect.totalNumUniforms() * context._rawImages.size());
+    poolInfo.maxSets = static_cast<uint32_t>(effect.totalNumUniforms() * context._colorBuffers.size());
 
 	VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &effect._descriptorPool);
 	assert(creationResult == VK_SUCCESS);
@@ -2378,7 +2378,7 @@ bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
 
 bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, EffectDescriptor& effect)
 {
-    const uint32_t framesCount = (uint32_t)context._rawImages.size();
+    const uint32_t framesCount = (uint32_t)context._colorBuffers.size();
 
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -2739,16 +2739,13 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 	vkDestroyPipelineCache(device, context._pipelineCache, VK_NULL_HANDLE);
 	context._pipelineCache = VK_NULL_HANDLE;
     */
-	for (auto imageView : context._colorBuffers)
+	for (auto imageView : context._colorBufferViews)
 		vkDestroyImageView(device, imageView, nullptr);
+	context._colorBufferViews.clear();
+
+	for (auto image : context._colorBuffers)
+		vkDestroyImage(device, image, nullptr);
 	context._colorBuffers.clear();
-
-/*	for (auto image : context._rawImages)
-		vkDestroyImage(device, image, nullptr);*/
-	context._rawImages.clear();
-
-//	vkDestroyDescriptorSetLayout(device, context._descriptorSetLayout, VK_NULL_HANDLE);
-//	context._descriptorSetLayout = VK_NULL_HANDLE;
 
 	vkDestroySwapchainKHR(device, context._swapChain, nullptr);
 	context._swapChain = VK_NULL_HANDLE;
@@ -2772,7 +2769,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
         for (unsigned int uniformIndex = 0; uniformIndex < uniformCount; uniformIndex++)
         {
             Uniform* uniform = uniforms[uniformIndex];
-            for (unsigned int frame = 0; frame < context._rawImages.size(); frame++)
+            for (unsigned int frame = 0; frame < context._colorBuffers.size(); frame++)
             {
                 Vulkan::BufferDescriptor& buffer = uniform->_frames[frame]._buffer;
                 if (!Vulkan::createUniformBuffer(appDesc, context, buffer._size, buffer))
@@ -2805,7 +2802,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
     }
 
 
-    if (!createCommandBuffers(context, context._commandPool, (unsigned int)context._rawImages.size(), &effect._commandBuffers))
+    if (!createCommandBuffers(context, context._commandPool, (unsigned int)context._colorBuffers.size(), &effect._commandBuffers))
     {
         SDL_LogError(0, "Failed to create command buffers\n");
         return false;

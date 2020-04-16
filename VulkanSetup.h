@@ -402,8 +402,8 @@ namespace Vulkan
         VkSwapchainKHR _swapChain;
         
 		// for colour buffer
-        std::vector<VkImage> _rawImages;
-        std::vector<VkImageView> _colorBuffers;
+        std::vector<VkImage> _colorBuffers;
+        std::vector<VkImageView> _colorBufferViews;
 
 		// for depth buffer
 		std::vector<VkImage> _depthImages;

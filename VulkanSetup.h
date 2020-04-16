@@ -427,7 +427,8 @@ namespace Vulkan
         VkRenderPass _renderPass;
 
         unsigned int _currentFrame;
-        std::vector<EffectDescriptorPtr> _effects;
+        std::vector<EffectDescriptorPtr> _potentialEffects;
+        std::vector<EffectDescriptorPtr> _frameReadyEffects;
 
         Context();
 

@@ -2432,7 +2432,8 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
 
 void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t currentImage)
 {
-    for(EffectDescriptorPtr & effect : context._effects)
+    context._frameReadyEffects.clear();
+    for(EffectDescriptorPtr & effect : context._potentialEffects)
     {
         static std::vector<unsigned char> updateData;
 
@@ -2450,7 +2451,8 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
                 uniform->_frames[context._currentFrame]._buffer.copyFrom(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
         }
 
-        effect->_recordCommandBuffers(appDesc, context, *effect);
+        if (effect->_recordCommandBuffers(appDesc, context, *effect))
+            context._frameReadyEffects.push_back(effect);
     }
     
 }

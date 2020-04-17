@@ -1981,10 +1981,10 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR
     };
-    dynamicStateCreateInfo.dynamicStateCount = 0;
-    dynamicStateCreateInfo.pDynamicStates = nullptr;
-    //	dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
-    //	createInfo.pDynamicState = &dynamicStateCreateInfo;
+    dynamicStateCreateInfo.dynamicStateCount = 2;
+//    dynamicStateCreateInfo.pDynamicStates = nullptr;
+    dynamicStateCreateInfo.pDynamicStates = &dynamicState[0];
+    createInfo.pDynamicState = &dynamicStateCreateInfo;
 
     // Pipeline Vertex Input State
     VkPipelineVertexInputStateCreateInfo vertexInputInfo;
@@ -2610,7 +2610,15 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         SDL_LogError(0, "Failed to create standard command pool\n");
         return false;
     }
-
+    
+    // create utility command Pool
+    std::vector<VkCommandBuffer> commandBuffers;
+    if (!createCommandBuffers(context, context._commandPool, 1, &commandBuffers))
+    {
+        SDL_LogError(0, "Failed to create utility command buffer\n");
+        return false;
+    }
+    context._utilityCommandBuffer = commandBuffers[0];
     
 	if (!createDepthBuffers(appDesc, context))
 	{

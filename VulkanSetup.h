@@ -418,6 +418,7 @@ namespace Vulkan
 		VkAllocationCallbacks * _allocator;
         
         VkCommandPool _commandPool;
+        VkCommandBuffer _utilityCommandBuffer;
 
         std::vector<VkSemaphore> _renderFinishedSemaphores;
         std::vector<VkSemaphore> _imageAvailableSemaphores;

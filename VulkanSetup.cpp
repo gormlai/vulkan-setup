@@ -2648,26 +2648,6 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-	if (!createRenderPass(context, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
-	{
-		SDL_LogError(0, "Failed to create standard render pass\n");
-		return false;
-	}
-
-
-	if (!createPipelineCache(appDesc, context))
-	{
-		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
-	}
-
-    // create standard command pool
-    if(!createCommandPool(appDesc, context, &context._commandPool))
-    {
-        SDL_LogError(0, "Failed to create standard command pool\n");
-        return false;
-    }
-    
-    
 	if (!createDepthBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");
@@ -2725,32 +2705,17 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 	for (auto frameBuffer : context._frameBuffers)
 		vkDestroyFramebuffer(device, frameBuffer, nullptr);
 	context._frameBuffers.clear();
-/*
-	vkFreeCommandBuffers(device, context._commandPool, (uint32_t)context._commandBuffers.size(), &context._commandBuffers[0]);
-	vkDestroyCommandPool(device, context._commandPool, VK_NULL_HANDLE);
-	context._commandBuffers.clear();
-	vkDestroyRenderPass(device, context._renderPass, VK_NULL_HANDLE);
-	context._renderPass = VK_NULL_HANDLE;
 
-	vkDestroyPipeline(device, context._pipeline, nullptr);
-	context._pipeline = VK_NULL_HANDLE;
-	vkDestroyPipelineLayout(device, context._pipelineLayout, nullptr);
-	context._pipelineLayout = VK_NULL_HANDLE;
-	vkDestroyPipelineCache(device, context._pipelineCache, VK_NULL_HANDLE);
-	context._pipelineCache = VK_NULL_HANDLE;
-    */
 	for (auto imageView : context._colorBufferViews)
 		vkDestroyImageView(device, imageView, nullptr);
 	context._colorBufferViews.clear();
 
-	for (auto image : context._colorBuffers)
+/*	for (auto image : context._colorBuffers)
 		vkDestroyImage(device, image, nullptr);
-	context._colorBuffers.clear();
+	context._colorBuffers.clear();*/
 
 	vkDestroySwapchainKHR(device, context._swapChain, nullptr);
 	context._swapChain = VK_NULL_HANDLE;
-
-
 
 	return true;
 }

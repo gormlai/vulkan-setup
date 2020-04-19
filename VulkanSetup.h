@@ -226,19 +226,25 @@ namespace Vulkan
     };
     typedef std::shared_ptr<BufferDescriptor> BufferDescriptorPtr;
 
+    struct Context;
     struct PersistentBuffer
     {
-        unsigned int _offset;
-        VmaAllocationInfo _allocInfo;
-        Vulkan::BufferDescriptor _buffer;
+        std::vector<unsigned int> _offsets;
+        std::vector<VmaAllocationInfo> _allocInfos;
+        std::vector<Vulkan::BufferDescriptor> _buffers;
 
-        PersistentBuffer()
-            :_offset(0) {}
+        PersistentBuffer(unsigned int numBuffers)
+            :_offsets(numBuffers)
+            ,_allocInfos(numBuffers)
+            ,_buffers(numBuffers)
+        {
+            memset(&_offsets[0], 0, sizeof(unsigned int) * numBuffers);
+        }
 
-        static bool startFrame();
-        static bool submitFrame();
+        static bool startFrame(Vulkan::Context& context);
+        static bool submitFrame(Vulkan::Context& context);
 
-        bool copyFrom(VkDevice device, const void* srcData, VkDeviceSize amount);
+        bool copyFrom(Vulkan::Context & context, const void* srcData, VkDeviceSize amount);
 
     };
     typedef std::shared_ptr<PersistentBuffer> PersistentBufferPtr;

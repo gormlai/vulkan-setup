@@ -673,30 +673,33 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
 
 ///////////////////////////////////// Vulkan PersistentBuffer ///////////////////////////////////////////////////////////////////
 
-bool Vulkan::PersistentBuffer::copyFrom(VkDevice device, const void* srcData, VkDeviceSize amount)
+bool Vulkan::PersistentBuffer::copyFrom(Vulkan::Context& context, const void* srcData, VkDeviceSize amount)
 {
-    if (_offset + (VkDeviceSize)amount > _buffer._size)
+    const unsigned int currentFrame = context._currentFrame;
+    if (_offsets[currentFrame] + (VkDeviceSize)amount > _buffers[currentFrame]._size)
         return false;
 
-    unsigned char* dstData = reinterpret_cast<unsigned char*>(_allocInfo.pMappedData);
-    void* fPointer = reinterpret_cast<void*>(dstData + _offset);
+    unsigned char* dstData = reinterpret_cast<unsigned char*>(_allocInfos[currentFrame].pMappedData);
+    void* fPointer = reinterpret_cast<void*>(dstData + _offsets[currentFrame]);
     memcpy(fPointer, srcData, amount);
-    _offset += (unsigned int)amount;
+    _offsets[currentFrame] += (unsigned int)amount;
     return true;
 }
 
-bool Vulkan::PersistentBuffer::startFrame()
+bool Vulkan::PersistentBuffer::startFrame(Vulkan::Context& context)
 {
+    const unsigned int currentFrame = context._currentFrame;
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers)
-        keyValue.second->_offset = 0;
+        keyValue.second->_offsets[currentFrame] = 0;
 
     return true;
 }
 
-bool Vulkan::PersistentBuffer::submitFrame()
+bool Vulkan::PersistentBuffer::submitFrame(Vulkan::Context& context)
 {
+    const unsigned int currentFrame = context._currentFrame;
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers) {
-        vmaFlushAllocation(g_allocator, keyValue.second->_buffer._memory, 0, keyValue.second->_offset);
+        vmaFlushAllocation(g_allocator, keyValue.second->_buffers[currentFrame]._memory, 0, keyValue.second->_offsets[currentFrame]);
     }
     return true;
 }
@@ -2204,9 +2207,12 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
     PersistentBufferMap::iterator it = g_persistentBuffers.find(PersistentBufferKey(usage, properties));
     if (it == g_persistentBuffers.end())
     {
-        Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer());
-        if (!createBuffer(context, size, usage, properties, pBuffer->_buffer, &pBuffer->_allocInfo))
-            return Vulkan::PersistentBufferPtr();
+        Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer(context._colorBuffers.size()));
+        for (unsigned int i = 0; i < pBuffer->_buffers.size(); i++)
+        {
+            if (!createBuffer(context, size, usage, properties, pBuffer->_buffers[i], &pBuffer->_allocInfos[i]))
+                return Vulkan::PersistentBufferPtr();
+        }
         g_persistentBuffers[PersistentBufferKey(usage, properties)] = pBuffer;
         return pBuffer;
     }

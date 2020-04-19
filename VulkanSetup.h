@@ -244,7 +244,7 @@ namespace Vulkan
         static bool startFrame(Vulkan::Context& context);
         static bool submitFrame(Vulkan::Context& context);
 
-        bool copyFrom(Vulkan::Context & context, const void* srcData, VkDeviceSize amount);
+        bool copyFrom(Vulkan::Context & context, const void* srcData, VkDeviceSize amount, VkDeviceSize offset = UINT64_MAX);
 
     };
     typedef std::shared_ptr<PersistentBuffer> PersistentBufferPtr;
@@ -379,7 +379,7 @@ namespace Vulkan
         uint32_t collectUniformsOfType(VkDescriptorType type, Vulkan::ShaderStage stage, Uniform** result);
         Uniform* getUniformWithBinding(int binding);
 
-        bool bindTexelBuffer(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkBufferView bufferView, VkBuffer buffer);
+        bool bindTexelBuffer(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkBufferView bufferView, VkBuffer buffer, unsigned int offset, unsigned int range);
         bool bindSampler(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkSampler sampler);
         bool bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView);
 
@@ -470,7 +470,7 @@ namespace Vulkan
     BufferDescriptorPtr createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
     PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
 
-    bool createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkBufferView& result);
+    bool createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferView& result);
 
     bool allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory& memory);
     bool createImage(Vulkan::Context& context,

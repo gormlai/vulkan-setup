@@ -404,7 +404,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
     }
 }
 
-bool Vulkan::EffectDescriptor::bindTexelBuffer(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkBufferView bufferView, VkBuffer buffer)
+bool Vulkan::EffectDescriptor::bindTexelBuffer(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkBufferView bufferView, VkBuffer buffer, unsigned int offset, unsigned int range)
 {
     Uniform* uniform = findUniform(*this, shaderStage, binding);
     assert(uniform != nullptr);
@@ -415,15 +415,16 @@ bool Vulkan::EffectDescriptor::bindTexelBuffer(Vulkan::Context& context, Vulkan:
     if (uniform->_type != VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER)
         return false;
 
-    for (unsigned int frame = 0; frame < uniform->_frames.size(); frame++)
+    unsigned int frame = context._currentFrame;
+
     {
         UniformAggregate& aggregate = uniform->_frames[frame];
         aggregate._bufferView = bufferView;
 
         VkDescriptorBufferInfo texelBufferInfo = {};
         texelBufferInfo.buffer = buffer;
-        texelBufferInfo.offset = 0;
-        texelBufferInfo.range = uniform->_frames[frame]._buffer._size;
+        texelBufferInfo.offset = offset;
+        texelBufferInfo.range = range;
 
         VkWriteDescriptorSet writeSet = { };
         writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -439,7 +440,6 @@ bool Vulkan::EffectDescriptor::bindTexelBuffer(Vulkan::Context& context, Vulkan:
 
         vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
     }
-
 
     return true;
 }
@@ -673,16 +673,17 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
 
 ///////////////////////////////////// Vulkan PersistentBuffer ///////////////////////////////////////////////////////////////////
 
-bool Vulkan::PersistentBuffer::copyFrom(Vulkan::Context& context, const void* srcData, VkDeviceSize amount)
+bool Vulkan::PersistentBuffer::copyFrom(Vulkan::Context& context, const void* srcData, VkDeviceSize amount, VkDeviceSize offset)
 {
     const unsigned int currentFrame = context._currentFrame;
-    if (_offsets[currentFrame] + (VkDeviceSize)amount > _buffers[currentFrame]._size)
+    const unsigned int lOffset =  UINT64_MAX==offset ? _offsets[currentFrame] : offset;
+    if (lOffset + (VkDeviceSize)amount > _buffers[currentFrame]._size)
         return false;
 
     unsigned char* dstData = reinterpret_cast<unsigned char*>(_allocInfos[currentFrame].pMappedData);
-    void* fPointer = reinterpret_cast<void*>(dstData + _offsets[currentFrame]);
+    void* fPointer = reinterpret_cast<void*>(dstData + lOffset);
     memcpy(fPointer, srcData, amount);
-    _offsets[currentFrame] += (unsigned int)amount;
+    _offsets[currentFrame] = lOffset + (unsigned int)amount;
     return true;
 }
 
@@ -2173,14 +2174,14 @@ bool Vulkan::createSemaphores(AppDescriptor & appDesc, Context & context)
     && !context._imageAvailableSemaphores.empty();
 }
 
-bool Vulkan::createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkBufferView& result)
+bool Vulkan::createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferView& result)
 {
     VkBufferViewCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
     createInfo.pNext = NULL;
     createInfo.buffer = buffer;
     createInfo.format = requiredFormat;
-    createInfo.offset = 0;
+    createInfo.offset = offset;
     createInfo.range = size;
     VkResult success = vkCreateBufferView(context._device, &createInfo, NULL, &result);
     assert(success == VK_SUCCESS);

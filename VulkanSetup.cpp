@@ -53,7 +53,7 @@ namespace Vulkan
 
     bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
     bool createComputePipeline(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
-    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc);
+    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc, VmaAllocationInfo* aInfo = nullptr);
 
     static VmaAllocator g_allocator;
 }
@@ -675,7 +675,7 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
 
 bool Vulkan::PersistentBuffer::copyFrom(VkDevice device, const void* srcData, VkDeviceSize amount)
 {
-    if (_offset + (VkDeviceSize)amount > _size)
+    if (_offset + (VkDeviceSize)amount > _buffer._size)
         return false;
 
     unsigned char* dstData = reinterpret_cast<unsigned char*>(_allocInfo.pMappedData);
@@ -696,7 +696,7 @@ bool Vulkan::PersistentBuffer::startFrame()
 bool Vulkan::PersistentBuffer::submitFrame()
 {
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers) {
-        vmaFlushAllocation(g_allocator, keyValue.second->_memory, 0, keyValue.second->_offset);
+        vmaFlushAllocation(g_allocator, keyValue.second->_buffer._memory, 0, keyValue.second->_offset);
     }
     return true;
 }
@@ -2205,7 +2205,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
     if (it == g_persistentBuffers.end())
     {
         Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer());
-        if (!createBuffer(context, size, usage, properties, *pBuffer))
+        if (!createBuffer(context, size, usage, properties, pBuffer->_buffer, &pBuffer->_allocInfo))
             return Vulkan::PersistentBufferPtr();
         g_persistentBuffers[PersistentBufferKey(usage, properties)] = pBuffer;
         return pBuffer;
@@ -2215,18 +2215,18 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
 }
 
 
-bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc)
+bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc, VmaAllocationInfo * aInfo)
 {
     VkBufferCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkBufferCreateInfo));
     createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    createInfo.size = bufDesc.isPersistentlyMapped() ? g_persistentBufferSize : size;
+    createInfo.size = aInfo!=nullptr ? g_persistentBufferSize : size;
     createInfo.usage = usage;
     createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VmaAllocationCreateInfo allocCreateInfo = {};
     allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-    if (bufDesc.isPersistentlyMapped())
+    if (aInfo != nullptr)
         allocCreateInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
     allocCreateInfo.requiredFlags = properties;
@@ -2247,9 +2247,8 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     bufDesc._buffer = vertexBuffer;
     bufDesc._memory = allocation;
     bufDesc._size = (unsigned int)createInfo.size;
-    if (bufDesc.isPersistentlyMapped()) {
-        Vulkan::PersistentBuffer& pBuffer = (Vulkan::PersistentBuffer&)bufDesc;
-        pBuffer._allocInfo = allocInfo;
+    if (aInfo != nullptr) {
+        *aInfo = allocInfo;
     }
     return true;
 }

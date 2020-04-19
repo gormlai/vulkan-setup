@@ -206,8 +206,6 @@ namespace Vulkan
         {
         }
 
-
-        virtual bool isPersistentlyMapped() const { return false; }
         virtual bool copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount);
         bool copyFrom(VkDevice device,
                       VkCommandPool commandPool,
@@ -228,10 +226,11 @@ namespace Vulkan
     };
     typedef std::shared_ptr<BufferDescriptor> BufferDescriptorPtr;
 
-    struct PersistentBuffer : public Vulkan::BufferDescriptor
+    struct PersistentBuffer
     {
         unsigned int _offset;
         VmaAllocationInfo _allocInfo;
+        Vulkan::BufferDescriptor _buffer;
 
         PersistentBuffer()
             :_offset(0) {}
@@ -239,9 +238,7 @@ namespace Vulkan
         static bool startFrame();
         static bool submitFrame();
 
-
-        bool isPersistentlyMapped() const override { return true; }
-        bool copyFrom(VkDevice device, const void* srcData, VkDeviceSize amount) override;
+        bool copyFrom(VkDevice device, const void* srcData, VkDeviceSize amount);
 
     };
     typedef std::shared_ptr<PersistentBuffer> PersistentBufferPtr;

@@ -177,6 +177,7 @@ namespace Vulkan
     {
         std::string _appName;
         uint32_t _requiredVulkanVersion;
+        bool _enableVSync;
         SDL_Window * _window;
         std::vector<VkPhysicalDevice> _physicalDevices;
         unsigned int _chosenPhysicalDevice;

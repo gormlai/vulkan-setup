@@ -543,6 +543,7 @@ Vulkan::Shader::Shader(const std::string & filename, VkShaderStageFlagBits  type
 Vulkan::AppDescriptor::AppDescriptor()
 :_window(nullptr)
 , _chosenPhysicalDevice(0)
+, _enableVSync(true)
 {
 }
 
@@ -1510,7 +1511,7 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
     swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapChainCreateInfo.preTransform = context._surfaceCapabilities.currentTransform;
     swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapChainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    swapChainCreateInfo.presentMode = appDesc._enableVSync ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
     swapChainCreateInfo.clipped = VK_TRUE;
 //    swapChainCreateInfo.oldSwapchain = context._swapChain;
     swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;

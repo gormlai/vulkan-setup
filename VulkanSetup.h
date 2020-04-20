@@ -233,19 +233,21 @@ namespace Vulkan
         std::vector<unsigned int> _offsets;
         std::vector<VmaAllocationInfo> _allocInfos;
         std::vector<Vulkan::BufferDescriptor> _buffers;
+        bool _clearOnStartFrame;
 
         PersistentBuffer(unsigned int numBuffers)
             :_offsets(numBuffers)
             ,_allocInfos(numBuffers)
             ,_buffers(numBuffers)
+            ,_clearOnStartFrame(true)
         {
             memset(&_offsets[0], 0, sizeof(unsigned int) * numBuffers);
         }
 
-        static bool startFrame(Vulkan::Context& context);
-        static bool submitFrame(Vulkan::Context& context);
+        static bool startFrame(unsigned int frameIndex);
+        static bool submitFrame(unsigned int frameIndex);
 
-        bool copyFrom(Vulkan::Context & context, const void* srcData, VkDeviceSize amount, VkDeviceSize offset = UINT64_MAX);
+        bool copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize offset = UINT64_MAX);
 
     };
     typedef std::shared_ptr<PersistentBuffer> PersistentBufferPtr;

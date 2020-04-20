@@ -674,34 +674,34 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
 
 ///////////////////////////////////// Vulkan PersistentBuffer ///////////////////////////////////////////////////////////////////
 
-bool Vulkan::PersistentBuffer::copyFrom(Vulkan::Context& context, const void* srcData, VkDeviceSize amount, VkDeviceSize offset)
+bool Vulkan::PersistentBuffer::copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize offset)
 {
-    const unsigned int currentFrame = context._currentFrame;
-    const unsigned int lOffset =  UINT64_MAX==offset ? _offsets[currentFrame] : offset;
-    if (lOffset + (VkDeviceSize)amount > _buffers[currentFrame]._size)
+    const unsigned int lOffset =  UINT64_MAX==offset ? _offsets[frameIndex] : offset;
+    if (lOffset + (VkDeviceSize)amount > _buffers[frameIndex]._size)
         return false;
 
-    unsigned char* dstData = reinterpret_cast<unsigned char*>(_allocInfos[currentFrame].pMappedData);
+    unsigned char* dstData = reinterpret_cast<unsigned char*>(_allocInfos[frameIndex].pMappedData);
     void* fPointer = reinterpret_cast<void*>(dstData + lOffset);
     memcpy(fPointer, srcData, amount);
-    _offsets[currentFrame] = lOffset + (unsigned int)amount;
+    _offsets[frameIndex] = lOffset + (unsigned int)amount;
     return true;
 }
 
-bool Vulkan::PersistentBuffer::startFrame(Vulkan::Context& context)
+bool Vulkan::PersistentBuffer::startFrame(unsigned int frameIndex)
 {
-    const unsigned int currentFrame = context._currentFrame;
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers)
-        keyValue.second->_offsets[currentFrame] = 0;
+    {
+        if(keyValue.second->_clearOnStartFrame)
+            keyValue.second->_offsets[frameIndex] = 0;
+    }
 
     return true;
 }
 
-bool Vulkan::PersistentBuffer::submitFrame(Vulkan::Context& context)
+bool Vulkan::PersistentBuffer::submitFrame(unsigned int frameIndex)
 {
-    const unsigned int currentFrame = context._currentFrame;
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers) {
-        vmaFlushAllocation(g_allocator, keyValue.second->_buffers[currentFrame]._memory, 0, keyValue.second->_offsets[currentFrame]);
+        vmaFlushAllocation(g_allocator, keyValue.second->_buffers[frameIndex]._memory, 0, keyValue.second->_offsets[frameIndex]);
     }
     return true;
 }

@@ -676,7 +676,7 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
 
 bool Vulkan::PersistentBuffer::copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize offset)
 {
-    const unsigned int lOffset =  UINT64_MAX==offset ? _offsets[frameIndex] : offset;
+    const unsigned int lOffset =  (UINT64_MAX==offset) ? _offsets[frameIndex] : (unsigned int)offset;
     if (lOffset + (VkDeviceSize)amount > _buffers[frameIndex]._size)
         return false;
 
@@ -691,7 +691,7 @@ bool Vulkan::PersistentBuffer::startFrame(unsigned int frameIndex)
 {
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers)
     {
-        if(keyValue.second->_clearOnStartFrame)
+        if(keyValue.second->_shared)
             keyValue.second->_offsets[frameIndex] = 0;
     }
 
@@ -2204,22 +2204,46 @@ Vulkan::BufferDescriptorPtr Vulkan::createBuffer(Context& context, VkDeviceSize 
     return buffer;
 }
 
-Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
+Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool shared, int numBuffers)
 {
-    PersistentBufferMap::iterator it = g_persistentBuffers.find(PersistentBufferKey(usage, properties));
-    if (it == g_persistentBuffers.end())
-    {
-        Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer(context._colorBuffers.size()));
+    auto createBuffers = [&context, usage, properties, shared, numBuffers](Vulkan::PersistentBufferPtr pBuffer, unsigned int size) {
         for (unsigned int i = 0; i < pBuffer->_buffers.size(); i++)
         {
-            if (!createBuffer(context, size, usage, properties, pBuffer->_buffers[i], &pBuffer->_allocInfos[i]))
-                return Vulkan::PersistentBufferPtr();
+            if (!Vulkan::createBuffer(context, size, usage, properties, pBuffer->_buffers[i], &pBuffer->_allocInfos[i]))
+                return false;
         }
-        g_persistentBuffers[PersistentBufferKey(usage, properties)] = pBuffer;
+        return true;
+    };
+
+    PersistentBufferMap::iterator it = g_persistentBuffers.find(PersistentBufferKey(usage, properties));
+    if (!shared || it == g_persistentBuffers.end())
+    {
+        const int numInternalBuffers = (numBuffers <= 0) ? (int)context._colorBuffers.size() : numBuffers;
+        const int realSize = shared ? g_persistentBufferSize : (int)size;
+        Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer(numInternalBuffers));
+        if(!createBuffers(pBuffer, realSize))
+            return Vulkan::PersistentBufferPtr();
+
+        pBuffer->_shared = shared;
+        pBuffer->_registeredSize = (unsigned int)size;
+        if(shared)
+            g_persistentBuffers[PersistentBufferKey(usage, properties)] = pBuffer;
         return pBuffer;
     }
     else
+    {
+        Vulkan::PersistentBufferPtr pBuffer = it->second;
+        pBuffer->_registeredSize += (unsigned int)size;
+        if (pBuffer->_registeredSize > pBuffer->_buffers[0]._size) {
+            unsigned int newSize = pBuffer->_registeredSize*2;
+            for (Vulkan::BufferDescriptor& desc : pBuffer->_buffers)
+                destroyBufferDescriptor(context, desc);
+            if(!createBuffers(pBuffer, newSize))
+                return Vulkan::PersistentBufferPtr();
+
+        }
         return it->second;
+    }
 }
 
 
@@ -2228,7 +2252,7 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     VkBufferCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkBufferCreateInfo));
     createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    createInfo.size = aInfo!=nullptr ? g_persistentBufferSize : size;
+    createInfo.size = size;
     createInfo.usage = usage;
     createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -2481,8 +2505,7 @@ void Vulkan::destroyMesh(Context & context, Mesh& mesh)
 
 void Vulkan::destroyBufferDescriptor(Context & context, BufferDescriptor& descriptor)
 {
-//	vkFreeMemory(context._device, descriptor._memory, VK_NULL_HANDLE);
-	vkDestroyBuffer(context._device, descriptor._buffer, VK_NULL_HANDLE);
+    vmaDestroyBuffer(g_allocator, descriptor._buffer, descriptor._memory);
 }
 
 

@@ -186,8 +186,15 @@ namespace Vulkan
         
         AppDescriptor();
     };
-    
-    struct BufferDescriptor
+
+    struct Buffer
+    {
+    public:
+        virtual VkBuffer getBuffer(unsigned int frame) { return VK_NULL_HANDLE;  };
+    };
+    typedef std::shared_ptr<Buffer> BufferPtr;
+
+    struct BufferDescriptor : public Buffer
     {
         VkBuffer _buffer;
         VmaAllocation _memory;
@@ -228,18 +235,20 @@ namespace Vulkan
     typedef std::shared_ptr<BufferDescriptor> BufferDescriptorPtr;
 
     struct Context;
-    struct PersistentBuffer
+    struct PersistentBuffer : public Buffer
     {
         std::vector<unsigned int> _offsets;
         std::vector<VmaAllocationInfo> _allocInfos;
         std::vector<Vulkan::BufferDescriptor> _buffers;
-        bool _clearOnStartFrame;
+        bool _shared;
+        unsigned int _registeredSize;
 
         PersistentBuffer(unsigned int numBuffers)
             :_offsets(numBuffers)
             ,_allocInfos(numBuffers)
             ,_buffers(numBuffers)
-            ,_clearOnStartFrame(true)
+            ,_shared(true)
+            ,_registeredSize(0)
         {
             memset(&_offsets[0], 0, sizeof(unsigned int) * numBuffers);
         }
@@ -261,27 +270,27 @@ namespace Vulkan
 		unsigned int _numIndices;
         void * _userData;
         
-        BufferDescriptorPtr getVertexBuffer() {
+        BufferPtr getVertexBuffer() {
             return _buffers[0];
         }
 
-        BufferDescriptorPtr getIndexBuffer() {
+        BufferPtr getIndexBuffer() {
             return _buffers[1];
         }
 
-        PersistentBufferPtr getInstanceBuffer() {
+        BufferPtr getInstanceBuffer() {
             return _instanceBuffer;
         }
 
-        void setVertexBuffer(BufferDescriptorPtr vertexBuffer) {
+        void setVertexBuffer(BufferPtr vertexBuffer) {
             _buffers[0] = vertexBuffer;
         }
 
-        void setIndexBuffer(BufferDescriptorPtr indexBuffer) {
+        void setIndexBuffer(BufferPtr indexBuffer) {
             _buffers[1] = indexBuffer;
         }
 
-        void setInstanceBuffer(PersistentBufferPtr instanceBuffer) {
+        void setInstanceBuffer(BufferPtr instanceBuffer) {
             _instanceBuffer = instanceBuffer;
         }
 
@@ -293,8 +302,8 @@ namespace Vulkan
 		}
 
     private:
-        BufferDescriptorPtr _buffers[2];
-        PersistentBufferPtr _instanceBuffer;
+        BufferPtr _buffers[2];
+        BufferPtr _instanceBuffer;
 
 	};
     typedef std::shared_ptr<Mesh> MeshPtr;
@@ -471,7 +480,7 @@ namespace Vulkan
     bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
 
     BufferDescriptorPtr createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
-    PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+    PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool shared = true, int numBuffers = -1);
 
     bool createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferView& result);
 

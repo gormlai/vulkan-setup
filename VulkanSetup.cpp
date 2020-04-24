@@ -559,6 +559,15 @@ namespace
 
 }
 
+void Vulkan::BufferDescriptor::destroy()
+{
+    if(_buffer!=VK_NULL_HANDLE && _memory!=VK_NULL_HANDLE)
+       vmaDestroyBuffer(g_allocator, _buffer, _memory);
+    _buffer = VK_NULL_HANDLE;
+    _memory = VK_NULL_HANDLE;
+}
+
+
 bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount)
 {
     void* data = nullptr;
@@ -673,6 +682,14 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
 }
 
 ///////////////////////////////////// Vulkan PersistentBuffer ///////////////////////////////////////////////////////////////////
+
+void Vulkan::PersistentBuffer::destroy()
+{
+    for (auto& buf : _buffers)
+        buf.destroy();
+
+    _buffers.clear();
+}
 
 bool Vulkan::PersistentBuffer::copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize offset)
 {

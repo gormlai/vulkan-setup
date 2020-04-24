@@ -190,7 +190,10 @@ namespace Vulkan
     struct Buffer
     {
     public:
-        virtual VkBuffer getBuffer(unsigned int frame) { return VK_NULL_HANDLE;  };
+        virtual void destroy() {}
+        virtual ~Buffer() {}
+
+    protected:
     };
     typedef std::shared_ptr<Buffer> BufferPtr;
 
@@ -207,12 +210,7 @@ namespace Vulkan
         {
         }
 
-        BufferDescriptor(bool persistentlyMapped)
-            :_buffer(VK_NULL_HANDLE)
-            , _memory(VK_NULL_HANDLE)
-            , _size(0)
-        {
-        }
+        void destroy() override;
 
         virtual bool copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount);
         bool copyFrom(VkDevice device,
@@ -257,6 +255,7 @@ namespace Vulkan
         static bool submitFrame(unsigned int frameIndex);
 
         bool copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize offset = UINT64_MAX);
+        void destroy() override;
 
     };
     typedef std::shared_ptr<PersistentBuffer> PersistentBufferPtr;

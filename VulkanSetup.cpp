@@ -38,7 +38,6 @@ namespace Vulkan
     bool createPipelineCache(AppDescriptor& appDesc, Context& context);
     bool createCommandPool(AppDescriptor& appDesc, Context& context, VkCommandPool* result);
     bool recordStandardCommandBuffers(AppDescriptor& appDesc, Context& context);
-    std::vector<VkFence> createFences(Context& context);
     std::vector<VkSemaphore> createSemaphores(Context& context);
     bool createSemaphores(AppDescriptor& appDesc, Context& context);
     bool createIndexAndVertexBuffer(AppDescriptor& appDesc, Context& context, std::vector<unsigned char>& vertexData, std::vector<unsigned char>& indexData, void* userData, Vulkan::Mesh& result);
@@ -774,7 +773,7 @@ namespace
 	}
 }
 
-bool Vulkan::allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory & memory)
+bool Vulkan::allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory & memory, VkMemoryPropertyFlags memoryProperties)
 {
     VkMemoryRequirements imageMemoryRequirements;
     vkGetImageMemoryRequirements(context._device, image, &imageMemoryRequirements);
@@ -782,13 +781,15 @@ bool Vulkan::allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image
     VkMemoryAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = imageMemoryRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(context, imageMemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    allocInfo.memoryTypeIndex = findMemoryType(context, imageMemoryRequirements.memoryTypeBits, memoryProperties);
 
     if (vkAllocateMemory(context._device, &allocInfo, nullptr, &memory) != VK_SUCCESS) {
         return false;
     }
 
-    vkBindImageMemory(context._device, image, memory, 0);
+    if (vkBindImageMemory(context._device, image, memory, 0) != VK_SUCCESS) {
+        return false;
+    }
     return true;
 }
 
@@ -861,14 +862,13 @@ bool Vulkan::createImage(Vulkan::Context& context, const void* pixels, const uns
         return false;
     }
 
-    if (!Vulkan::allocateAndBindImageMemory(context, result, imageMemory))
+    if (!Vulkan::allocateAndBindImageMemory(context, result, imageMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
     {
         SDL_LogError(0, "createImage - Failed to allocate imageMemory");
         return false;
     }
 
-    if (!Vulkan::transitionImageLayout(context, result,
-        format,
+    if (!Vulkan::transitionImageLayoutAndSubmit(context, result,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL))
     {
@@ -889,9 +889,8 @@ bool Vulkan::createImage(Vulkan::Context& context, const void* pixels, const uns
     }
 
 
-    if (!Vulkan::transitionImageLayout(context,
+    if (!Vulkan::transitionImageLayoutAndSubmit(context,
         result,
-        format,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_GENERAL))
     {
@@ -927,10 +926,114 @@ bool Vulkan::createImageView(Vulkan::Context& context, VkImage image, VkFormat r
     return true;
 }
 
+bool Vulkan::transitionImageLayout(Vulkan::Context& context,
+    VkImage image,
+    VkImageLayout oldLayout,
+    VkImageLayout newLayout,
+    VkAccessFlags srcAccessMask,
+    VkAccessFlags dstAccessMask,
+    VkPipelineStageFlags srcStageFlags,
+    VkPipelineStageFlags dstStageFlags,
+    VkCommandBuffer commandBuffer)
+{
+    VkImageMemoryBarrier barrier;
+    memset(&barrier, 0, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.pNext = NULL;
+    barrier.srcAccessMask = srcAccessMask;
+    barrier.dstAccessMask = dstAccessMask;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        ? VK_IMAGE_ASPECT_DEPTH_BIT
+        : VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
 
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStageFlags,
+        dstStageFlags,
+        0,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        1,
+        &barrier);
 
+    return true;
+}
 
-bool Vulkan::transitionImageLayout(Vulkan::Context & context, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
+bool Vulkan::transitionImageLayout(Vulkan::Context& context,
+    VkImage image,
+    VkImageLayout oldLayout,
+    VkImageLayout newLayout,
+    VkCommandBuffer commandBuffer)
+{
+    VkAccessFlags srcAccessMask;
+    VkAccessFlags dstAccessMask;
+
+    VkPipelineStageFlags sourceStage;
+    VkPipelineStageFlags destinationStage;
+
+    switch (oldLayout)
+    {
+    case VK_IMAGE_LAYOUT_UNDEFINED:
+    {
+        switch (newLayout)
+        {
+        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+            srcAccessMask = 0;
+            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+            srcAccessMask = 0;
+            dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            break;
+        default:
+            return false;
+        }
+    }
+    break;
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+    {
+        switch (newLayout)
+        {
+        case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+            srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_GENERAL:
+            srcAccessMask = 0;
+            dstAccessMask = 0;
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            break;
+        default:
+            return false;
+        }
+    }
+    break;
+    default:
+        return false;
+    }
+
+    return transitionImageLayout(context, image, oldLayout, newLayout, srcAccessMask, dstAccessMask, sourceStage, destinationStage, commandBuffer);
+}
+
+bool Vulkan::transitionImageLayoutAndSubmit(Vulkan::Context & context, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
     std::vector<VkCommandBuffer> commandBuffers;
     if (!createCommandBuffers(context, context._commandPool, 1, &commandBuffers))
@@ -948,87 +1051,7 @@ bool Vulkan::transitionImageLayout(Vulkan::Context & context, VkImage image, VkF
     if (beginCommandResult != VK_SUCCESS)
         return false;
 
-    VkImageMemoryBarrier barrier;
-    memset(&barrier, 0, sizeof(barrier));
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.pNext = NULL;
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = 0;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange.aspectMask = (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-    ? VK_IMAGE_ASPECT_DEPTH_BIT
-    : VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-
-    VkPipelineStageFlags sourceStage;
-    VkPipelineStageFlags destinationStage;
-
-    switch (oldLayout)
-    {
-        case VK_IMAGE_LAYOUT_UNDEFINED:
-        {
-            switch (newLayout)
-            {
-            case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-                barrier.srcAccessMask = 0;
-                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-                destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                break;
-            case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-                barrier.srcAccessMask = 0;
-                barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-                destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-                break;
-            default:
-                return false;
-            }
-        }
-            break;
-        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-        {
-            switch (newLayout)
-            {
-                case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-                    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                    sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                    break;
-                case VK_IMAGE_LAYOUT_GENERAL:
-                    barrier.srcAccessMask = 0;
-                    barrier.dstAccessMask = 0;
-                    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-                    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                    break;
-                default:
-                    return false;
-            }
-        }
-            break;
-        default:
-            return false;
-    }
-
-    vkCmdPipelineBarrier(
-                         commandBuffer,
-                         sourceStage,
-                         destinationStage,
-                         0,
-                         0,
-                         nullptr,
-                         0,
-                         nullptr,
-                         1,
-                         &barrier);
+    transitionImageLayout(context, image, oldLayout, newLayout, commandBuffer);
 
     vkEndCommandBuffer(commandBuffer);
 
@@ -1581,7 +1604,7 @@ bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context)
 		if(!createImageView(context, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D, depthImageView))
 			continue;
 
-		if (!transitionImageLayout(context, depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
+		if (!transitionImageLayoutAndSubmit(context, depthImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
 			continue;
 
 		context._depthImages[i] = depthImage;
@@ -2134,27 +2157,38 @@ bool Vulkan::resetCommandBuffers(Context & context, std::vector<VkCommandBuffer>
 		}
 	}
 	return true;
-
-
 }
 
-std::vector<VkFence> Vulkan::createFences(Context & context)
+bool Vulkan::createFence(Context & context, VkFenceCreateFlags flags, VkFence & result)
 {
-    std::vector<VkFence> fences(context._frameBuffers.size());
-    for(unsigned int i=0 ; i < (unsigned int)fences.size() ; i++)
+    VkFenceCreateInfo createInfo;
+    memset(&createInfo, 0, sizeof(VkFenceCreateInfo));
+    createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    createInfo.flags = flags;
+
+    const VkResult createFenceResult = vkCreateFence(context._device, &createInfo, nullptr, &result);
+    assert(createFenceResult == VK_SUCCESS);
+    if (createFenceResult != VK_SUCCESS)
     {
-        VkFenceCreateInfo createInfo;
-        memset(&createInfo, 0, sizeof(VkFenceCreateInfo));
-        createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        createInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        
-		const VkResult createFenceResult = vkCreateFence(context._device, &createInfo, nullptr, &fences[i]);
-		assert(createFenceResult == VK_SUCCESS);
-        if(createFenceResult != VK_SUCCESS)
+        SDL_LogError(0, "Failed to create fences\n");
+        return false;
+    }
+    return true;
+}
+
+// VK_FENCE_CREATE_SIGNALED_BIT context._frameBuffers.size()
+std::vector<VkFence> Vulkan::createFences(Context & context, unsigned int count, VkFenceCreateFlags flags)
+{
+    std::vector<VkFence> fences;
+    for(unsigned int i=0 ; i < count ; i++)
+    {
+        VkFence result;
+        if (!createFence(context, flags, result))
         {
             SDL_LogError(0, "Failed to create fences (%d)\n", i);
             return std::vector<VkFence>();
         }
+        fences.push_back(result);
 
     }
     return fences;
@@ -2185,7 +2219,7 @@ bool Vulkan::createSemaphores(AppDescriptor & appDesc, Context & context)
 {
     context._imageAvailableSemaphores = createSemaphores(context);
     context._renderFinishedSemaphores = createSemaphores(context);
-    context._fences = createFences(context);
+    context._fences = createFences(context, context._frameBuffers.size(), VK_FENCE_CREATE_SIGNALED_BIT);
     
     return context._imageAvailableSemaphores.size() == context._renderFinishedSemaphores.size()
     && context._imageAvailableSemaphores.size() == context._fences.size()
@@ -2657,16 +2691,7 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         SDL_LogError(0, "Failed to create standard command pool\n");
         return false;
     }
-    
-    // create utility command Pool
-    std::vector<VkCommandBuffer> commandBuffers;
-    if (!createCommandBuffers(context, context._commandPool, 1, &commandBuffers))
-    {
-        SDL_LogError(0, "Failed to create utility command buffer\n");
-        return false;
-    }
-    context._utilityCommandBuffer = commandBuffers[0];
-    
+        
 	if (!createDepthBuffers(appDesc, context))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");
@@ -2918,3 +2943,40 @@ bool Vulkan::createSampler(Vulkan::Context& context, VkSampler& sampler)
     return Vulkan::createSampler(context, sampler, samplerCreateInfo);
 }
 
+VkCommandBuffer Vulkan::createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool, bool beginCommandBuffer)
+{
+    VkCommandBuffer commandBuffer;
+
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo;
+    memset(&commandBufferAllocateInfo, 0, sizeof(VkCommandBufferAllocateInfo));
+    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    commandBufferAllocateInfo.commandPool = commandPool;
+    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    commandBufferAllocateInfo.commandBufferCount = 1;
+    const VkResult allocateCommandBuffersResult = vkAllocateCommandBuffers(context._device, &commandBufferAllocateInfo, &commandBuffer);
+    assert(allocateCommandBuffersResult == VK_SUCCESS);
+    if (allocateCommandBuffersResult != VK_SUCCESS)
+    {
+        SDL_LogError(0, "Failed to create VkCommandbufferAllocateInfo\n");
+        return commandBuffer;
+    }
+
+    if (beginCommandBuffer)
+    {
+        VkCommandBufferBeginInfo beginInfo;
+        memset(&beginInfo, 0, sizeof(beginInfo));
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        beginInfo.pInheritanceInfo = NULL;
+        beginInfo.pNext = NULL;
+
+        const VkResult beginCommandResult = vkBeginCommandBuffer(commandBuffer, &beginInfo);
+        if (beginCommandResult != VK_SUCCESS)
+        {
+            SDL_LogError(0, "Failed to call vkBeginCommandBuffer\n");
+            return commandBuffer;
+        }
+    }
+
+    return commandBuffer;
+}

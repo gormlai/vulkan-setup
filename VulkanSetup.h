@@ -432,7 +432,6 @@ namespace Vulkan
 		VkAllocationCallbacks * _allocator;
         
         VkCommandPool _commandPool;
-        VkCommandBuffer _utilityCommandBuffer;
 
         std::vector<VkSemaphore> _renderFinishedSemaphores;
         std::vector<VkSemaphore> _imageAvailableSemaphores;
@@ -483,7 +482,7 @@ namespace Vulkan
 
     bool createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferView& result);
 
-    bool allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory& memory);
+    bool allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory& memory, VkMemoryPropertyFlags memoryProperties);
     bool createImage(Vulkan::Context& context,
         unsigned int width,
         unsigned int height,
@@ -502,10 +501,24 @@ namespace Vulkan
         VkImageViewType imageViewType,
         VkImageView& result);
 
+    bool transitionImageLayout(Vulkan::Context& context,
+        VkImage image,
+        VkImageLayout oldLayout,
+        VkImageLayout newLayout,
+        VkAccessFlags srcAccessMask,
+        VkAccessFlags dstAccessMask,
+        VkPipelineStageFlags srcStageFlags,
+        VkPipelineStageFlags dstStageFlags,
+        VkCommandBuffer commandBuffer);
 
-    bool transitionImageLayout(Vulkan::Context & context,
+    bool transitionImageLayout(Vulkan::Context& context,
+        VkImage image,
+        VkImageLayout oldLayout,
+        VkImageLayout newLayout,
+        VkCommandBuffer commandBuffer);
+
+    bool transitionImageLayoutAndSubmit(Vulkan::Context & context,
                                VkImage image,
-                               VkFormat format,
                                VkImageLayout oldLayout,
                                VkImageLayout newLayout);
 
@@ -513,6 +526,16 @@ namespace Vulkan
 
     bool createSampler(Vulkan::Context& context, VkSampler& sampler, VkSamplerCreateInfo & samplerCreateInfo);
     bool createSampler(Vulkan::Context& context, VkSampler& sampler);
+
+    std::vector<VkFence> createFences(Context& context, unsigned int count, VkFenceCreateFlags flags);
+    bool createFence(Context& context, VkFenceCreateFlags flags, VkFence& result);
+
+    inline unsigned int getNumSwapBuffers(Context& context) {
+        return (unsigned int)context._colorBuffers.size();
+    }
+
+    VkCommandBuffer createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool, bool beginCommandBuffer);
+
 }
 
 #endif

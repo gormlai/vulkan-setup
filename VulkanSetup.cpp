@@ -31,10 +31,10 @@ namespace Vulkan
     bool createQueue(AppDescriptor& appDesc, Context& context);
     bool createSwapChain(AppDescriptor& appDesc, Context& context);
     bool createColorBuffers(Context& context);
-    bool createDepthBuffers(AppDescriptor& appDesc, Context& context);
+    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory);
+    bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<VkImage>& images, std::vector<VkImageView>& imageViews, std::vector<VkDeviceMemory>& memory);
     bool createRenderPass(Context& Context, VkRenderPass* result, RenderPassCustomizationCallback renderPassCreationCallback);
     bool createDescriptorSetLayout(Context& Context, EffectDescriptor& effect);
-    bool createFrameBuffers(Context& Context);
     bool createPipelineCache(AppDescriptor& appDesc, Context& context);
     bool createCommandPool(AppDescriptor& appDesc, Context& context, VkCommandPool* result);
     bool recordStandardCommandBuffers(AppDescriptor& appDesc, Context& context);
@@ -1575,42 +1575,44 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
     return true;
 }
 
-bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context)
+bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory)
 {
-	constexpr VkImageTiling requiredTiling = VK_IMAGE_TILING_OPTIMAL;
+    constexpr VkImageTiling requiredTiling = VK_IMAGE_TILING_OPTIMAL;
+    VkFormat depthFormat = findDepthFormat(context, requiredTiling);
 
-	VkFormat depthFormat = findDepthFormat(context, requiredTiling);
-	context._depthImageViews.resize(context._colorBuffers.size());
-	context._depthImages.resize(context._colorBuffers.size());
-	context._depthMemory.resize(context._colorBuffers.size());
-	for (unsigned int i = 0; i < (unsigned int)context._depthImageViews.size(); i++)
+    if (!createImage(context,
+        context._swapChainSize.width,
+        context._swapChainSize.height,
+        1,
+        depthFormat,
+        requiredTiling,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        image))
+        return false;
+
+    if (!allocateImageMemory(context, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory))
+        return false;
+
+    if (!createImageView(context, image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D, imageView))
+        return false;
+
+    if (!transitionImageLayoutAndSubmit(context, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
+        return false;
+
+    return true;
+}
+
+
+bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context, std::vector<VkImage> & images, std::vector<VkImageView> & imageViews,  std::vector<VkDeviceMemory> & memory)
+{
+    const unsigned int numBuffers = Vulkan::getNumSwapBuffers(context);
+	imageViews.resize(numBuffers);
+	images.resize(numBuffers);
+	memory.resize(numBuffers);
+	for (unsigned int i = 0; i < numBuffers; i++)
 	{
-		VkImage depthImage;
-		VkImageView depthImageView;
-		VkDeviceMemory depthImageMemory;
-		if(!createImage(context,
-			context._swapChainSize.width,
-			context._swapChainSize.height,
-			1,
-			depthFormat,
-			requiredTiling,
-			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-			depthImage))
-			continue;
-
-		if (!allocateImageMemory(context, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory))
-			continue;
-
-		if(!createImageView(context, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D, depthImageView))
-			continue;
-
-		if (!transitionImageLayoutAndSubmit(context, depthImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
-			continue;
-
-		context._depthImages[i] = depthImage;
-		context._depthMemory[i] = depthImageMemory;
-		context._depthImageViews[i] = depthImageView;
-
+        if (!createDepthBuffer(appDesc, context, images[i], imageViews[i], memory[i]))
+            return false;
 	}
 
 	return true;
@@ -1736,17 +1738,22 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPa
     return true;
 }
 
-bool Vulkan::createFrameBuffers(Context & Context)
+bool Vulkan::createFrameBuffers(Context & Context, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& depthViews, std::vector<VkFramebuffer>& result)
 {
-	for(unsigned int i=0 ; i < (unsigned int)Context._colorBufferViews.size() ; i++ )
+    result.resize(colorViews.size());
+	for(unsigned int i=0 ; i < (unsigned int)colorViews.size() ; i++ )
     {
         VkFramebufferCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
+
+        std::vector<VkImageView> attachments;
+        attachments.push_back(colorViews[i]);
+        if (!depthViews.empty())
+            attachments.push_back(depthViews[i]);
         
-        VkImageView attachments[] = { Context._colorBufferViews[i], Context._depthImageViews[i] };
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = Context._renderPass;
-        createInfo.attachmentCount = sizeof(attachments) / sizeof(VkImageView);
+        createInfo.attachmentCount = (uint32_t)attachments.size();
 		createInfo.pAttachments = &attachments[0];
         createInfo.width = Context._swapChainSize.width;
         createInfo.height = Context._swapChainSize.height;
@@ -1757,8 +1764,9 @@ bool Vulkan::createFrameBuffers(Context & Context)
 		assert(frameBufferCreationResult == VK_SUCCESS);
 		if (frameBufferCreationResult != VK_SUCCESS)
             return false;
+
+        result[i] = frameBuffer;
         
-        Context._frameBuffers.push_back(frameBuffer);
     }
     
     return true;
@@ -2219,7 +2227,7 @@ bool Vulkan::createSemaphores(AppDescriptor & appDesc, Context & context)
 {
     context._imageAvailableSemaphores = createSemaphores(context);
     context._renderFinishedSemaphores = createSemaphores(context);
-    context._fences = createFences(context, context._frameBuffers.size(), VK_FENCE_CREATE_SIGNALED_BIT);
+    context._fences = createFences(context, (unsigned int)context._frameBuffers.size(), VK_FENCE_CREATE_SIGNALED_BIT);
     
     return context._imageAvailableSemaphores.size() == context._renderFinishedSemaphores.size()
     && context._imageAvailableSemaphores.size() == context._fences.size()
@@ -2692,14 +2700,14 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         return false;
     }
         
-	if (!createDepthBuffers(appDesc, context))
+	if (!createDepthBuffers(appDesc, context, context._depthImages, context._depthImageViews, context._depthMemory))
 	{
 		SDL_LogError(0, "Failed to create depth buffers\n");
 		return false;
 	}
     
 
-	if (!createFrameBuffers(context))
+	if (!createFrameBuffers(context, context._colorBufferViews, context._depthImageViews, context._frameBuffers))
 	{
 		SDL_LogError(0, "Failed to create frame buffers\n");
 		return false;
@@ -2728,13 +2736,13 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-	if (!createDepthBuffers(appDesc, context))
-	{
+    if (!createDepthBuffers(appDesc, context, context._depthImages, context._depthImageViews, context._depthMemory))
+    {
 		SDL_LogError(0, "Failed to create depth buffers\n");
 		return false;
 	}
 
-	if (!createFrameBuffers(context))
+	if (!createFrameBuffers(context, context._colorBufferViews, context._depthImageViews, context._frameBuffers))
 	{
 		SDL_LogError(0, "Failed to create frame buffers\n");
 		return false;

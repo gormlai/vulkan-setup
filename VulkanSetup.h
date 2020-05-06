@@ -535,6 +535,10 @@ namespace Vulkan
     }
 
     VkCommandBuffer createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool, bool beginCommandBuffer);
+    bool createFrameBuffers(Context& Context, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
+    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory);
+    bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<VkImage>& images, std::vector<VkImageView>& imageViews, std::vector<VkDeviceMemory>& memory);
+
 
 }
 

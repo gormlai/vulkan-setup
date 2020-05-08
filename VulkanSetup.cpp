@@ -236,7 +236,8 @@ namespace
 
 void Vulkan::EffectDescriptor::collectDescriptorSetLayouts(std::vector<VkDescriptorSetLayout>& layouts)
 {
-    layouts.push_back(_descriptorSetLayout);
+    if (_descriptorSetLayout != VK_NULL_HANDLE)
+        layouts.push_back(_descriptorSetLayout);
 }
 
 uint32_t Vulkan::EffectDescriptor::collectUniformsOfType(VkDescriptorType type, Vulkan::ShaderStage stage, Uniform** result)
@@ -794,13 +795,14 @@ bool Vulkan::allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image
 }
 
 bool Vulkan::createImage(Vulkan::Context & context,
-                 unsigned int width,
-                 unsigned int height,
-                 unsigned int depth,
-                 VkFormat requiredFormat,
-                 VkImageTiling requiredTiling,
-                 VkImageUsageFlags requiredUsage,
-                 VkImage& resultImage)
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth,
+    unsigned int mipMapLevels,
+    VkFormat requiredFormat,
+    VkImageTiling requiredTiling,
+    VkImageUsageFlags requiredUsage,
+    VkImage& resultImage)
 {
     VkImageCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
@@ -812,7 +814,7 @@ bool Vulkan::createImage(Vulkan::Context & context,
     createInfo.extent.width = width;
     createInfo.extent.height = height;
     createInfo.extent.depth = depth;
-    createInfo.mipLevels = 1;
+    createInfo.mipLevels = mipMapLevels;
     createInfo.arrayLayers = 1;
     createInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     createInfo.tiling = requiredTiling;
@@ -829,8 +831,9 @@ bool Vulkan::createImage(Vulkan::Context & context,
     return true;
 }
 
-bool Vulkan::createImage(Vulkan::Context& context, const void* pixels, const unsigned int pixelSize, const unsigned int width, const unsigned int height, const unsigned int depth, VkFormat format, VkImage& result, VkDeviceMemory& imageMemory)
+bool Vulkan::createImage(Vulkan::Context& context, const void* pixels, const unsigned int pixelSize, const unsigned int width, const unsigned int height, const unsigned int depth, VkFormat format, VkImage& result, VkDeviceMemory& imageMemory, unsigned int mipMapLevels)
 {
+    assert(mipMapLevels > 0);
     Vulkan::BufferDescriptor stagingBuffer;
     const VkDeviceSize size = pixelSize * width * height * depth;
     if (!Vulkan::createBuffer(context,
@@ -853,9 +856,10 @@ bool Vulkan::createImage(Vulkan::Context& context, const void* pixels, const uns
         width,
         height,
         depth,
+        mipMapLevels,
         format,
         VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         result))
     {
         SDL_LogError(0, "createImage - Failed to create image");
@@ -1488,6 +1492,7 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
 
 bool Vulkan::createQueue(AppDescriptor & appDesc, Context & context)
 {
+    vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._computeQueue);
     vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._graphicsQueue);
     vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._presentQueue);
     return true;
@@ -1583,6 +1588,7 @@ bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage
     if (!createImage(context,
         context._swapChainSize.width,
         context._swapChainSize.height,
+        1,
         1,
         depthFormat,
         requiredTiling,
@@ -1848,12 +1854,11 @@ bool Vulkan::createComputePipeline(AppDescriptor& appDesc, Context& context, Com
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
     memset(&pipelineLayoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateInfo));
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    //    pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)effect._descriptorSetLayouts.size();
 
     std::vector<VkDescriptorSetLayout> layouts;
     effect.collectDescriptorSetLayouts(layouts);
     pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)layouts.size();
-    pipelineLayoutCreateInfo.pSetLayouts = &layouts[0];
+    pipelineLayoutCreateInfo.pSetLayouts = layouts.empty() ? VK_NULL_HANDLE :  &layouts[0];
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
 
@@ -1868,7 +1873,11 @@ bool Vulkan::createComputePipeline(AppDescriptor& appDesc, Context& context, Com
     createInfo.basePipelineHandle = effect._pipeline;
     createInfo.basePipelineIndex = 0;
 
-    const VkResult createComputePipelineResult = vkCreateComputePipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, VK_NULL_HANDLE, &effect._pipeline);
+    VkComputePipelineCreateInfoDescriptor createDescriptor;
+    createDescriptor._createInfo = createInfo;
+    computePipelineCreationCallback(createDescriptor);
+
+    const VkResult createComputePipelineResult = vkCreateComputePipelines(context._device, VK_NULL_HANDLE, 1, &createDescriptor._createInfo, VK_NULL_HANDLE, &effect._pipeline);
     assert(createComputePipelineResult == VK_SUCCESS);
     if (createComputePipelineResult != VK_SUCCESS)
     {
@@ -2086,6 +2095,9 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
 
 bool Vulkan::createDescriptorSetLayout(Context & context, Vulkan::EffectDescriptor& effect)
 {
+    if (effect._uniforms.empty())
+        return true;
+
     std::vector<VkDescriptorSetLayoutBinding> layouts;
 
     for (size_t i = 0; i < effect._uniforms.size(); i++)
@@ -2468,6 +2480,10 @@ bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
 
 bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, EffectDescriptor& effect)
 {
+    if (effect._uniforms.empty())
+        return true;
+
+
     const uint32_t framesCount = (uint32_t)context._colorBuffers.size();
 
     VkDescriptorSetAllocateInfo allocInfo = {};

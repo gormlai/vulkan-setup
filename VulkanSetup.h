@@ -148,6 +148,7 @@ namespace Vulkan
 
     struct VkComputePipelineCreateInfoDescriptor
     {
+        VkComputePipelineCreateInfo _createInfo;
     };
 
     struct VkRenderPassCreateInfoDescriptor
@@ -372,6 +373,7 @@ namespace Vulkan
 
         EffectDescriptor()
             :_descriptorPool(VK_NULL_HANDLE)
+            ,_descriptorSetLayout(VK_NULL_HANDLE)
         {
         }
 
@@ -407,6 +409,7 @@ namespace Vulkan
         
         VkQueue _presentQueue;
         VkQueue _graphicsQueue;
+        VkQueue _computeQueue;
         
         VkSurfaceKHR _surface;
         VkSurfaceCapabilitiesKHR _surfaceCapabilities;
@@ -487,12 +490,17 @@ namespace Vulkan
         unsigned int width,
         unsigned int height,
         unsigned int depth,
+        unsigned int mipMapLevels,
         VkFormat requiredFormat,
         VkImageTiling requiredTiling,
         VkImageUsageFlags requiredUsage,
         VkImage& resultImage);
 
-    bool createImage(Vulkan::Context& context, const void* pixels, const unsigned int pixelSize, const unsigned int width, const unsigned int height, const unsigned int depth, VkFormat format, VkImage& result, VkDeviceMemory& imageMemory);
+    inline unsigned int maxMipMapLevels(unsigned int width) { return static_cast<unsigned int>(floor(log2(width))) + 1; }
+    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height) { return static_cast<unsigned int>(floor(log2(std::max(width,height)))) + 1; }
+    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height, unsigned int depth) { return static_cast<unsigned int>(floor(log2(std::max(width, std::max(height, depth))))) + 1; }
+
+    bool createImage(Vulkan::Context& context, const void* pixels, const unsigned int pixelSize, const unsigned int width, const unsigned int height, const unsigned int depth, VkFormat format, VkImage& result, VkDeviceMemory& imageMemory, unsigned int mipLevels = 1);
 
     bool createImageView(Vulkan::Context& context,
         VkImage image,

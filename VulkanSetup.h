@@ -155,9 +155,11 @@ namespace Vulkan
     {
         VkAttachmentReference _colorAttachmentReference;
         VkAttachmentReference _depthAttachmentReference;
+        VkAttachmentReference _colorAttachmentReferenceResolve;
         VkSubpassDescription _subpassDescription;
         VkAttachmentDescription _colorAttachment;
         VkAttachmentDescription _depthAttachment;
+        VkAttachmentDescription _colorAttachmentResolve;
         VkSubpassDependency _dependency;
         VkRenderPassCreateInfo _createInfo;
         std::array<VkAttachmentDescription,10> _attachmentDescriptions;
@@ -179,6 +181,7 @@ namespace Vulkan
         std::string _appName;
         uint32_t _requiredVulkanVersion;
         bool _enableVSync;
+        uint32_t _numSamples;
         SDL_Window * _window;
         std::vector<VkPhysicalDevice> _physicalDevices;
         unsigned int _chosenPhysicalDevice;
@@ -354,6 +357,11 @@ namespace Vulkan
 
     struct EffectDescriptor
     {
+        GraphicsPipelineCustomizationCallback _graphicsPipelineCreationCallback;
+        ComputePipelineCustomizationCallback _computePipelineCreationCallback;
+        RenderPassCustomizationCallback _renderPassCreationCallback;
+        bool _createPipeline;
+
         VkPipeline _pipeline;
         VkPipelineLayout _pipelineLayout;
         std::vector<Shader> _shaderModules;
@@ -373,7 +381,14 @@ namespace Vulkan
 
         EffectDescriptor()
             :_descriptorPool(VK_NULL_HANDLE)
-            ,_descriptorSetLayout(VK_NULL_HANDLE)
+            , _descriptorSetLayout(VK_NULL_HANDLE)
+            , _pipeline(VK_NULL_HANDLE)
+            , _pipelineLayout(VK_NULL_HANDLE)
+            , _renderPass(VK_NULL_HANDLE)
+            , _graphicsPipelineCreationCallback(nullptr)
+            , _computePipelineCreationCallback(nullptr)
+            , _renderPassCreationCallback(nullptr)
+            , _createPipeline(true)
         {
         }
 
@@ -419,8 +434,13 @@ namespace Vulkan
         VkSwapchainKHR _swapChain;
         
 		// for colour buffer
-        std::vector<VkImage> _colorBuffers;
-        std::vector<VkImageView> _colorBufferViews;
+        std::vector<VkImage> _swapChainImages;
+        std::vector<VkImageView> _swapChainImageViews;
+
+        // for the msaa colour buffer
+        std::vector<VkImage> _msaaColourImages;
+        std::vector<VkImageView> _msaaColourImageViews;
+        std::vector<VkDeviceMemory> _msaaColourMemory;
 
 		// for depth buffer
 		std::vector<VkImage> _depthImages;
@@ -479,6 +499,7 @@ namespace Vulkan
         RenderPassCustomizationCallback renderPassCreationCallback,
         Vulkan::EffectDescriptor& effect);
     bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+    bool recreateEffectDescriptor(AppDescriptor& appDesc, Context& context, EffectDescriptorPtr effect);
 
     BufferDescriptorPtr createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
     PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool shared = true, int numBuffers = -1);
@@ -491,6 +512,7 @@ namespace Vulkan
         unsigned int height,
         unsigned int depth,
         unsigned int mipMapLevels,
+        unsigned int samplesPrPixels,
         VkFormat requiredFormat,
         VkImageTiling requiredTiling,
         VkImageUsageFlags requiredUsage,
@@ -500,7 +522,17 @@ namespace Vulkan
     inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height) { return static_cast<unsigned int>(floor(log2(std::max(width,height)))) + 1; }
     inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height, unsigned int depth) { return static_cast<unsigned int>(floor(log2(std::max(width, std::max(height, depth))))) + 1; }
 
-    bool createImage(Vulkan::Context& context, const void* pixels, const unsigned int pixelSize, const unsigned int width, const unsigned int height, const unsigned int depth, VkFormat format, VkImage& result, VkDeviceMemory& imageMemory, unsigned int mipLevels = 1);
+    bool createImage(Vulkan::Context& context, 
+        const void* pixels, 
+        const unsigned int pixelSize, 
+        const unsigned int width, 
+        const unsigned int height, 
+        const unsigned int depth,
+        const unsigned int samplesPrPixels,
+        VkFormat format, 
+        VkImage& result, 
+        VkDeviceMemory& imageMemory, 
+        unsigned int mipLevels = 1);
 
     bool createImageView(Vulkan::Context& context,
         VkImage image,
@@ -539,11 +571,11 @@ namespace Vulkan
     bool createFence(Context& context, VkFenceCreateFlags flags, VkFence& result);
 
     inline unsigned int getNumSwapBuffers(Context& context) {
-        return (unsigned int)context._colorBuffers.size();
+        return (unsigned int)context._swapChainImages.size();
     }
 
     VkCommandBuffer createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool, bool beginCommandBuffer);
-    bool createFrameBuffers(Context& Context, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
+    bool createFrameBuffers(Context& Context, VkRenderPass& renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& msaaViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
     bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory);
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<VkImage>& images, std::vector<VkImageView>& imageViews, std::vector<VkDeviceMemory>& memory);
 

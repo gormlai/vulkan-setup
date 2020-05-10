@@ -33,7 +33,7 @@ namespace Vulkan
     bool createColorBuffers(Context& context);
     bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory);
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<VkImage>& images, std::vector<VkImageView>& imageViews, std::vector<VkDeviceMemory>& memory);
-    bool createRenderPass(Context& Context, VkRenderPass* result, RenderPassCustomizationCallback renderPassCreationCallback);
+    bool createRenderPass(Context& Context, uint32_t numAASamples, VkRenderPass* result, RenderPassCustomizationCallback renderPassCreationCallback);
     bool createDescriptorSetLayout(Context& Context, EffectDescriptor& effect);
     bool createPipelineCache(AppDescriptor& appDesc, Context& context);
     bool createCommandPool(AppDescriptor& appDesc, Context& context, VkCommandPool* result);
@@ -346,7 +346,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformSamplerOrImage(Vulkan::Context& con
         Vulkan::Uniform newUniform{};
         newUniform._name = name;
         newUniform._type = type;
-        newUniform._frames.resize(context._colorBuffers.size());
+        newUniform._frames.resize(context._swapChainImages.size());
         newUniform._stages.push_back(stage);
 
         if (binding < 0)
@@ -392,7 +392,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
         else
             newUniform._binding = binding;
 
-        for (uint32_t i = 0; i < (uint32_t)context._colorBuffers.size(); i++)
+        for (uint32_t i = 0; i < (uint32_t)context._swapChainImages.size(); i++)
         {
             UniformAggregate aggregate;
             aggregate._buffer._size = size;
@@ -544,6 +544,7 @@ Vulkan::AppDescriptor::AppDescriptor()
 :_window(nullptr)
 , _chosenPhysicalDevice(0)
 , _enableVSync(true)
+, _numSamples(1)
 {
 }
 
@@ -799,6 +800,7 @@ bool Vulkan::createImage(Vulkan::Context & context,
     unsigned int height,
     unsigned int depth,
     unsigned int mipMapLevels,
+    const unsigned int samplesPrPixels,
     VkFormat requiredFormat,
     VkImageTiling requiredTiling,
     VkImageUsageFlags requiredUsage,
@@ -816,7 +818,7 @@ bool Vulkan::createImage(Vulkan::Context & context,
     createInfo.extent.depth = depth;
     createInfo.mipLevels = mipMapLevels;
     createInfo.arrayLayers = 1;
-    createInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    createInfo.samples = (VkSampleCountFlagBits)samplesPrPixels;
     createInfo.tiling = requiredTiling;
     createInfo.usage = requiredUsage;
     createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -831,7 +833,17 @@ bool Vulkan::createImage(Vulkan::Context & context,
     return true;
 }
 
-bool Vulkan::createImage(Vulkan::Context& context, const void* pixels, const unsigned int pixelSize, const unsigned int width, const unsigned int height, const unsigned int depth, VkFormat format, VkImage& result, VkDeviceMemory& imageMemory, unsigned int mipMapLevels)
+bool Vulkan::createImage(Vulkan::Context& context, 
+    const void* pixels, 
+    const unsigned int pixelSize, 
+    const unsigned int width, 
+    const unsigned int height, 
+    const unsigned int depth, 
+    const unsigned int samplesPrPixels,
+    VkFormat format,
+    VkImage& result, 
+    VkDeviceMemory& imageMemory, 
+    unsigned int mipMapLevels)
 {
     assert(mipMapLevels > 0);
     Vulkan::BufferDescriptor stagingBuffer;
@@ -857,6 +869,7 @@ bool Vulkan::createImage(Vulkan::Context& context, const void* pixels, const uns
         height,
         depth,
         mipMapLevels,
+        samplesPrPixels,
         format,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -1142,9 +1155,11 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 
 		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
 		createInfo.pNext = nullptr;
-		createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | /*VK_DEBUG_REPORT_INFORMATION_BIT_EXT  | */
-			VK_DEBUG_REPORT_WARNING_BIT_EXT |
-			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+		createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT 
+            | VK_DEBUG_REPORT_INFORMATION_BIT_EXT  
+            | VK_DEBUG_REPORT_WARNING_BIT_EXT 
+            | VK_DEBUG_REPORT_DEBUG_BIT_EXT
+            | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
 		createInfo.pUserData = nullptr;
 		createInfo.pfnCallback = &VulkanDebugReportCallback;
 
@@ -1573,8 +1588,8 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
 	if (getVkImageCountFromSwapChainResult != VK_SUCCESS || vkImageCount == 0)
         return false;
     
-    context._colorBuffers.resize(vkImageCount);
-    VkResult getSwapChainImagesResult = vkGetSwapchainImagesKHR(context._device, context._swapChain, &vkImageCount, &context._colorBuffers[0]);
+    context._swapChainImages.resize(vkImageCount);
+    VkResult getSwapChainImagesResult = vkGetSwapchainImagesKHR(context._device, context._swapChain, &vkImageCount, &context._swapChainImages[0]);
 	assert(getSwapChainImagesResult == VK_SUCCESS);
 
     return true;
@@ -1590,6 +1605,7 @@ bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage
         context._swapChainSize.height,
         1,
         1,
+        appDesc._numSamples,
         depthFormat,
         requiredTiling,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -1626,7 +1642,7 @@ bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context, std:
 
 bool Vulkan::createColorBuffers(Context & context)
 {
-    for (VkImage & image : context._colorBuffers)
+    for (VkImage & image : context._swapChainImages)
     {
         VkImageViewCreateInfo createInfo;
         memset(&createInfo, 0, sizeof(createInfo));
@@ -1653,13 +1669,13 @@ bool Vulkan::createColorBuffers(Context & context)
         if (imageViewCreationResult != VK_SUCCESS)
             return false;
         
-        context._colorBufferViews.push_back(imageView);
+        context._swapChainImageViews.push_back(imageView);
     }
     
     return true;
 }
 
-bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPassCustomizationCallback renderPassCreationCallback)
+bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRenderPass * result, RenderPassCustomizationCallback renderPassCreationCallback)
 {
     VkRenderPassCreateInfoDescriptor renderPassInfoDescriptor;
 
@@ -1673,35 +1689,55 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPa
 	depthAttachmentReference.attachment = 1;
 	depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    
+    // only used if numSamples > 1
+    VkAttachmentReference& colorAttachmentReferenceResolve = renderPassInfoDescriptor._colorAttachmentReferenceResolve;
+    memset(&colorAttachmentReferenceResolve, 0, sizeof(colorAttachmentReference));
+    colorAttachmentReferenceResolve.attachment = 2;
+    colorAttachmentReferenceResolve.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
     VkSubpassDescription& subpassDescription = renderPassInfoDescriptor._subpassDescription;
     memset(&subpassDescription, 0, sizeof(subpassDescription));
     subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpassDescription.colorAttachmentCount = 1;
+    subpassDescription.colorAttachmentCount = 1; 
     subpassDescription.pColorAttachments = &colorAttachmentReference;
 	subpassDescription.pDepthStencilAttachment = &depthAttachmentReference;
+
+    if(numAASamples>1)
+        subpassDescription.pResolveAttachments = &colorAttachmentReferenceResolve;
 
     VkAttachmentDescription& colorAttachment = renderPassInfoDescriptor._colorAttachment;
     memset(&colorAttachment, 0, sizeof(colorAttachment));
     colorAttachment.format = Context._surfaceFormat.format;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.samples = static_cast<VkSampleCountFlagBits>(numAASamples);
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    colorAttachment.finalLayout = (numAASamples > 1) ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentDescription& depthAttachment = renderPassInfoDescriptor._depthAttachment;
 	memset(&depthAttachment, 0, sizeof(depthAttachment));
 	depthAttachment.format = findDepthFormat(Context, VK_IMAGE_TILING_OPTIMAL);
-	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	depthAttachment.samples = static_cast<VkSampleCountFlagBits>(numAASamples);
 	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    // only used if numSamples > 1
+    VkAttachmentDescription& colorAttachmentResolve = renderPassInfoDescriptor._colorAttachmentResolve;
+    memset(&colorAttachmentResolve, 0, sizeof(colorAttachment));
+    colorAttachmentResolve.format = Context._surfaceFormat.format;
+    colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkSubpassDependency& dependency = renderPassInfoDescriptor._dependency;
 	memset(&dependency, 0, sizeof(dependency));
@@ -1715,10 +1751,11 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPa
     VkRenderPassCreateInfo& createInfo = renderPassInfoDescriptor._createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
     std::array<VkAttachmentDescription, 10> & attachmentDescriptions = renderPassInfoDescriptor._attachmentDescriptions;
-    attachmentDescriptions[0] = colorAttachment;
+ //   attachmentDescriptions[0] = colorAttachment;
     attachmentDescriptions[0] = depthAttachment;
+//    attachmentDescriptions[2] = colorAttachmentResolve;
     createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    createInfo.attachmentCount = 2;
+    createInfo.attachmentCount = (numAASamples> 1) ? 3 : 2;
 	createInfo.pAttachments = &attachmentDescriptions[0];
     createInfo.subpassCount = 1;
     createInfo.pSubpasses = &subpassDescription;
@@ -1726,12 +1763,13 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPa
 	createInfo.pDependencies = &dependency;
 
     renderPassCreationCallback(renderPassInfoDescriptor); // give the user a chance to customize pipeline
-    attachmentDescriptions[0] = colorAttachment;
-    createInfo.attachmentCount = 1;
-    if (subpassDescription.pDepthStencilAttachment != nullptr) {
-        attachmentDescriptions[1] = depthAttachment;
-        createInfo.attachmentCount = 2;
-    }
+    createInfo.attachmentCount = 0;
+    attachmentDescriptions[createInfo.attachmentCount++] = colorAttachment;
+    if (subpassDescription.pDepthStencilAttachment != nullptr) 
+        attachmentDescriptions[createInfo.attachmentCount++] = depthAttachment;
+
+    if (numAASamples > 1)
+        attachmentDescriptions[createInfo.attachmentCount++] = colorAttachmentResolve;
 
 	VkRenderPass renderPass;
     VkResult createRenderPassResult = vkCreateRenderPass(Context._device, &createInfo, nullptr, &renderPass);
@@ -1744,7 +1782,7 @@ bool Vulkan::createRenderPass(Context & Context, VkRenderPass * result, RenderPa
     return true;
 }
 
-bool Vulkan::createFrameBuffers(Context & Context, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& depthViews, std::vector<VkFramebuffer>& result)
+bool Vulkan::createFrameBuffers(Context & Context, VkRenderPass & renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView> & msaaViews, std::vector<VkImageView>& depthViews, std::vector<VkFramebuffer>& result)
 {
     result.resize(colorViews.size());
 	for(unsigned int i=0 ; i < (unsigned int)colorViews.size() ; i++ )
@@ -1753,12 +1791,23 @@ bool Vulkan::createFrameBuffers(Context & Context, std::vector<VkImageView>& col
         memset(&createInfo, 0, sizeof(createInfo));
 
         std::vector<VkImageView> attachments;
-        attachments.push_back(colorViews[i]);
-        if (!depthViews.empty())
-            attachments.push_back(depthViews[i]);
+        if (msaaViews.empty())
+        {
+            attachments.push_back(colorViews[i]);
+            if (!depthViews.empty())
+                attachments.push_back(depthViews[i]);
+        }
+        else
+        {
+            if (!msaaViews.empty())
+                attachments.push_back(msaaViews[i]);
+            if (!depthViews.empty())
+                attachments.push_back(depthViews[i]);
+            attachments.push_back(colorViews[i]);
+        }
         
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        createInfo.renderPass = Context._renderPass;
+        createInfo.renderPass = renderPass;
         createInfo.attachmentCount = (uint32_t)attachments.size();
 		createInfo.pAttachments = &attachments[0];
         createInfo.width = Context._swapChainSize.width;
@@ -1894,6 +1943,7 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     VkGraphicsPipelineCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkGraphicsPipelineCreateInfo));
 
+
     const std::vector<Shader>& shaderModules = effect._shaderModules;
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
@@ -1969,7 +2019,7 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     memset(&multisamplingCreateInfo, 0, sizeof(VkPipelineMultisampleStateCreateInfo));
     multisamplingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisamplingCreateInfo.sampleShadingEnable = VK_FALSE;
-    multisamplingCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisamplingCreateInfo.rasterizationSamples = (VkSampleCountFlagBits)appDesc._numSamples;
     multisamplingCreateInfo.minSampleShading = 1.0f;
     multisamplingCreateInfo.pSampleMask = nullptr;
     multisamplingCreateInfo.alphaToCoverageEnable = VK_FALSE;
@@ -2031,7 +2081,7 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
         return false;
     }
     createInfo.layout = effect._pipelineLayout;
-    createInfo.renderPass = context._renderPass;
+    createInfo.renderPass = effect._renderPass;
     createInfo.subpass = 0;
     createInfo.basePipelineHandle = VK_NULL_HANDLE;
     //    createInfo.basePipelineIndex = -1;
@@ -2289,7 +2339,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
     PersistentBufferMap::iterator it = g_persistentBuffers.find(PersistentBufferKey(usage, properties));
     if (!shared || it == g_persistentBuffers.end())
     {
-        const int numInternalBuffers = (numBuffers <= 0) ? (int)context._colorBuffers.size() : numBuffers;
+        const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
         const int realSize = shared ? g_persistentBufferSize : (int)size;
         Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer(numInternalBuffers));
         if(!createBuffers(pBuffer, realSize))
@@ -2446,21 +2496,21 @@ bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
     if (effect.totalNumUniformBuffers() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalNumUniformBuffers() * context._colorBuffers.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalNumUniformBuffers() * context._swapChainImages.size());
         poolIndex++;
     }
 
     if (effect.totalSamplerCount() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalSamplerCount() * context._colorBuffers.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalSamplerCount() * context._swapChainImages.size());
         poolIndex++;
     }
 
     if (effect.totalImagesCount() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalImagesCount() * context._colorBuffers.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalImagesCount() * context._swapChainImages.size());
         poolIndex++;
     }
 
@@ -2468,7 +2518,7 @@ bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = poolIndex;
 	poolInfo.pPoolSizes = &poolSizes[0];
-    poolInfo.maxSets = static_cast<uint32_t>(effect.totalNumUniforms() * context._colorBuffers.size());
+    poolInfo.maxSets = static_cast<uint32_t>(effect.totalNumUniforms() * context._swapChainImages.size());
 
 	VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &effect._descriptorPool);
 	assert(creationResult == VK_SUCCESS);
@@ -2484,7 +2534,7 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
         return true;
 
 
-    const uint32_t framesCount = (uint32_t)context._colorBuffers.size();
+    const uint32_t framesCount = (uint32_t)context._swapChainImages.size();
 
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -2697,7 +2747,7 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         return false;
     }
 
-    if (!createRenderPass(context, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
+    if (!createRenderPass(context, appDesc._numSamples, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
     {
         SDL_LogError(0, "Failed to create standard render pass\n");
         return false;
@@ -2722,8 +2772,39 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
 		return false;
 	}
     
+    if (appDesc._numSamples > 1)
+    {       
+        const unsigned int width = context._swapChainSize.width;
+        const unsigned int height = context._swapChainSize.height;
+        const unsigned int depth = 1;
+        const unsigned int numSwapBuffers = Vulkan::getNumSwapBuffers(context);
+        context._msaaColourImages.resize(numSwapBuffers);
+        context._msaaColourMemory.resize(numSwapBuffers);
+        context._msaaColourImageViews.resize(numSwapBuffers);
+        for (unsigned int i = 0; i < numSwapBuffers; i++)
+        {
+            if(!createImage(context, width, height, depth, 1, appDesc._numSamples, context._surfaceFormat.format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, context._msaaColourImages[i]))
+            {
+                SDL_LogError(0, "Failed to create msaa image %d\n", i);
+                return false;
+            }
 
-	if (!createFrameBuffers(context, context._colorBufferViews, context._depthImageViews, context._frameBuffers))
+            if (!allocateAndBindImageMemory(context, context._msaaColourImages[i], context._msaaColourMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            {
+                SDL_LogError(0, "Failed to allocate and bind msaa image %d\n", i);
+                return false;
+            }
+
+            if (!createImageView(context, context._msaaColourImages[i], context._surfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, context._msaaColourImageViews[i]))
+            {
+                SDL_LogError(0, "Failed to create msaa image %d\n", i);
+                return false;
+            }
+        }
+    }
+
+
+	if (!createFrameBuffers(context, context._renderPass, context._swapChainImageViews, context._msaaColourImageViews, context._depthImageViews, context._frameBuffers))
 	{
 		SDL_LogError(0, "Failed to create frame buffers\n");
 		return false;
@@ -2746,7 +2827,13 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-	if (!createColorBuffers(context))
+    if (!createRenderPass(context, appDesc._numSamples, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
+    {
+        SDL_LogError(0, "Failed to create standard render pass\n");
+        return false;
+    }
+   
+    if (!createColorBuffers(context))
 	{
 		SDL_LogError(0, "Failed to create color buffers\n");
 		return false;
@@ -2758,7 +2845,32 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-	if (!createFrameBuffers(context, context._colorBufferViews, context._depthImageViews, context._frameBuffers))
+    if (appDesc._numSamples > 1)
+    {
+        const unsigned int width = context._swapChainSize.width;
+        const unsigned int height = context._swapChainSize.height;
+        const unsigned int numSwapBuffers = Vulkan::getNumSwapBuffers(context);
+        std::vector<char> pixels(width * height * 4);
+        context._msaaColourImages.resize(numSwapBuffers);
+        context._msaaColourMemory.resize(numSwapBuffers);
+        context._msaaColourImageViews.resize(numSwapBuffers);
+        for (unsigned int i = 0; i < numSwapBuffers; i++)
+        {
+            if (!createImage(context, &pixels[0], 4, width, height, 1, appDesc._numSamples, context._surfaceFormat.format, context._msaaColourImages[i], context._msaaColourMemory[i]))
+            {
+                SDL_LogError(0, "Failed to create msaa image %d\n", i);
+                return false;
+            }
+
+            if (!createImageView(context, context._msaaColourImages[i], context._surfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, context._msaaColourImageViews[i]))
+            {
+                SDL_LogError(0, "Failed to create msaa image %d\n", i);
+                return false;
+            }
+        }
+    }
+
+	if (!createFrameBuffers(context, context._renderPass, context._swapChainImageViews, context._msaaColourImageViews, context._depthImageViews, context._frameBuffers))
 	{
 		SDL_LogError(0, "Failed to create frame buffers\n");
 		return false;
@@ -2810,9 +2922,22 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 		vkDestroyFramebuffer(device, frameBuffer, nullptr);
 	context._frameBuffers.clear();
 
-	for (auto imageView : context._colorBufferViews)
+	for (auto imageView : context._swapChainImageViews)
 		vkDestroyImageView(device, imageView, nullptr);
-	context._colorBufferViews.clear();
+	context._swapChainImageViews.clear();
+
+    for (auto msaaColourImageView : context._msaaColourImageViews)
+        vkDestroyImageView(device, msaaColourImageView, nullptr);
+    context._msaaColourImageViews.clear();
+
+    for (auto msaaColourImage : context._msaaColourImages)
+        vkDestroyImage(device, msaaColourImage, nullptr);
+    context._msaaColourImages.clear();
+
+    for (auto msaaColourMemory : context._msaaColourMemory)
+        (device, msaaColourMemory, nullptr);
+    context._msaaColourMemory.clear();
+
 
 /*	for (auto image : context._colorBuffers)
 		vkDestroyImage(device, image, nullptr);
@@ -2820,6 +2945,9 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 
 	vkDestroySwapchainKHR(device, context._swapChain, nullptr);
 	context._swapChain = VK_NULL_HANDLE;
+
+    vkDestroyRenderPass(device, context._renderPass, nullptr);
+    context._renderPass = VK_NULL_HANDLE;
 
 	return true;
 }
@@ -2838,7 +2966,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
         for (unsigned int uniformIndex = 0; uniformIndex < uniformCount; uniformIndex++)
         {
             Uniform* uniform = uniforms[uniformIndex];
-            for (unsigned int frame = 0; frame < context._colorBuffers.size(); frame++)
+            for (unsigned int frame = 0; frame < context._swapChainImages.size(); frame++)
             {
                 Vulkan::BufferDescriptor& buffer = uniform->_frames[frame]._buffer;
                 if (!Vulkan::createUniformBuffer(appDesc, context, buffer._size, buffer))
@@ -2871,7 +2999,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
     }
 
 
-    if (!createCommandBuffers(context, context._commandPool, (unsigned int)context._colorBuffers.size(), &effect._commandBuffers))
+    if (!createCommandBuffers(context, context._commandPool, (unsigned int)context._swapChainImages.size(), &effect._commandBuffers))
     {
         SDL_LogError(0, "Failed to create command buffers\n");
         return false;
@@ -2892,6 +3020,8 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
 
 bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect)
 {
+    effect._computePipelineCreationCallback = computePipelineCreationCallback;
+
     if (!initEffectDescriptor(appDesc, context, effect))
     {
         SDL_LogError(0, "Failed to create pipeline\n");
@@ -2914,13 +3044,17 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc,
     RenderPassCustomizationCallback renderPassCreationCallback,
     Vulkan::EffectDescriptor& effect)
 {
+    effect._createPipeline = createPipeline;
+    effect._graphicsPipelineCreationCallback = graphicsPipelineCreationCallback;
+    effect._renderPassCreationCallback = renderPassCreationCallback;
+
     if (!initEffectDescriptor(appDesc, context, effect))
     {
         SDL_LogError(0, "Failed to create pipeline\n");
         return false;
     }
 
-    if (!createRenderPass(context, &effect._renderPass, renderPassCreationCallback))
+    if (!createRenderPass(context, appDesc._numSamples, &effect._renderPass, renderPassCreationCallback))
     {
         SDL_LogError(0, "Failed to create render pass for effect\n");
         return false;
@@ -2935,6 +3069,40 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc,
 
     return true;
 }
+
+bool Vulkan::recreateEffectDescriptor(AppDescriptor& appDesc, Context& context, EffectDescriptorPtr effect)
+{
+    vkDestroyRenderPass(context._device, effect->_renderPass, nullptr);
+    vkDestroyPipelineLayout(context._device, effect->_pipelineLayout, nullptr);
+    vkDestroyPipeline(context._device, effect->_pipeline, nullptr);
+
+    // compute or graphics pipeline???
+    if (effect->_graphicsPipelineCreationCallback != nullptr)
+    {
+        if (!createRenderPass(context, appDesc._numSamples, &effect->_renderPass, effect->_renderPassCreationCallback))
+        {
+            SDL_LogError(0, "Failed to recreate render pass for effect\n");
+            return false;
+        }
+
+
+        if (effect->_createPipeline && !createGraphicsPipeline(appDesc, context, effect->_graphicsPipelineCreationCallback, *effect))
+        {
+            SDL_LogError(0, "Failed to recreate graphics pipeline\n");
+            return false;
+        }
+    }
+    else if (effect->_computePipelineCreationCallback != nullptr)
+    {
+        if (!createComputePipeline(appDesc, context, effect->_computePipelineCreationCallback, *effect))
+        {
+            SDL_LogError(0, "Failed to recreate compute pipeline\n");
+            return false;
+        }
+    }
+    return true;
+}
+
 
 bool Vulkan::createSampler(Vulkan::Context& context, VkSampler& sampler, VkSamplerCreateInfo & samplerCreateInfo)
 {

@@ -12,6 +12,11 @@
 
 ////////////////////////////////////// Vulkan method declarations ///////////////////////////////////////////////////////
 
+namespace
+{
+    Vulkan::Logger * g_logger = new Vulkan::Logger();
+}
+
 namespace Vulkan
 {
     void clearMeshes(Context& context, EffectDescriptor& effect);
@@ -99,7 +104,7 @@ namespace
         assert(allocateCommandBuffersResult == VK_SUCCESS);
         if (allocateCommandBuffersResult != VK_SUCCESS)
         {
-            SDL_LogError(0, "Failed to create VkCommandbufferAllocateInfo\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create VkCommandbufferAllocateInfo\n"));
             return false;
         }
 
@@ -576,7 +581,7 @@ bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, const void * srcData, V
     assert(mapResult == VK_SUCCESS);
     if (mapResult != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to map vertex buffer memory\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to map vertex buffer memory\n"));
         return false;
     }
 
@@ -739,19 +744,19 @@ namespace
 		switch (severity)
 		{
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-            SDL_LogInfo(0, "%s\n", callbackData->pMessage);
+            g_logger->log(Vulkan::Logger::Level::Info, std::string(callbackData->pMessage));
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-            SDL_LogWarn(0, "%s\n", callbackData->pMessage);
+            g_logger->log(Vulkan::Logger::Level::Warn, std::string(callbackData->pMessage));
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-            SDL_Log(0, "%s\n", callbackData->pMessage);
+            g_logger->log(Vulkan::Logger::Level::Verbose, std::string(callbackData->pMessage));
 			break;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-            SDL_LogError(0, "%s\n", callbackData->pMessage);
+            g_logger->log(Vulkan::Logger::Level::Debug, std::string(callbackData->pMessage));
 			break;
 		default:
-			SDL_Log(0, "%s\n", callbackData->pMessage);
+            g_logger->log(Vulkan::Logger::Level::Info, std::string(callbackData->pMessage));
 			break;
 		}
 
@@ -768,9 +773,7 @@ namespace
 		const char*                 pMessage,
 		void*                       pUserData) 
 	{
-		int k = 0;
-		k = 1;
-		SDL_LogError(0, "VulkanDebugReportCallback : %s - %s\n", pLayerPrefix, pMessage);
+        g_logger->log(Vulkan::Logger::Level::Debug, std::string("VulkanDebugReportCallback : ") + std::string(pLayerPrefix) + std::string("-") + std::string(pMessage));
 		return VK_TRUE;
 	}
 }
@@ -854,13 +857,13 @@ bool Vulkan::createImage(Vulkan::Context& context,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         stagingBuffer))
     {
-        SDL_LogError(0, "createImage - Failed to create staging buffer for image");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to create staging buffer for image\n"));
         return false;
     }
 
     if (!stagingBuffer.copyFrom(context._device, reinterpret_cast<const void*>(pixels), size))
     {
-        SDL_LogError(0, "createImage - Failed to fill staging buffer");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
         return false;
     }
 
@@ -875,13 +878,13 @@ bool Vulkan::createImage(Vulkan::Context& context,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         result))
     {
-        SDL_LogError(0, "createImage - Failed to create image");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to create image\n"));
         return false;
     }
 
     if (!Vulkan::allocateAndBindImageMemory(context, result, imageMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
     {
-        SDL_LogError(0, "createImage - Failed to allocate imageMemory");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to allocate imageMemory\n"));
         return false;
     }
 
@@ -889,7 +892,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL))
     {
-        SDL_LogError(0, "createImage - transitionImageLayout : VK_IMAGE_LAYOUT_UNDEFINED -> VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - transitionImageLayout : VK_IMAGE_LAYOUT_UNDEFINED -> VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL\n"));
         return false;
     }
 
@@ -901,7 +904,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
         height,
         depth))
     {
-        SDL_LogError(0, "createImage - copyData");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - copyData\n"));
         return false;
     }
 
@@ -911,7 +914,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_GENERAL))
     {
-        SDL_LogError(0, "createImage - transitionImageLayout : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> VK_IMAGE_LAYOUT_GENERAL ");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - transitionImageLayout : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> VK_IMAGE_LAYOUT_GENERAL\n"));
         return false;
     }
 
@@ -1098,7 +1101,7 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 		if (debugUtilsMessengerCreator == nullptr)
 		{
 #if !defined(__APPLE__) // function doesn't seeem to exist with moltenvk
-            SDL_LogError(0, "Could not create function: %s\n", debugFunctionCreatorName);
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not create function: ") + debugFunctionCreatorName + "\n");
             return false;
 #endif
 		}
@@ -1128,7 +1131,7 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 		assert(debugUtilsCreationResult == VK_SUCCESS);
 		if (debugUtilsCreationResult != VK_SUCCESS)
 		{
-			SDL_LogError(0, "Failed to create callback for method %s\n", debugFunctionCreatorName);
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method: ") + debugFunctionCreatorName + "\n");
 			// TODO: should probably destroy the callbackCreator here
 			return false;
 		}
@@ -1144,7 +1147,7 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 #if defined(__APPLE__) // function doesn't seeem to exist with moltenvk
 			return true;
 #else
-			SDL_LogError(0, "Could not create function: %s\n", debugFunctionCreatorName);
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not create function: ") + debugFunctionCreatorName + "\n");
 			return false;
 #endif
 		}
@@ -1167,8 +1170,7 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 		assert(debugReportCreationResult == VK_SUCCESS);
 		if (debugReportCreationResult != VK_SUCCESS)
 		{
-			SDL_LogError(0, "Failed to create callback for method %s\n", debugFunctionCreatorName);
-			// TODO: should probably destroy the callbackCreator here
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method ") + debugFunctionCreatorName + "\n");
 			return false;
 		}
 	}
@@ -1204,7 +1206,7 @@ bool Vulkan::areValidationLayersAvailable(const std::vector<const char*> & valid
             }
             if (!found)
             {
-                SDL_LogError(0, "Could not find needed validation layer %s\n", neededLayer.c_str());
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not find needed validation layer ") + neededLayer + "\n");
                 layers.clear();
                 return false;
             }
@@ -1253,15 +1255,15 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
         instanceExtensionNames.push_back((const char *)property.extensionName);
     
     // log all the extensions
-    SDL_LogInfo(0, "Vulkan Instance Extensions. Count = %d", instanceExtensionCount);
+    g_logger->log(Vulkan::Logger::Level::Info, std::string("Vulkan Instance Extensions. Count = ") + std::to_string(instanceExtensionCount) + "\n");
     for (unsigned int i = 0; i < (unsigned int)instanceExtensionNames.size(); i++)
-        SDL_LogInfo(0, "\t%d: %s", i, instanceExtensionNames[i]);
+        g_logger->log(Vulkan::Logger::Level::Info, std::string("\t") + std::to_string(i) + std::string(": ") + std::string(instanceExtensionNames[i]) + "\n");
     
     
     unsigned int requiredInstanceExtensionCount = 0;
     if (!SDL_Vulkan_GetInstanceExtensions(appDesc._window, &requiredInstanceExtensionCount, nullptr))
     {
-        SDL_LogError(0, "Failed to get number of extensions");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to get number of extensions\n"));
         return false;
     }
     
@@ -1269,7 +1271,7 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
     requiredInstanceExtensions.resize(requiredInstanceExtensionCount);
     if (!SDL_Vulkan_GetInstanceExtensions(appDesc._window, &requiredInstanceExtensionCount, &requiredInstanceExtensions[0]))
     {
-        SDL_LogError(0, "Failed to acquire possible extensions error");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to acquire possible extensions error\n"));
         return false;
     }
     
@@ -1283,9 +1285,9 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
     
     
     // log all the required extensions
-    SDL_LogInfo(0, "Required Vulkan Instance Extensions. Count = %d", requiredInstanceExtensionCount);
+    g_logger->log(Vulkan::Logger::Level::Info, std::string("Required Vulkan Instance Extensions. Count = ") + std::to_string(requiredInstanceExtensionCount) + "\n");
     for (unsigned int i = 0; i < requiredInstanceExtensionCount; i++)
-        SDL_LogInfo(0, "\t%d: %s", i, requiredInstanceExtensions[i]);
+        g_logger->log(Vulkan::Logger::Level::Info, std::string("\t") + std::to_string(i) + std::string(": ") + std::string(requiredInstanceExtensions[i]) + "\n");
     
     // check if required extensions are available
     {
@@ -1303,7 +1305,7 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
             
             if (instanceIndex == instanceExtensionCount)
             {
-                SDL_LogError(0, "required vulkan extension %s not found", requiredExtension);
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("Required vulkan extension ") + requiredExtension + " not found\n");
                 return false;
             }
         }
@@ -1369,12 +1371,12 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppDescriptor & appDesc, Vulkan::C
     VkResult countResult = vkEnumeratePhysicalDevices(context._instance, &deviceCount, NULL);
 	assert(countResult == VK_SUCCESS);
 	if (countResult != VK_SUCCESS) {
-        SDL_LogError(0, "vkEnumeratePhysicalDevices returned error code %d", countResult);
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("vkEnumeratePhysicalDevices returned error code ") + std::to_string(countResult) + "\n");
         return false;
     }
     
     if (deviceCount == 0) {
-        SDL_LogError(0, "vkEnumeratePhysicalDevices returned 0 devices");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("vkEnumeratePhysicalDevices returned 0 devices\n"));
         return false;
     }
     
@@ -1382,7 +1384,7 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppDescriptor & appDesc, Vulkan::C
     VkResult enumerateResult = vkEnumeratePhysicalDevices(context._instance, &deviceCount, &devices[0]);
 	assert(enumerateResult == VK_SUCCESS);
 	if (enumerateResult != VK_SUCCESS) {
-        SDL_LogError(0, "vkEnumeratePhysicalDevices returned error code %d", countResult);
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("vkEnumeratePhysicalDevices returned error code ") + std::to_string(countResult) + "\n");
         return false;
     }
     
@@ -1432,7 +1434,7 @@ bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, Context & Context) {
     
     appDesc._chosenPhysicalDevice = currentPhysicalDevice;
     Context._physicalDevice = appDesc._physicalDevices[currentPhysicalDevice];
-    SDL_LogInfo(0, "Chosen Vulkan Physical Device = %s. Driver version = %d\n", currentPhysicalProperties.deviceName, currentPhysicalProperties.driverVersion);
+    g_logger->log(Vulkan::Logger::Level::Error, std::string("Chosen Vulkan Physical Device = ") + currentPhysicalProperties.deviceName + ". Driver version = " + std::to_string(currentPhysicalProperties.driverVersion) + "\n");
     
 	// get the device features, so we can check against them later on
 	vkGetPhysicalDeviceFeatures(Context._physicalDevice, &Context._physicalDeviceFeatures);
@@ -1844,7 +1846,7 @@ bool Vulkan::createShaderModules(AppDescriptor & appDesc, Context & context, std
 		assert(result == VK_SUCCESS);
 		if (result != VK_SUCCESS)
         {
-            SDL_LogError(0, "Failed to create shader module for file %s with error %d\n", shader._filename.c_str(), (int)result);
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create shader module for file ") + shader._filename + " with error " + std::to_string(result) + "\n");
             return false;
         }
         
@@ -1915,7 +1917,7 @@ bool Vulkan::createComputePipeline(AppDescriptor& appDesc, Context& context, Com
     assert(createPipelineLayoutResult == VK_SUCCESS);
     if (createPipelineLayoutResult != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to create pipeline layout\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create pipeline layout\n"));
         return false;
     }
     createInfo.layout = effect._pipelineLayout;
@@ -1930,7 +1932,7 @@ bool Vulkan::createComputePipeline(AppDescriptor& appDesc, Context& context, Com
     assert(createComputePipelineResult == VK_SUCCESS);
     if (createComputePipelineResult != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to create vulkan compute pipeline\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vulkan compute pipeline\n"));
         return false;
     }
 
@@ -2077,7 +2079,7 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     assert(createPipelineLayoutResult == VK_SUCCESS);
     if (createPipelineLayoutResult != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to create graphics pipeline layout\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create graphics pipeline layout\n"));
         return false;
     }
     createInfo.layout = effect._pipelineLayout;
@@ -2136,7 +2138,7 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     assert(createGraphicsPipelineResult == VK_SUCCESS);
     if (createGraphicsPipelineResult != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to create vulkan graphics pipeline\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vulkan graphics pipeline\n"));
         return false;
     }
 
@@ -2199,7 +2201,7 @@ bool Vulkan::createCommandPool(AppDescriptor & appDesc, Context & context, VkCom
 	assert(createCommandPoolResult == VK_SUCCESS);
 	if (createCommandPoolResult != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to create command pool\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create command pool\n"));
         return false;
     }
     *result = commandPool;
@@ -2222,7 +2224,7 @@ bool Vulkan::resetCommandBuffers(Context & context, std::vector<VkCommandBuffer>
 		assert(resetCommandBufferResult == VK_SUCCESS);
 		if (resetCommandBufferResult != VK_SUCCESS)
 		{
-			SDL_LogError(0, "call to vkResetCommandBuffer failed, i=%d\n", i);
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Call to vkResetCommandBuffer failed, i=") + std::to_string(i) + "\n");
 			return false;
 		}
 	}
@@ -2240,7 +2242,7 @@ bool Vulkan::createFence(Context & context, VkFenceCreateFlags flags, VkFence & 
     assert(createFenceResult == VK_SUCCESS);
     if (createFenceResult != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to create fences\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create fences\n"));
         return false;
     }
     return true;
@@ -2255,7 +2257,7 @@ std::vector<VkFence> Vulkan::createFences(Context & context, unsigned int count,
         VkFence result;
         if (!createFence(context, flags, result))
         {
-            SDL_LogError(0, "Failed to create fences (%d)\n", i);
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create fence (") + std::to_string(i) + ")\n");
             return std::vector<VkFence>();
         }
         fences.push_back(result);
@@ -2278,7 +2280,7 @@ std::vector<VkSemaphore> Vulkan::createSemaphores(Context & context)
 		assert(createSemaphoreResult == VK_SUCCESS);
         if(createSemaphoreResult != VK_SUCCESS)
         {
-            SDL_LogError(0, "Failed to create semaphore (%d)\n", i);
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create semaphore (") + std::to_string(i) + ")\n");
             return std::vector<VkSemaphore>();
         }
     }
@@ -2309,7 +2311,7 @@ bool Vulkan::createBufferView(Context& context, VkBuffer buffer, VkFormat requir
     assert(success == VK_SUCCESS);
     if (success != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to create bufferView of Format %d\n", requiredFormat);
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create bufferView of Format ") + std::to_string(requiredFormat) + "\n");
         return false;
     }
     return true;
@@ -2393,7 +2395,7 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     assert(createBufferResult == VK_SUCCESS);
     if (createBufferResult != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to create vertex buffer\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vertex buffer\n"));
         return false;
     }
 
@@ -2413,14 +2415,14 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
     Vulkan::BufferDescriptor stagingBufferDescriptor;
     if(!createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBufferDescriptor))
     {
-        SDL_LogError(0, "Failed to create buffer of size %d bytes\n", (int)bufferSize);
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create staging buffer of size ") + std::to_string((int)bufferSize) + " bytes\n");
         return Vulkan::BufferDescriptorPtr();
     }
     
     Vulkan::BufferDescriptorPtr vertexBufferDescriptor = createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | ((type == BufferType::Vertex) ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if(vertexBufferDescriptor==nullptr)
     {
-        SDL_LogError(0, "Failed to create buffer of size %d bytes\n", (int)bufferSize);
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vertex buffer of size ") + std::to_string((int)bufferSize) + " bytes\n");
         return Vulkan::BufferDescriptorPtr();
     }
     
@@ -2480,7 +2482,7 @@ bool Vulkan::createUniformBuffer(AppDescriptor & appDesc, Context & context, VkD
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         uniforms))
     {
-        SDL_LogError(0, "Failed to create uniform buffer of size=%d\n", (int)bufferSize);
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create uniform buffer of size=") + std::to_string((int)bufferSize) + "\n");
         return false;
     }
 
@@ -2651,7 +2653,7 @@ bool Vulkan::initializeIndexAndVertexBuffers(AppDescriptor & appDesc,
     Vulkan::Mesh mesh;
 	if (!createIndexAndVertexBuffer(appDesc, context, vertexData, indexData, userData, mesh))
 	{
-		SDL_LogError(0, "Failed to create index and vertex buffer\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create index and vertex buffer\n"));
 		return false;
 	}
 
@@ -2674,101 +2676,101 @@ bool Vulkan::setupAllocator(Context& context)
 bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
 {
     if (!loadVulkanLibrary()) {
-        SDL_LogError(0, "Failed to load vulkan library");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to load vulkan library\n"));
         return false;
     }
     
     if (!loadVulkanFunctions()) {
-        SDL_LogError(0, "Failed to load vulkan functions");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to load vulkan functions\n"));
         return false;
     }
     
     if (!createInstanceAndLoadExtensions(appDesc, context)) {
-        SDL_LogError(0, "Failed to create instance and load extensions");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create instance and load extensions\n"));
         return false;
     }
     
     if (validationLayersEnabled && !setupDebugCallback(context))
     {
-        SDL_LogError(0, "Failed to setup requested debug callback\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to setup requested debug callback\n"));
         return false;
     }
     
     if (!createVulkanSurface(appDesc._window, context)) {
-        SDL_LogError(0, "Failed to create vulkan surface");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vulkan surface\n"));
         return false;
     }
     
     if (!enumeratePhysicalDevices(appDesc, context)) {
-        SDL_LogError(0, "Failed to enumerate and choose device");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to enumerate and choose device\n"));
         return false;
     }
     
     // choose a gpu
     if (!choosePhysicalDevice(appDesc, context)) {
-        SDL_LogError(0, "Failed to choose appropriate physical device");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to choose appropriate physical device\n"));
         return false;
     }
     
     // load extensions
     if (!lookupDeviceExtensions(appDesc))
     {
-        SDL_LogError(0, "Failed to enumerate device extensions!");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to enumerate device extensions!\n"));
         return false;
     }
     
     if (!createDevice(appDesc, context))
     {
-        SDL_LogError(0, "Failed to create device!");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create device!\n"));
         return false;
     }
     
     if (!createQueue(appDesc, context))
     {
-        SDL_LogError(0, "Failed to create queue!");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create queue!\n"));
         return false;
     }
 
     if (!setupAllocator(context))
     {
-        SDL_LogError(0, "Failed to setup allocator!");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to setup allocator!\n"));
         return false;
     }
     
     if (!createSwapChain(appDesc, context))
     {
-        SDL_LogError(0, "Failed to create and setup swap chain!");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create and setup swap chain!\n"));
         return false;
     }
     
     if (!createColorBuffers(context))
     {
-        SDL_LogError(0, "Failed to create color buffers\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create color buffers\n"));
         return false;
     }
 
     if (!createRenderPass(context, appDesc._numSamples, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
     {
-        SDL_LogError(0, "Failed to create standard render pass\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create standard render pass\n"));
         return false;
     }
 
 	
 	if (!createPipelineCache(appDesc, context))
 	{
-		SDL_LogWarn(0, "Failed to create pipeline cache. This is non-fatal.\n");
+        g_logger->log(Vulkan::Logger::Level::Warn, std::string("Failed to create pipeline cache. This is non-fatal.\n"));
 	}
 	
 	// create standard command pool
     if(!createCommandPool(appDesc, context, &context._commandPool))
     {
-        SDL_LogError(0, "Failed to create standard command pool\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create standard command pool\n"));
         return false;
     }
         
 	if (!createDepthBuffers(appDesc, context, context._depthImages, context._depthImageViews, context._depthMemory))
 	{
-		SDL_LogError(0, "Failed to create depth buffers\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create depth buffers\n"));
 		return false;
 	}
     
@@ -2785,19 +2787,19 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         {
             if(!createImage(context, width, height, depth, 1, appDesc._numSamples, context._surfaceFormat.format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, context._msaaColourImages[i]))
             {
-                SDL_LogError(0, "Failed to create msaa image %d\n", i);
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image ") + std::to_string(i) + "\n");
                 return false;
             }
 
             if (!allocateAndBindImageMemory(context, context._msaaColourImages[i], context._msaaColourMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
             {
-                SDL_LogError(0, "Failed to allocate and bind msaa image %d\n", i);
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to allocate and bind msaa image ") + std::to_string(i) + "\n");
                 return false;
             }
 
             if (!createImageView(context, context._msaaColourImages[i], context._surfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, context._msaaColourImageViews[i]))
             {
-                SDL_LogError(0, "Failed to create msaa image %d\n", i);
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image view") + std::to_string(i) + "\n");
                 return false;
             }
         }
@@ -2806,13 +2808,13 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
 
 	if (!createFrameBuffers(context, context._renderPass, context._swapChainImageViews, context._msaaColourImageViews, context._depthImageViews, context._frameBuffers))
 	{
-		SDL_LogError(0, "Failed to create frame buffers\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create frame buffers\n"));
 		return false;
 	}
 
     if(!createSemaphores(appDesc, context))
     {
-        SDL_LogError(0, "Failed to create semaphores\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create semaphores\n"));
         return false;
     }
     
@@ -2823,25 +2825,25 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 {
 	if (!createSwapChain(appDesc, context))
 	{
-		SDL_LogError(0, "Failed to create and setup swap chain!");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create and setup swap chain!\n"));
 		return false;
 	}
 
     if (!createRenderPass(context, appDesc._numSamples, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
     {
-        SDL_LogError(0, "Failed to create standard render pass\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create standard render pass\n"));
         return false;
     }
    
     if (!createColorBuffers(context))
 	{
-		SDL_LogError(0, "Failed to create color buffers\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create color buffers\n"));
 		return false;
 	}
 
     if (!createDepthBuffers(appDesc, context, context._depthImages, context._depthImageViews, context._depthMemory))
     {
-		SDL_LogError(0, "Failed to create depth buffers\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create depth buffers\n"));
 		return false;
 	}
 
@@ -2858,13 +2860,13 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
         {
             if (!createImage(context, &pixels[0], 4, width, height, 1, appDesc._numSamples, context._surfaceFormat.format, context._msaaColourImages[i], context._msaaColourMemory[i]))
             {
-                SDL_LogError(0, "Failed to create msaa image %d\n", i);
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image ") + std::to_string(i) + "\n");
                 return false;
             }
 
             if (!createImageView(context, context._msaaColourImages[i], context._surfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, context._msaaColourImageViews[i]))
             {
-                SDL_LogError(0, "Failed to create msaa image %d\n", i);
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image view ") + std::to_string(i) + "\n");
                 return false;
             }
         }
@@ -2872,7 +2874,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 
 	if (!createFrameBuffers(context, context._renderPass, context._swapChainImageViews, context._msaaColourImageViews, context._depthImageViews, context._frameBuffers))
 	{
-		SDL_LogError(0, "Failed to create frame buffers\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create frame buffers\n"));
 		return false;
 	}
 
@@ -2971,7 +2973,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
                 Vulkan::BufferDescriptor& buffer = uniform->_frames[frame]._buffer;
                 if (!Vulkan::createUniformBuffer(appDesc, context, buffer._size, buffer))
                 {
-                    SDL_LogError(0, "Failed to create uniform buffer\n");
+                    g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create uniform buffer\n"));
                     return false;
                 }
 
@@ -2982,26 +2984,26 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
 
     if (!createDescriptorSetLayout(context, effect))
     {
-        SDL_LogError(0, "Failed to create descriptor set layouts!");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create descriptor set layouts!\n"));
         return false;
     }
 
     if (effect._descriptorPool==VK_NULL_HANDLE && !createDescriptorPool(context, effect))
     {
-        SDL_LogError(0, "Failed to create descriptor pool\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create descriptor pool\n"));
         return false;
     }
 
     if (!createDescriptorSet(appDesc, context, effect))
     {
-        SDL_LogError(0, "Failed to create descriptor set\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create descriptor set\n"));
         return false;
     }
 
 
     if (!createCommandBuffers(context, context._commandPool, (unsigned int)context._swapChainImages.size(), &effect._commandBuffers))
     {
-        SDL_LogError(0, "Failed to create command buffers\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create command buffers\n"));
         return false;
     }
 
@@ -3010,7 +3012,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
         bool createShaderModulesSuccess = Vulkan::createShaderModules(appDesc, context, effect._shaderModules);
         if (!createShaderModulesSuccess)
         {
-            SDL_LogError(0, "Failed to create shader modules\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create shader modules\n"));
             return 1;
         }
     }
@@ -3024,13 +3026,13 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Comp
 
     if (!initEffectDescriptor(appDesc, context, effect))
     {
-        SDL_LogError(0, "Failed to create pipeline\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create pipeline\n"));
         return false;
     }
 
     if (!createComputePipeline(appDesc, context,  computePipelineCreationCallback, effect))
     {
-        SDL_LogError(0, "Failed to create compute pipeline\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create compute pipeline\n"));
         return false;
     }
 
@@ -3050,20 +3052,20 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc,
 
     if (!initEffectDescriptor(appDesc, context, effect))
     {
-        SDL_LogError(0, "Failed to create pipeline\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create pipeline\n"));
         return false;
     }
 
     if (!createRenderPass(context, appDesc._numSamples, &effect._renderPass, renderPassCreationCallback))
     {
-        SDL_LogError(0, "Failed to create render pass for effect\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create render pass for effect\n"));
         return false;
     }
 
 
     if(createPipeline && !createGraphicsPipeline(appDesc, context, graphicsPipelineCreationCallback, effect))
     {
-        SDL_LogError(0, "Failed to create graphics pipeline\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create graphics pipeline\n"));
         return false;
     }
 
@@ -3081,14 +3083,14 @@ bool Vulkan::recreateEffectDescriptor(AppDescriptor& appDesc, Context& context, 
     {
         if (!createRenderPass(context, appDesc._numSamples, &effect->_renderPass, effect->_renderPassCreationCallback))
         {
-            SDL_LogError(0, "Failed to recreate render pass for effect\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to recreate render pass for effect\n"));
             return false;
         }
 
 
         if (effect->_createPipeline && !createGraphicsPipeline(appDesc, context, effect->_graphicsPipelineCreationCallback, *effect))
         {
-            SDL_LogError(0, "Failed to recreate graphics pipeline\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to recreate graphics pipeline\n"));
             return false;
         }
     }
@@ -3096,7 +3098,7 @@ bool Vulkan::recreateEffectDescriptor(AppDescriptor& appDesc, Context& context, 
     {
         if (!createComputePipeline(appDesc, context, effect->_computePipelineCreationCallback, *effect))
         {
-            SDL_LogError(0, "Failed to recreate compute pipeline\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to recreate compute pipeline\n"));
             return false;
         }
     }
@@ -3149,7 +3151,7 @@ VkCommandBuffer Vulkan::createCommandBuffer(Vulkan::Context& context, VkCommandP
     assert(allocateCommandBuffersResult == VK_SUCCESS);
     if (allocateCommandBuffersResult != VK_SUCCESS)
     {
-        SDL_LogError(0, "Failed to create VkCommandbufferAllocateInfo\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create VkCommandbufferAllocateInfo\n"));
         return commandBuffer;
     }
 
@@ -3165,10 +3167,15 @@ VkCommandBuffer Vulkan::createCommandBuffer(Vulkan::Context& context, VkCommandP
         const VkResult beginCommandResult = vkBeginCommandBuffer(commandBuffer, &beginInfo);
         if (beginCommandResult != VK_SUCCESS)
         {
-            SDL_LogError(0, "Failed to call vkBeginCommandBuffer\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to call vkBeginCommandBuffer\n"));
             return commandBuffer;
         }
     }
 
     return commandBuffer;
+}
+
+void Vulkan::setLogger(Vulkan::Logger * logger) 
+{ 
+    g_logger = logger; 
 }

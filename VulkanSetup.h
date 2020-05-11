@@ -54,6 +54,23 @@ namespace Vulkan
 {
     extern bool validationLayersEnabled;
 
+    class Logger
+    {
+    public:
+        enum class Level
+        {
+            Verbose,
+            Info,
+            Warn,
+            Debug,
+            Error,
+        };
+
+        virtual void log(Vulkan::Logger::Level logLevel, const std::string entry) {}
+        virtual ~Logger() {}
+    };
+
+
 	enum class BufferType
 	{
 		Index = 0,
@@ -579,6 +596,7 @@ namespace Vulkan
     bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory);
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<VkImage>& images, std::vector<VkImageView>& imageViews, std::vector<VkDeviceMemory>& memory);
 
+    void setLogger(Vulkan::Logger * logger);
 
 }
 

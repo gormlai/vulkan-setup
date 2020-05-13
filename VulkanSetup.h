@@ -1,9 +1,9 @@
 #ifndef _VULKAN_SETUP_H_
 #define _VULKAN_SETUP_H_
 
+#include <volk/volk.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
-#include <vulkan/vulkan.h>
 #include <string>
 #include <vector>
 #include <algorithm>

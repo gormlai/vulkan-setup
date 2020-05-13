@@ -2688,6 +2688,8 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create instance and load extensions\n"));
         return false;
     }
+
+    volkLoadInstance(context._instance);
     
     if (validationLayersEnabled && !setupDebugCallback(context))
     {

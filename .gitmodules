@@ -1,0 +1,6 @@
+[submodule "submodules/VulkanMemoryAllocator"]
+	path = submodules/VulkanMemoryAllocator
+	url = git@github.com:gormlai/VulkanMemoryAllocator.git
+[submodule "submodules/volk"]
+	path = submodules/volk
+	url = git@github.com:gormlai/volk.git

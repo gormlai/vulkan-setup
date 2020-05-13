@@ -2666,6 +2666,7 @@ bool Vulkan::setupAllocator(Context& context)
     static VmaAllocatorCreateInfo allocatorInfo = {};
     allocatorInfo.physicalDevice = context._physicalDevice;
     allocatorInfo.device = context._device;
+    allocatorInfo.instance = context._instance;
 
     vmaCreateAllocator(&allocatorInfo, &g_allocator);
     return true;

@@ -1,6 +1,0 @@
-[submodule "submodules/VulkanMemoryAllocator"]
-	path = submodules/VulkanMemoryAllocator
-	url = git@github.com:GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-[submodule "submodules/volk"]
-	path = submodules/volk
-	url = git@github.com:zeux/volk.git

@@ -64,8 +64,11 @@ namespace Vulkan
 
 ///////////////////////////////////// Vulkan Variable ///////////////////////////////////////////////////////////////////
 
+#if defined(FUGL_INSTALL)
+bool Vulkan::validationLayersEnabled = false;
+#else
 bool Vulkan::validationLayersEnabled = true;
-
+#endif
 
 ///////////////////////////////////// Vulkan Helper Function ////////////////////////////////////////////////////////////
 
@@ -2593,7 +2596,6 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
     for(EffectDescriptorPtr & effect : context._potentialEffects)
     {
         static std::vector<unsigned char> updateData;
-
         const uint32_t uniformCount = effect->totalTypeCount(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         static std::vector<Uniform*> uniforms(1);
         if (uniforms.size() < uniformCount)
@@ -2608,7 +2610,8 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
                 uniform->_frames[context._currentFrame]._buffer.copyFrom(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
         }
 
-        if (!effect->getRerecordNeeded(context._currentFrame) || effect->_recordCommandBuffers(appDesc, context, *effect))
+
+        if (/*!effect->getRerecordNeeded(context._currentFrame) || */effect->_recordCommandBuffers(appDesc, context, *effect))
             context._frameReadyEffects.push_back(effect);
     }
     

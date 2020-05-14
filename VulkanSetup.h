@@ -378,6 +378,7 @@ namespace Vulkan
         ComputePipelineCustomizationCallback _computePipelineCreationCallback;
         RenderPassCustomizationCallback _renderPassCreationCallback;
         bool _createPipeline;
+        std::vector<bool> _recordCommandsNeeded;
 
         VkPipeline _pipeline;
         VkPipelineLayout _pipelineLayout;
@@ -409,6 +410,8 @@ namespace Vulkan
         {
         }
 
+        inline void setRerecordNeeded()  { for (auto& val : _recordCommandsNeeded) val = true; }
+        inline bool getRerecordNeeded(const unsigned int frame) { return _recordCommandsNeeded[frame]; }
         uint32_t totalSamplerCount() const;
         uint32_t totalImagesCount() const;
         uint32_t totalNumUniformBuffers() const;

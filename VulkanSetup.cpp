@@ -2608,7 +2608,7 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
                 uniform->_frames[context._currentFrame]._buffer.copyFrom(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
         }
 
-        if (effect->_recordCommandBuffers(appDesc, context, *effect))
+        if (!effect->getRerecordNeeded(context._currentFrame) || effect->_recordCommandBuffers(appDesc, context, *effect))
             context._frameReadyEffects.push_back(effect);
     }
     
@@ -3018,6 +3018,9 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
             return 1;
         }
     }
+
+    effect._recordCommandsNeeded.resize(Vulkan::getNumSwapBuffers(context));
+    effect.setRerecordNeeded();
 
     return true;
 }

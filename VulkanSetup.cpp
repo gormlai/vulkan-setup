@@ -308,6 +308,11 @@ uint32_t Vulkan::EffectDescriptor::totalTypeCount(Vulkan::ShaderStage stage, VkD
 }
 
 
+uint32_t Vulkan::EffectDescriptor::totalTexelBufferCount() const
+{
+    return totalTypeCount(VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
+}
+
 uint32_t Vulkan::EffectDescriptor::totalImagesCount() const
 {
     return totalTypeCount(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
@@ -2495,7 +2500,7 @@ bool Vulkan::createUniformBuffer(AppDescriptor & appDesc, Context & context, VkD
 
 bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
 {
-	VkDescriptorPoolSize poolSizes[2] = {};
+	VkDescriptorPoolSize poolSizes[4] = {};
     int poolIndex = 0;
     if (effect.totalNumUniformBuffers() > 0)
     {
@@ -2515,6 +2520,13 @@ bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalImagesCount() * context._swapChainImages.size());
+        poolIndex++;
+    }
+
+    if (effect.totalTexelBufferCount() > 0)
+    {
+        poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalTexelBufferCount() * context._swapChainImages.size());
         poolIndex++;
     }
 

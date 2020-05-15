@@ -413,6 +413,7 @@ namespace Vulkan
         inline void setRerecordNeeded()  { for (auto& val : _recordCommandsNeeded) val = true; }
         inline bool getRerecordNeeded(const unsigned int frame) { return _recordCommandsNeeded[frame]; }
         uint32_t totalSamplerCount() const;
+        uint32_t totalTexelBufferCount() const;
         uint32_t totalImagesCount() const;
         uint32_t totalNumUniformBuffers() const;
         uint32_t totalNumUniforms() const;

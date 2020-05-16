@@ -1720,8 +1720,8 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     colorAttachment.samples = static_cast<VkSampleCountFlagBits>(numAASamples);
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachment.finalLayout = (numAASamples > 1) ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
@@ -1731,8 +1731,8 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
 	depthAttachment.samples = static_cast<VkSampleCountFlagBits>(numAASamples);
 	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
 	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
@@ -1743,8 +1743,8 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 

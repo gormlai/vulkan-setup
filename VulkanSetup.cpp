@@ -24,7 +24,7 @@ namespace Vulkan
     void destroyBufferDescriptor(Context& context, BufferDescriptor& descriptor);
 
     bool setupDebugCallback(Context& context);
-    bool areValidationLayersAvailable(const std::vector<const char*>& validationLayers);
+    void areValidationLayersAvailable(const std::vector<const char*>& validationLayers, std::vector<const char*> & output);
     bool loadVulkanLibrary();
     bool loadVulkanFunctions();
     bool createInstanceAndLoadExtensions(const AppDescriptor& appDesc, Context& context);
@@ -67,7 +67,7 @@ namespace Vulkan
 #if defined(FUGL_INSTALL)
 bool Vulkan::validationLayersEnabled = false;
 #else
-bool Vulkan::validationLayersEnabled = true;
+bool Vulkan::validationLayersEnabled = false;
 #endif
 
 ///////////////////////////////////// Vulkan Helper Function ////////////////////////////////////////////////////////////
@@ -1104,12 +1104,11 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 
 	// debug utils
 	{
-		const char * debugFunctionCreatorName = "vkCreateDebugUtilsMessengerEXT";
-		auto debugUtilsMessengerCreator = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(context._instance, debugFunctionCreatorName);
+        auto debugUtilsMessengerCreator = vkCreateDebugUtilsMessengerEXT;
 		if (debugUtilsMessengerCreator == nullptr)
 		{
 #if !defined(__APPLE__) // function doesn't seeem to exist with moltenvk
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not create function: ") + debugFunctionCreatorName + "\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not create function: vkCreateDebugUtilsMessengerEXT") + "\n");
             return false;
 #endif
 		}
@@ -1139,7 +1138,7 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 		assert(debugUtilsCreationResult == VK_SUCCESS);
 		if (debugUtilsCreationResult != VK_SUCCESS)
 		{
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method: ") + debugFunctionCreatorName + "\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method: ") + "\n");
 			// TODO: should probably destroy the callbackCreator here
 			return false;
 		}
@@ -1148,14 +1147,13 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
     
 	// debug report
 	{
-		const char * debugFunctionCreatorName = "vkCreateDebugReportCallbackEXT";
-		auto debugReportMessengerCreator = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(context._instance, debugFunctionCreatorName);
+        auto debugReportMessengerCreator = vkCreateDebugReportCallbackEXT;
 		if (debugReportMessengerCreator == nullptr)
 		{
 #if defined(__APPLE__) // function doesn't seeem to exist with moltenvk
 			return true;
 #else
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not create function: ") + debugFunctionCreatorName + "\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not create function: vkCreateDebugReportCallbackEXT") +  + "\n");
 			return false;
 #endif
 		}
@@ -1177,7 +1175,7 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 		assert(debugReportCreationResult == VK_SUCCESS);
 		if (debugReportCreationResult != VK_SUCCESS)
 		{
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method ") + debugFunctionCreatorName + "\n");
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method ") + "\n");
 			return false;
 		}
 	}
@@ -1187,7 +1185,7 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
     return true;
 }
 
-bool Vulkan::areValidationLayersAvailable(const std::vector<const char*> & validationLayers)
+void Vulkan::areValidationLayersAvailable(const std::vector<const char*> & validationLayers, std::vector<const char*> & output)
 {
     std::vector<VkLayerProperties> layers;
     
@@ -1200,13 +1198,14 @@ bool Vulkan::areValidationLayersAvailable(const std::vector<const char*> & valid
         layers.resize(layerCount);
 		const VkResult enumerateInstanceLayerResult = vkEnumerateInstanceLayerProperties(&layerCount, &layers[0]);
 		assert(enumerateInstanceLayerResult == VK_SUCCESS);
-        for (const std::string & neededLayer : validationLayers)
+        for (const char * neededLayer : validationLayers)
         {
             bool found = false;
             for (const auto & layer : layers)
             {
-                if (strcmp(neededLayer.c_str(), layer.layerName) == 0)
+                if (strcmp(neededLayer, layer.layerName) == 0)
                 {
+                    output.push_back(neededLayer);
                     found = true;
                     break;
                 }
@@ -1214,15 +1213,9 @@ bool Vulkan::areValidationLayersAvailable(const std::vector<const char*> & valid
             if (!found)
             {
                 g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not find needed validation layer ") + neededLayer + "\n");
-                layers.clear();
-                return false;
             }
         }
-        return true;
-        
     }
-    
-    return false;
 }
 
 bool Vulkan::loadVulkanLibrary() {
@@ -1332,25 +1325,29 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
     
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCreateInfo.pApplicationInfo = &vkAppInfo;
-#if !defined(__APPLE__)
-	requiredInstanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-#endif
+	requiredInstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     instanceCreateInfo.enabledExtensionCount = (uint32_t)requiredInstanceExtensions.size();
     instanceCreateInfo.ppEnabledExtensionNames = &requiredInstanceExtensions[0];
     
+    std::vector<const char*> output;
     if (validationLayersEnabled)
     {
         static const std::vector<const char*> validationLayers = {
-#if defined(__APPLE__)
-           "MoltenVK"
-#else
-            "VK_LAYER_LUNARG_standard_validation"
-#endif
+           "MoltenVK",
+            "VK_LAYER_LUNARG_standard_validation",
+//            "VK_LAYER_AMD_switchable_graphics",
+//            "VK_LAYER_LUNARG_api_dump",
+//            "VK_LAYER_LUNARG_device_simulation",
+            "VK_LAYER_KHRONOS_validation",
+//            "VK_LAYER_LUNARG_monitor",
+//            "VK_LAYER_LUNARG_screenshot",
+ //           "VK_LAYER_LUNARG_vktrace"
         };
-        if (areValidationLayersAvailable(validationLayers))
+        areValidationLayersAvailable(validationLayers, output);
+        if(!output.empty())
         {
-            instanceCreateInfo.enabledLayerCount = (uint32_t)validationLayers.size();
-            instanceCreateInfo.ppEnabledLayerNames = &validationLayers[0];
+            instanceCreateInfo.enabledLayerCount = (uint32_t)output.size();
+            instanceCreateInfo.ppEnabledLayerNames = &output[0];
         }
     }
     
@@ -1516,7 +1513,6 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
 
 bool Vulkan::createQueue(AppDescriptor & appDesc, Context & context)
 {
-    vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._computeQueue);
     vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._graphicsQueue);
     vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._presentQueue);
     return true;
@@ -1722,7 +1718,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colorAttachment.finalLayout = (numAASamples > 1) ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentDescription& depthAttachment = renderPassInfoDescriptor._depthAttachment;
@@ -1733,7 +1729,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     // only used if numSamples > 1
@@ -1745,7 +1741,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkSubpassDependency& dependency = renderPassInfoDescriptor._dependency;
@@ -2048,7 +2044,7 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     VkPipelineColorBlendAttachmentState colorBlendAttachmentCreateInfo;
     memset(&colorBlendAttachmentCreateInfo, 0, sizeof(VkPipelineColorBlendAttachmentState));
     colorBlendAttachmentCreateInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachmentCreateInfo.blendEnable = VK_TRUE;
+    colorBlendAttachmentCreateInfo.blendEnable = VK_FALSE;
     colorBlendAttachmentCreateInfo.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
     colorBlendAttachmentCreateInfo.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
     colorBlendAttachmentCreateInfo.colorBlendOp = VK_BLEND_OP_ADD;
@@ -2710,7 +2706,6 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
     if (validationLayersEnabled && !setupDebugCallback(context))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to setup requested debug callback\n"));
-        return false;
     }
     
     if (!createVulkanSurface(appDesc._window, context)) {

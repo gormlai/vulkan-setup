@@ -445,7 +445,6 @@ namespace Vulkan
         
         VkQueue _presentQueue;
         VkQueue _graphicsQueue;
-        VkQueue _computeQueue;
         
         VkSurfaceKHR _surface;
         VkSurfaceCapabilitiesKHR _surfaceCapabilities;

@@ -67,7 +67,7 @@ namespace Vulkan
 #if defined(FUGL_INSTALL)
 bool Vulkan::validationLayersEnabled = false;
 #else
-bool Vulkan::validationLayersEnabled = true;
+bool Vulkan::validationLayersEnabled = false;
 #endif
 
 ///////////////////////////////////// Vulkan Helper Function ////////////////////////////////////////////////////////////

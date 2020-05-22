@@ -177,7 +177,7 @@ namespace Vulkan
         VkAttachmentDescription _colorAttachment;
         VkAttachmentDescription _depthAttachment;
         VkAttachmentDescription _colorAttachmentResolve;
-        VkSubpassDependency _dependency;
+        std::array<VkSubpassDependency,10> _dependency;
         VkRenderPassCreateInfo _createInfo;
         std::array<VkAttachmentDescription,10> _attachmentDescriptions;
 
@@ -429,8 +429,8 @@ namespace Vulkan
         Uniform* getUniformWithBinding(int binding);
 
         bool bindTexelBuffer(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkBufferView bufferView, VkBuffer buffer, unsigned int offset, unsigned int range);
-        bool bindSampler(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkSampler sampler);
-        bool bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView);
+        bool bindSampler(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkImageLayout layout, VkSampler sampler);
+        bool bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkImageLayout layout);
 
     };
     typedef std::shared_ptr<EffectDescriptor> EffectDescriptorPtr;
@@ -552,7 +552,8 @@ namespace Vulkan
         VkFormat format, 
         VkImage& result, 
         VkDeviceMemory& imageMemory, 
-        unsigned int mipLevels = 1);
+        unsigned int mipLevels,
+        VkImageLayout finalLayout);
 
     bool createImageView(Vulkan::Context& context,
         VkImage image,

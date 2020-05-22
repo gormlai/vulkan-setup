@@ -67,7 +67,7 @@ namespace Vulkan
 #if defined(FUGL_INSTALL)
 bool Vulkan::validationLayersEnabled = false;
 #else
-bool Vulkan::validationLayersEnabled = false;
+bool Vulkan::validationLayersEnabled = true;
 #endif
 
 ///////////////////////////////////// Vulkan Helper Function ////////////////////////////////////////////////////////////
@@ -458,7 +458,7 @@ bool Vulkan::EffectDescriptor::bindTexelBuffer(Vulkan::Context& context, Vulkan:
 }
 
 
-bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView)
+bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkImageLayout layout)
 {
     Uniform* uniform = findUniform(*this, shaderStage, binding);
     assert(uniform != nullptr);
@@ -476,7 +476,7 @@ bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::Shade
 
         VkDescriptorImageInfo imageInfo;
 
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        imageInfo.imageLayout = layout;
         imageInfo.imageView = imageView;
         imageInfo.sampler = VK_NULL_HANDLE;
 
@@ -499,7 +499,7 @@ bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::Shade
     return true;
 }
 
-bool Vulkan::EffectDescriptor::bindSampler(Vulkan::Context & context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkSampler sampler)
+bool Vulkan::EffectDescriptor::bindSampler(Vulkan::Context & context, Vulkan::ShaderStage shaderStage, uint32_t binding, VkImageView imageView, VkImageLayout layout, VkSampler sampler)
 {
     Uniform* uniform = findUniform(*this, shaderStage, binding);
     assert(uniform != nullptr);
@@ -516,7 +516,7 @@ bool Vulkan::EffectDescriptor::bindSampler(Vulkan::Context & context, Vulkan::Sh
 
     VkDescriptorImageInfo imageInfo;
 
-    imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    imageInfo.imageLayout = layout;
     imageInfo.imageView = imageView;
     imageInfo.sampler = sampler;
 
@@ -854,25 +854,29 @@ bool Vulkan::createImage(Vulkan::Context& context,
     VkFormat format,
     VkImage& result, 
     VkDeviceMemory& imageMemory, 
-    unsigned int mipMapLevels)
+    unsigned int mipMapLevels,
+    VkImageLayout finalLayout)
 {
     assert(mipMapLevels > 0);
     Vulkan::BufferDescriptor stagingBuffer;
     const VkDeviceSize size = pixelSize * width * height * depth;
-    if (!Vulkan::createBuffer(context,
-        size,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBuffer))
+    if (pixels != nullptr)
     {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to create staging buffer for image\n"));
-        return false;
-    }
+        if (!Vulkan::createBuffer(context,
+            size,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer))
+        {
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to create staging buffer for image\n"));
+            return false;
+        }
 
-    if (!stagingBuffer.copyFrom(context._device, reinterpret_cast<const void*>(pixels), size))
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
-        return false;
+        if (!stagingBuffer.copyFrom(context._device, reinterpret_cast<const void*>(pixels), size))
+        {
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
+            return false;
+        }
     }
 
     if (!Vulkan::createImage(context,
@@ -904,23 +908,25 @@ bool Vulkan::createImage(Vulkan::Context& context,
         return false;
     }
 
-    if (!stagingBuffer.copyTo(context._device,
-        context._commandPool,
-        context._graphicsQueue,
-        result,
-        width,
-        height,
-        depth))
+    if (pixels != nullptr)
     {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - copyData\n"));
-        return false;
+        if (!stagingBuffer.copyTo(context._device,
+            context._commandPool,
+            context._graphicsQueue,
+            result,
+            width,
+            height,
+            depth))
+        {
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - copyData\n"));
+            return false;
+        }
     }
-
 
     if (!Vulkan::transitionImageLayoutAndSubmit(context,
         result,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_GENERAL))
+        finalLayout))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - transitionImageLayout : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> VK_IMAGE_LAYOUT_GENERAL\n"));
         return false;
@@ -1004,11 +1010,11 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
     VkImageLayout newLayout,
     VkCommandBuffer commandBuffer)
 {
-    VkAccessFlags srcAccessMask;
-    VkAccessFlags dstAccessMask;
+    VkAccessFlags srcAccessMask = 0;
+    VkAccessFlags dstAccessMask = 0;
 
-    VkPipelineStageFlags sourceStage;
-    VkPipelineStageFlags destinationStage;
+    VkPipelineStageFlags sourceStage = 0;
+    VkPipelineStageFlags destinationStage = 0;
 
     switch (oldLayout)
     {
@@ -1041,13 +1047,19 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
             srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             break;
         case VK_IMAGE_LAYOUT_GENERAL:
             srcAccessMask = 0;
             dstAccessMask = 0;
             sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+            srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
             break;
         default:
             return false;
@@ -1572,7 +1584,7 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
     swapChainCreateInfo.imageColorSpace = context._surfaceFormat.colorSpace;
     swapChainCreateInfo.imageExtent = context._swapChainSize;
     swapChainCreateInfo.imageArrayLayers = 1;
-    swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapChainCreateInfo.preTransform = context._surfaceCapabilities.currentTransform;
     swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -1718,8 +1730,8 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    colorAttachment.finalLayout = (numAASamples > 1) ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentDescription& depthAttachment = renderPassInfoDescriptor._depthAttachment;
 	memset(&depthAttachment, 0, sizeof(depthAttachment));
@@ -1729,7 +1741,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     // only used if numSamples > 1
@@ -1741,17 +1753,19 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    VkSubpassDependency& dependency = renderPassInfoDescriptor._dependency;
+    std::array<VkSubpassDependency,10> & dependencies = renderPassInfoDescriptor._dependency;
+    VkSubpassDependency& dependency = dependencies[0];
 	memset(&dependency, 0, sizeof(dependency));
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 	dependency.dstSubpass = 0;
 	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependency.srcAccessMask = 0;
-	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
 	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     
     VkRenderPassCreateInfo& createInfo = renderPassInfoDescriptor._createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
@@ -1765,7 +1779,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     createInfo.subpassCount = 1;
     createInfo.pSubpasses = &subpassDescription;
 	createInfo.dependencyCount = 1;
-	createInfo.pDependencies = &dependency;
+	createInfo.pDependencies = &dependencies[0];
 
     renderPassCreationCallback(renderPassInfoDescriptor); // give the user a chance to customize pipeline
     createInfo.attachmentCount = 0;
@@ -2864,13 +2878,24 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
         const unsigned int width = context._swapChainSize.width;
         const unsigned int height = context._swapChainSize.height;
         const unsigned int numSwapBuffers = Vulkan::getNumSwapBuffers(context);
-        std::vector<char> pixels(width * height * 4);
         context._msaaColourImages.resize(numSwapBuffers);
         context._msaaColourMemory.resize(numSwapBuffers);
         context._msaaColourImageViews.resize(numSwapBuffers);
         for (unsigned int i = 0; i < numSwapBuffers; i++)
         {
-            if (!createImage(context, &pixels[0], 4, width, height, 1, appDesc._numSamples, context._surfaceFormat.format, context._msaaColourImages[i], context._msaaColourMemory[i]))
+            if (!createImage(
+                context, 
+                nullptr,
+                4, 
+                width, 
+                height, 
+                1, 
+                appDesc._numSamples, 
+                context._surfaceFormat.format, 
+                context._msaaColourImages[i], 
+                context._msaaColourMemory[i],
+                1,
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL))
             {
                 g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image ") + std::to_string(i) + "\n");
                 return false;

@@ -932,6 +932,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
         return false;
     }
 
+    stagingBuffer.destroy();
     return true;
 }
 

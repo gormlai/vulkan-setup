@@ -3120,8 +3120,14 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc,
 bool Vulkan::recreateEffectDescriptor(AppDescriptor& appDesc, Context& context, EffectDescriptorPtr effect)
 {
     vkDestroyRenderPass(context._device, effect->_renderPass, nullptr);
-    vkDestroyPipelineLayout(context._device, effect->_pipelineLayout, nullptr);
-    vkDestroyPipeline(context._device, effect->_pipeline, nullptr);
+
+    if(effect->_pipelineLayout != nullptr)
+        vkDestroyPipelineLayout(context._device, effect->_pipelineLayout, nullptr);
+    effect->_pipelineLayout = nullptr;
+
+    if(effect->_pipeline != nullptr)
+        vkDestroyPipeline(context._device, effect->_pipeline, nullptr);
+    effect->_pipeline = nullptr;
 
     // compute or graphics pipeline???
     if (effect->_graphicsPipelineCreationCallback != nullptr)

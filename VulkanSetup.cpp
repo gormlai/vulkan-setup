@@ -469,31 +469,29 @@ bool Vulkan::EffectDescriptor::bindImage(Vulkan::Context& context, Vulkan::Shade
     if (uniform->_type != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
         return false;
 
-    for(unsigned int frame=0 ; frame < uniform->_frames.size() ; frame++)
-    {
-        UniformAggregate& aggregate = uniform->_frames[frame];
-        aggregate._imageView = imageView;
+    const unsigned int currentFrame = context._currentFrame;
+    UniformAggregate& aggregate = uniform->_frames[currentFrame];
+    aggregate._imageView = imageView;
 
-        VkDescriptorImageInfo imageInfo;
+    VkDescriptorImageInfo imageInfo;
 
-        imageInfo.imageLayout = layout;
-        imageInfo.imageView = imageView;
-        imageInfo.sampler = VK_NULL_HANDLE;
+    imageInfo.imageLayout = layout;
+    imageInfo.imageView = imageView;
+    imageInfo.sampler = VK_NULL_HANDLE;
 
-        VkWriteDescriptorSet writeSet = { };
-        writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSet.descriptorCount = 1;
-        writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        writeSet.dstArrayElement = 0;
-        writeSet.dstBinding = binding;
-        writeSet.dstSet = _descriptorSets[frame];
-        writeSet.pBufferInfo = VK_NULL_HANDLE;
-        writeSet.pImageInfo = &imageInfo;
-        writeSet.pNext = VK_NULL_HANDLE;
-        writeSet.pTexelBufferView = VK_NULL_HANDLE;
+    VkWriteDescriptorSet writeSet = { };
+    writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeSet.descriptorCount = 1;
+    writeSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    writeSet.dstArrayElement = 0;
+    writeSet.dstBinding = binding;
+    writeSet.dstSet = _descriptorSets[currentFrame];
+    writeSet.pBufferInfo = VK_NULL_HANDLE;
+    writeSet.pImageInfo = &imageInfo;
+    writeSet.pNext = VK_NULL_HANDLE;
+    writeSet.pTexelBufferView = VK_NULL_HANDLE;
 
-        vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
-    }
+    vkUpdateDescriptorSets(context._device, 1, &writeSet, 0, nullptr);
 
 
     return true;
@@ -2226,27 +2224,33 @@ bool Vulkan::createCommandPool(AppDescriptor & appDesc, Context & context, VkCom
     return true;
 }
 
+bool Vulkan::resetCommandBuffer(Context& context, VkCommandBuffer& commandBuffer)
+{
+    if (!context._fences.empty())
+    {
+        const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[context._currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+    }
+
+    VkCommandBufferResetFlags resetFlags = VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT;
+    const VkResult resetCommandBufferResult = vkResetCommandBuffer(commandBuffer, resetFlags);
+    assert(resetCommandBufferResult == VK_SUCCESS);
+    if (resetCommandBufferResult != VK_SUCCESS)
+    {
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Call to vkResetCommandBuffer failed, i=") + std::to_string(context._currentFrame) + "\n");
+        return false;
+    }
+    return true;
+}
+
 bool Vulkan::resetCommandBuffers(Context & context, std::vector<VkCommandBuffer>& commandBuffers)
 {
-	for (unsigned int i = 0; i < (unsigned int)commandBuffers.size(); i++)
-	{
-		if (!context._fences.empty())
-		{
-			const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, std::numeric_limits<uint64_t>::max());
-//            const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[i], VK_TRUE, 1);
-//            assert(waitForFencesResult == VK_SUCCESS);
-        }
+    for (unsigned int i = 0; i < (unsigned int)commandBuffers.size(); i++)
+    {
+        if (!resetCommandBuffer(context, commandBuffers[i]))
+            return false;
+    }
 
-		VkCommandBufferResetFlags resetFlags = VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT;
-		const VkResult resetCommandBufferResult = vkResetCommandBuffer(commandBuffers[i], resetFlags);
-		assert(resetCommandBufferResult == VK_SUCCESS);
-		if (resetCommandBufferResult != VK_SUCCESS)
-		{
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("Call to vkResetCommandBuffer failed, i=") + std::to_string(i) + "\n");
-			return false;
-		}
-	}
-	return true;
+    return true;
 }
 
 bool Vulkan::createFence(Context & context, VkFenceCreateFlags flags, VkFence & result)

@@ -46,6 +46,7 @@ namespace Vulkan
     bool recordStandardCommandBuffers(AppDescriptor& appDesc, Context& context);
     std::vector<VkSemaphore> createSemaphores(Context& context);
     bool createSemaphores(AppDescriptor& appDesc, Context& context);
+    void destroySemaphores(Context& context);
     bool createIndexAndVertexBuffer(AppDescriptor& appDesc, Context& context, std::vector<unsigned char>& vertexData, std::vector<unsigned char>& indexData, void* userData, Vulkan::Mesh& result);
     bool createDescriptorPool(Context& context, EffectDescriptor& effect);
     bool createDescriptorSet(AppDescriptor& appDesc, Context& context, EffectDescriptor& effect);
@@ -2380,6 +2381,23 @@ bool Vulkan::createSemaphores(AppDescriptor & appDesc, Context & context)
     && !context._imageAvailableSemaphores.empty();
 }
 
+void Vulkan::destroySemaphores(Context& context)
+{
+    for (auto semaphore : context._imageAvailableSemaphores)
+        vkDestroySemaphore(context._device, semaphore, nullptr);
+
+    for(auto semaphore : context._renderFinishedSemaphores)
+        vkDestroySemaphore(context._device, semaphore, nullptr);
+
+    for (auto fence : context._fences)
+        vkDestroyFence(context._device, fence, nullptr);
+
+    context._imageAvailableSemaphores.clear();
+    context._renderFinishedSemaphores.clear();
+    context._fences.clear();
+
+}
+
 bool Vulkan::createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferView& result)
 {
     VkBufferViewCreateInfo createInfo = {};
@@ -2983,6 +3001,12 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
+    if (!createSemaphores(appDesc, context))
+    {
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create frame semaphores\n"));
+        return false;
+    }
+
 	return true;
 }
 
@@ -3047,6 +3071,8 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 
     vkDestroyRenderPass(device, context._renderPass, nullptr);
     context._renderPass = VK_NULL_HANDLE;
+
+    destroySemaphores(context);
 
 	return true;
 }

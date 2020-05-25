@@ -510,7 +510,7 @@ namespace Vulkan
     bool recreateSwapChain(AppDescriptor& appDesc, Context& context);
     void updateUniforms(AppDescriptor& appDesc, Context& context, uint32_t currentImage);
 
-    bool resetCommandBuffer(Context& context, VkCommandBuffer & commandBuffers);
+    bool resetCommandBuffer(Context& context, VkCommandBuffer & commandBuffers, unsigned int index);
     bool resetCommandBuffers(Context& context, std::vector<VkCommandBuffer>& commandBuffers);
     bool createShaderModules(AppDescriptor& appDesc, Context& context, std::vector<Shader>& shaders);
     bool initEffectDescriptor(AppDescriptor& appDesc, 

@@ -1727,8 +1727,8 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     colorAttachment.samples = static_cast<VkSampleCountFlagBits>(numAASamples);
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
@@ -1738,8 +1738,8 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
 	depthAttachment.samples = static_cast<VkSampleCountFlagBits>(numAASamples);
 	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
@@ -1750,22 +1750,36 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     std::array<VkSubpassDependency,10> & dependencies = renderPassInfoDescriptor._dependency;
-    VkSubpassDependency& dependency = dependencies[0];
-	memset(&dependency, 0, sizeof(dependency));
-	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependency.dstSubpass = 0;
-	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = 0;
-	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-    
+    {
+        VkSubpassDependency& dependency = dependencies[0];
+        memset(&dependency, 0, sizeof(dependency));
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependency.dependencyFlags = 0;
+    }
+
+    {
+        VkSubpassDependency& dependency = dependencies[1];
+        memset(&dependency, 0, sizeof(dependency));
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependency.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+        dependency.dependencyFlags = 0;
+    };
+
     VkRenderPassCreateInfo& createInfo = renderPassInfoDescriptor._createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
     std::array<VkAttachmentDescription, 10> & attachmentDescriptions = renderPassInfoDescriptor._attachmentDescriptions;
@@ -1777,7 +1791,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
 	createInfo.pAttachments = &attachmentDescriptions[0];
     createInfo.subpassCount = 1;
     createInfo.pSubpasses = &subpassDescription;
-	createInfo.dependencyCount = 1;
+	createInfo.dependencyCount = 2;
 	createInfo.pDependencies = &dependencies[0];
 
     renderPassCreationCallback(renderPassInfoDescriptor); // give the user a chance to customize pipeline
@@ -2224,11 +2238,11 @@ bool Vulkan::createCommandPool(AppDescriptor & appDesc, Context & context, VkCom
     return true;
 }
 
-bool Vulkan::resetCommandBuffer(Context& context, VkCommandBuffer& commandBuffer)
+bool Vulkan::resetCommandBuffer(Context& context, VkCommandBuffer& commandBuffer, unsigned int index)
 {
     if (!context._fences.empty())
     {
-        const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[context._currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+        const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &context._fences[index], VK_TRUE, std::numeric_limits<uint64_t>::max());
     }
 
     VkCommandBufferResetFlags resetFlags = VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT;
@@ -2236,7 +2250,7 @@ bool Vulkan::resetCommandBuffer(Context& context, VkCommandBuffer& commandBuffer
     assert(resetCommandBufferResult == VK_SUCCESS);
     if (resetCommandBufferResult != VK_SUCCESS)
     {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Call to vkResetCommandBuffer failed, i=") + std::to_string(context._currentFrame) + "\n");
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Call to vkResetCommandBuffer failed, i=") + std::to_string(index) + "\n");
         return false;
     }
     return true;
@@ -2246,7 +2260,7 @@ bool Vulkan::resetCommandBuffers(Context & context, std::vector<VkCommandBuffer>
 {
     for (unsigned int i = 0; i < (unsigned int)commandBuffers.size(); i++)
     {
-        if (!resetCommandBuffer(context, commandBuffers[i]))
+        if (!resetCommandBuffer(context, commandBuffers[i], i))
             return false;
     }
 
@@ -2697,6 +2711,7 @@ bool Vulkan::setupAllocator(Context& context)
     allocatorInfo.physicalDevice = context._physicalDevice;
     allocatorInfo.device = context._device;
     allocatorInfo.instance = context._instance;
+    allocatorInfo.preferredLargeHeapBlockSize = 32 * 1024 ^ 3;
 
     vmaCreateAllocator(&allocatorInfo, &g_allocator);
     return true;

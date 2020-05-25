@@ -280,6 +280,24 @@ namespace Vulkan
 
     };
     typedef std::shared_ptr<PersistentBuffer> PersistentBufferPtr;
+
+    struct ImageDescriptor
+    {
+        VkImage _image;
+        VmaAllocation _memory;
+        unsigned int _size;
+        void* _mappedData;
+
+        ImageDescriptor()
+            :_image(VK_NULL_HANDLE)
+            , _size(0)
+            , _mappedData(nullptr) {}
+
+        void destroy();
+
+        void* map();
+        void unmap();
+    };
     
     struct Mesh;
     struct Uniform;
@@ -458,14 +476,12 @@ namespace Vulkan
         std::vector<VkImageView> _swapChainImageViews;
 
         // for the msaa colour buffer
-        std::vector<VkImage> _msaaColourImages;
+        std::vector<ImageDescriptor> _msaaColourImages;
         std::vector<VkImageView> _msaaColourImageViews;
-        std::vector<VkDeviceMemory> _msaaColourMemory;
 
 		// for depth buffer
-		std::vector<VkImage> _depthImages;
+		std::vector<ImageDescriptor> _depthImages;
 		std::vector<VkImageView> _depthImageViews;
-		std::vector<VkDeviceMemory> _depthMemory;
 
         std::vector<VkFramebuffer> _frameBuffers;
         
@@ -528,6 +544,11 @@ namespace Vulkan
     bool createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferView& result);
 
     bool allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory& memory, VkMemoryPropertyFlags memoryProperties);
+
+    inline unsigned int maxMipMapLevels(unsigned int width) { return static_cast<unsigned int>(floor(log2(width))) + 1; }
+    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height) { return static_cast<unsigned int>(floor(log2(std::max(width, height)))) + 1; }
+    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height, unsigned int depth) { return static_cast<unsigned int>(floor(log2(std::max(width, std::max(height, depth))))) + 1; }
+
     bool createImage(Vulkan::Context& context,
         unsigned int width,
         unsigned int height,
@@ -537,11 +558,9 @@ namespace Vulkan
         VkFormat requiredFormat,
         VkImageTiling requiredTiling,
         VkImageUsageFlags requiredUsage,
-        VkImage& resultImage);
+        VkMemoryPropertyFlags memoryProperties,
+        Vulkan::ImageDescriptor& resultImage);
 
-    inline unsigned int maxMipMapLevels(unsigned int width) { return static_cast<unsigned int>(floor(log2(width))) + 1; }
-    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height) { return static_cast<unsigned int>(floor(log2(std::max(width,height)))) + 1; }
-    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height, unsigned int depth) { return static_cast<unsigned int>(floor(log2(std::max(width, std::max(height, depth))))) + 1; }
 
     bool createImage(Vulkan::Context& context, 
         const void* pixels, 
@@ -551,8 +570,7 @@ namespace Vulkan
         const unsigned int depth,
         const unsigned int samplesPrPixels,
         VkFormat format, 
-        VkImage& result, 
-        VkDeviceMemory& imageMemory, 
+        ImageDescriptor & result, 
         unsigned int mipLevels,
         VkImageLayout finalLayout);
 
@@ -598,8 +616,8 @@ namespace Vulkan
 
     VkCommandBuffer createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool, bool beginCommandBuffer);
     bool createFrameBuffers(Context& Context, VkRenderPass& renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& msaaViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
-    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory);
-    bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<VkImage>& images, std::vector<VkImageView>& imageViews, std::vector<VkDeviceMemory>& memory);
+    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, ImageDescriptor & image, VkImageView& imageView);
+    bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<ImageDescriptor>& images, std::vector<VkImageView>& imageViews);
 
     void setLogger(Vulkan::Logger * logger);
 

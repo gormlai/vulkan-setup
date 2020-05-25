@@ -21,7 +21,8 @@ namespace Vulkan
 {
     void clearMeshes(Context& context, EffectDescriptor& effect);
     void destroyMesh(Context& context, Mesh& mesh); 
-    void destroyBufferDescriptor(Context& context, BufferDescriptor& descriptor);
+    void destroyBufferDescriptor(BufferDescriptor& descriptor);
+    void destroyImage(ImageDescriptor& descriptor);
 
     bool setupDebugCallback(Context& context);
     void areValidationLayersAvailable(const std::vector<const char*>& validationLayers, std::vector<const char*> & output);
@@ -580,6 +581,8 @@ void Vulkan::BufferDescriptor::destroy()
 }
 
 
+
+
 bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount)
 {
     void* data = nullptr;
@@ -735,9 +738,36 @@ bool Vulkan::PersistentBuffer::submitFrame(unsigned int frameIndex)
     return true;
 }
 
-
-
 ///////////////////////////////////// Vulkan Methods ///////////////////////////////////////////////////////////////////
+
+void Vulkan::ImageDescriptor::destroy()
+{
+    if (_image != VK_NULL_HANDLE)
+        Vulkan::destroyImage(*this);
+
+    _image = VK_NULL_HANDLE;
+    _size = 0;
+}
+
+void* Vulkan::ImageDescriptor::map()
+{
+    assert(_mappedData == nullptr);
+    VkResult result = vmaMapMemory(g_allocator, _memory, &_mappedData);
+    assert(result == VK_SUCCESS);
+    return _mappedData;
+}
+
+void Vulkan::ImageDescriptor::unmap()
+{
+    assert(_mappedData != nullptr);
+    if (_mappedData != nullptr)
+        vmaUnmapMemory(g_allocator, _memory);
+    _mappedData = nullptr;
+}
+
+
+
+///////////////////////////////////// Image Descriptor ///////////////////////////////////////////////////////////////////
 
 namespace
 {
@@ -813,7 +843,8 @@ bool Vulkan::createImage(Vulkan::Context & context,
     VkFormat requiredFormat,
     VkImageTiling requiredTiling,
     VkImageUsageFlags requiredUsage,
-    VkImage& resultImage)
+    VkMemoryPropertyFlags memoryProperties,
+    Vulkan::ImageDescriptor & resultImage)
 {
     VkImageCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
@@ -835,9 +866,21 @@ bool Vulkan::createImage(Vulkan::Context & context,
     createInfo.pQueueFamilyIndices = NULL;
     createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    const VkResult result = vkCreateImage(context._device, &createInfo, VK_NULL_HANDLE, &resultImage);
+    VmaAllocationCreateInfo allocCreateInfo = {};
+    allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+    allocCreateInfo.requiredFlags = memoryProperties;
+    allocCreateInfo.preferredFlags = memoryProperties;
+
+    VmaAllocationInfo allocInfo = {};
+    VmaAllocation allocation;
+
+    VkImage image = VK_NULL_HANDLE;
+    const VkResult result = vmaCreateImage(g_allocator, &createInfo, &allocCreateInfo, &image, &allocation, &allocInfo);
     if (result != VK_SUCCESS)
         return false;
+
+    resultImage._image = image;
+    resultImage._memory = allocation;
 
     return true;
 }
@@ -850,8 +893,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
     const unsigned int depth, 
     const unsigned int samplesPrPixels,
     VkFormat format,
-    VkImage& result, 
-    VkDeviceMemory& imageMemory, 
+    Vulkan::ImageDescriptor & result, 
     unsigned int mipMapLevels,
     VkImageLayout finalLayout)
 {
@@ -886,19 +928,22 @@ bool Vulkan::createImage(Vulkan::Context& context,
         format,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         result))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to create image\n"));
         return false;
     }
 
+    /*
     if (!Vulkan::allocateAndBindImageMemory(context, result, imageMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to allocate imageMemory\n"));
         return false;
     }
+    */
 
-    if (!Vulkan::transitionImageLayoutAndSubmit(context, result,
+    if (!Vulkan::transitionImageLayoutAndSubmit(context, result._image,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL))
     {
@@ -911,7 +956,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
         if (!stagingBuffer.copyTo(context._device,
             context._commandPool,
             context._graphicsQueue,
-            result,
+            result._image,
             width,
             height,
             depth))
@@ -922,7 +967,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
     }
 
     if (!Vulkan::transitionImageLayoutAndSubmit(context,
-        result,
+        result._image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         finalLayout))
     {
@@ -1611,7 +1656,7 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
     return true;
 }
 
-bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory)
+bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, Vulkan::ImageDescriptor & image, VkImageView& imageView)
 {
     constexpr VkImageTiling requiredTiling = VK_IMAGE_TILING_OPTIMAL;
     VkFormat depthFormat = findDepthFormat(context, requiredTiling);
@@ -1625,31 +1670,32 @@ bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, VkImage
         depthFormat,
         requiredTiling,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         image))
         return false;
 
+    /*
     if (!allocateImageMemory(context, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory))
         return false;
-
-    if (!createImageView(context, image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D, imageView))
+        */
+    if (!createImageView(context, image._image, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D, imageView))
         return false;
 
-    if (!transitionImageLayoutAndSubmit(context, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
+    if (!transitionImageLayoutAndSubmit(context, image._image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
         return false;
 
     return true;
 }
 
 
-bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context, std::vector<VkImage> & images, std::vector<VkImageView> & imageViews,  std::vector<VkDeviceMemory> & memory)
+bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context, std::vector<Vulkan::ImageDescriptor> & images, std::vector<VkImageView> & imageViews)
 {
     const unsigned int numBuffers = Vulkan::getNumSwapBuffers(context);
 	imageViews.resize(numBuffers);
 	images.resize(numBuffers);
-	memory.resize(numBuffers);
 	for (unsigned int i = 0; i < numBuffers; i++)
 	{
-        if (!createDepthBuffer(appDesc, context, images[i], imageViews[i], memory[i]))
+        if (!createDepthBuffer(appDesc, context, images[i], imageViews[i]))
             return false;
 	}
 
@@ -2396,7 +2442,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
         if (pBuffer->_registeredSize > pBuffer->_buffers[0]._size) {
             unsigned int newSize = pBuffer->_registeredSize*2;
             for (Vulkan::BufferDescriptor& desc : pBuffer->_buffers)
-                destroyBufferDescriptor(context, desc);
+                destroyBufferDescriptor(desc);
             if(!createBuffers(pBuffer, newSize))
                 return Vulkan::PersistentBufferPtr();
 
@@ -2419,7 +2465,6 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
     if (aInfo != nullptr)
         allocCreateInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
     allocCreateInfo.requiredFlags = properties;
     allocCreateInfo.preferredFlags = properties;
 
@@ -2465,7 +2510,7 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
     stagingBufferDescriptor.copyFrom(context._device, srcData, bufferSize);
     vertexBufferDescriptor->copyFrom(context._device, context._commandPool, context._graphicsQueue, stagingBufferDescriptor, bufferSize);
     
-	destroyBufferDescriptor(context, stagingBufferDescriptor);
+	destroyBufferDescriptor(stagingBufferDescriptor);
     return vertexBufferDescriptor;
     
 }
@@ -2673,9 +2718,14 @@ void Vulkan::destroyMesh(Context & context, Mesh& mesh)
 
 }
 
-void Vulkan::destroyBufferDescriptor(Context & context, BufferDescriptor& descriptor)
+void Vulkan::destroyBufferDescriptor(BufferDescriptor& descriptor)
 {
     vmaDestroyBuffer(g_allocator, descriptor._buffer, descriptor._memory);
+}
+
+void Vulkan::destroyImage(ImageDescriptor& descriptor)
+{
+    vmaDestroyImage(g_allocator, descriptor._image, descriptor._memory);
 }
 
 
@@ -2814,7 +2864,7 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         return false;
     }
         
-	if (!createDepthBuffers(appDesc, context, context._depthImages, context._depthImageViews, context._depthMemory))
+	if (!createDepthBuffers(appDesc, context, context._depthImages, context._depthImageViews))
 	{
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create depth buffers\n"));
 		return false;
@@ -2827,23 +2877,23 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         const unsigned int depth = 1;
         const unsigned int numSwapBuffers = Vulkan::getNumSwapBuffers(context);
         context._msaaColourImages.resize(numSwapBuffers);
-        context._msaaColourMemory.resize(numSwapBuffers);
         context._msaaColourImageViews.resize(numSwapBuffers);
         for (unsigned int i = 0; i < numSwapBuffers; i++)
         {
-            if(!createImage(context, width, height, depth, 1, appDesc._numSamples, context._surfaceFormat.format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, context._msaaColourImages[i]))
+            if(!createImage(context, width, height, depth, 1, appDesc._numSamples, context._surfaceFormat.format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, context._msaaColourImages[i]))
             {
                 g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image ") + std::to_string(i) + "\n");
                 return false;
             }
 
+            /*
             if (!allocateAndBindImageMemory(context, context._msaaColourImages[i], context._msaaColourMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
             {
                 g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to allocate and bind msaa image ") + std::to_string(i) + "\n");
                 return false;
-            }
+            }*/
 
-            if (!createImageView(context, context._msaaColourImages[i], context._surfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, context._msaaColourImageViews[i]))
+            if (!createImageView(context, context._msaaColourImages[i]._image, context._surfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, context._msaaColourImageViews[i]))
             {
                 g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image view") + std::to_string(i) + "\n");
                 return false;
@@ -2887,7 +2937,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-    if (!createDepthBuffers(appDesc, context, context._depthImages, context._depthImageViews, context._depthMemory))
+    if (!createDepthBuffers(appDesc, context, context._depthImages, context._depthImageViews))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create depth buffers\n"));
 		return false;
@@ -2899,7 +2949,6 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
         const unsigned int height = context._swapChainSize.height;
         const unsigned int numSwapBuffers = Vulkan::getNumSwapBuffers(context);
         context._msaaColourImages.resize(numSwapBuffers);
-        context._msaaColourMemory.resize(numSwapBuffers);
         context._msaaColourImageViews.resize(numSwapBuffers);
         for (unsigned int i = 0; i < numSwapBuffers; i++)
         {
@@ -2913,7 +2962,6 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
                 appDesc._numSamples, 
                 context._surfaceFormat.format, 
                 context._msaaColourImages[i], 
-                context._msaaColourMemory[i],
                 1,
                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL))
             {
@@ -2921,7 +2969,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
                 return false;
             }
 
-            if (!createImageView(context, context._msaaColourImages[i], context._surfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, context._msaaColourImageViews[i]))
+            if (!createImageView(context, context._msaaColourImages[i]._image, context._surfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, context._msaaColourImageViews[i]))
             {
                 g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image view ") + std::to_string(i) + "\n");
                 return false;
@@ -2969,13 +3017,9 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 		vkDestroyImageView(device, depthImageView, nullptr);
 	context._depthImageViews.clear();
 
-	for (auto depthImage : context._depthImages)
-		vkDestroyImage(device, depthImage, nullptr);
+    for (auto depthImage : context._depthImages)
+        depthImage.destroy();
 	context._depthImages.clear();
-
-	for (auto depthMemory : context._depthMemory)
-		vkFreeMemory(device, depthMemory, nullptr);
-	context._depthMemory.clear();
 
 	for (auto frameBuffer : context._frameBuffers)
 		vkDestroyFramebuffer(device, frameBuffer, nullptr);
@@ -2990,12 +3034,8 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
     context._msaaColourImageViews.clear();
 
     for (auto msaaColourImage : context._msaaColourImages)
-        vkDestroyImage(device, msaaColourImage, nullptr);
+        msaaColourImage.destroy();
     context._msaaColourImages.clear();
-
-    for (auto msaaColourMemory : context._msaaColourMemory)
-        (device, msaaColourMemory, nullptr);
-    context._msaaColourMemory.clear();
 
 
 /*	for (auto image : context._colorBuffers)

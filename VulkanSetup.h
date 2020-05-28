@@ -204,6 +204,16 @@ namespace Vulkan
         unsigned int _chosenPhysicalDevice;
         std::vector<VkExtensionProperties> _deviceExtensions;
         std::vector<VkSurfaceFormatKHR> _surfaceFormats;
+
+        bool hasExtension(const std::string& name)
+        {
+            for (auto ext : _deviceExtensions)
+            {
+                if (strcmp(ext.extensionName, name.c_str()) == 0)
+                    return true;
+            }
+            return false;
+        }
         
         AppDescriptor();
     };
@@ -233,7 +243,8 @@ namespace Vulkan
 
         void destroy() override;
 
-        virtual bool copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount);
+        virtual bool copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount, VkDeviceSize offset);
+
         bool copyFrom(VkDevice device,
                       VkCommandPool commandPool,
                       VkQueue queue,

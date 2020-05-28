@@ -55,11 +55,11 @@ namespace Vulkan
     bool createSwapChainDependents(AppDescriptor& appDesc, Context& context);
     bool cleanupSwapChain(AppDescriptor& appDesc, Context& context);
     bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulkan::EffectDescriptor& effect);
-    bool setupAllocator(Context& context);
+    bool setupAllocator(AppDescriptor& appDesc, Context& context);
 
     bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
     bool createComputePipeline(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
-    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc, VmaAllocationInfo* aInfo = nullptr);
+    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc, VmaAllocationInfo* aInfo = nullptr, bool dedicated = false);
 
     static VmaAllocator g_allocator;
 }
@@ -584,7 +584,7 @@ void Vulkan::BufferDescriptor::destroy()
 
 
 
-bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount)
+bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount, VkDeviceSize offset)
 {
     void* data = nullptr;
     const VkResult mapResult = vmaMapMemory(g_allocator, _memory, &data);
@@ -595,6 +595,8 @@ bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, const void * srcData, V
         return false;
     }
 
+    unsigned char* dstData = reinterpret_cast<unsigned char*>(data);
+    void* fPointer = reinterpret_cast<void*>(dstData + offset);
     memcpy(data, srcData, amount);
     vmaUnmapMemory(g_allocator, _memory);
     return true;
@@ -868,6 +870,7 @@ bool Vulkan::createImage(Vulkan::Context & context,
     createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     VmaAllocationCreateInfo allocCreateInfo = {};
+    allocCreateInfo.flags = VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT;
     allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
     allocCreateInfo.requiredFlags = memoryProperties;
     allocCreateInfo.preferredFlags = memoryProperties;
@@ -913,7 +916,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
             return false;
         }
 
-        if (!stagingBuffer.copyFrom(context._device, reinterpret_cast<const void*>(pixels), size))
+        if (!stagingBuffer.copyFrom(context._device, reinterpret_cast<const void*>(pixels), size, 0))
         {
             g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
             return false;
@@ -1556,12 +1559,18 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
   deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
   deviceCreateInfo.pEnabledFeatures = &context._physicalDeviceFeatures;
     
-  static const char * deviceExtensionNames[] = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-  };
-  static const unsigned int numExtensionNames = sizeof(deviceExtensionNames) / sizeof(const char*);
+  std::vector<const char*> deviceExtensionNames;
+  deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+  if (appDesc.hasExtension(std::string("VK_EXT_memory_budget")))
+      deviceExtensionNames.push_back("VK_EXT_memory_budget");
+  if (appDesc.hasExtension(std::string("VK_KHR_get_physical_device_properties2")))
+      deviceExtensionNames.push_back("VK_KHR_get_physical_device_properties2");
+
+
+  
+
   deviceCreateInfo.ppEnabledExtensionNames = &deviceExtensionNames[0];
-  deviceCreateInfo.enabledExtensionCount = numExtensionNames;
+  deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensionNames.size();
   
   VkResult creationResult = vkCreateDevice(appDesc._physicalDevices[appDesc._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
   assert(creationResult == VK_SUCCESS);
@@ -2432,7 +2441,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
     auto createBuffers = [&context, usage, properties, shared, numBuffers](Vulkan::PersistentBufferPtr pBuffer, unsigned int size) {
         for (unsigned int i = 0; i < pBuffer->_buffers.size(); i++)
         {
-            if (!Vulkan::createBuffer(context, size, usage, properties, pBuffer->_buffers[i], &pBuffer->_allocInfos[i]))
+            if (!Vulkan::createBuffer(context, size, usage, properties, pBuffer->_buffers[i], &pBuffer->_allocInfos[i], !shared))
                 return false;
         }
         return true;
@@ -2442,7 +2451,8 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
     if (!shared || it == g_persistentBuffers.end())
     {
         const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
-        const int realSize = shared ? g_persistentBufferSize : (int)size;
+//        const int realSize = shared ? g_persistentBufferSize : (int)size;
+        const int realSize = (int)size;
         Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer(numInternalBuffers));
         if(!createBuffers(pBuffer, realSize))
             return Vulkan::PersistentBufferPtr();
@@ -2458,7 +2468,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
         Vulkan::PersistentBufferPtr pBuffer = it->second;
         pBuffer->_registeredSize += (unsigned int)size;
         if (pBuffer->_registeredSize > pBuffer->_buffers[0]._size) {
-            unsigned int newSize = pBuffer->_registeredSize*2;
+            unsigned int newSize = pBuffer->_registeredSize;
             for (Vulkan::BufferDescriptor& desc : pBuffer->_buffers)
                 destroyBufferDescriptor(desc);
             if(!createBuffers(pBuffer, newSize))
@@ -2470,7 +2480,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
 }
 
 
-bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc, VmaAllocationInfo * aInfo)
+bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc, VmaAllocationInfo * aInfo, bool dedicated)
 {
     VkBufferCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkBufferCreateInfo));
@@ -2480,15 +2490,21 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VmaAllocationCreateInfo allocCreateInfo = {};
-    allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+    allocCreateInfo.flags = 0;
+    allocCreateInfo.usage = (dedicated) ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_GPU_ONLY;
     if (aInfo != nullptr)
-        allocCreateInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        allocCreateInfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    if (dedicated)
+        allocCreateInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+
     allocCreateInfo.requiredFlags = properties;
     allocCreateInfo.preferredFlags = properties;
 
     VkBuffer vertexBuffer;
     VmaAllocationInfo allocInfo = {};
     VmaAllocation allocation;
+//    if(dedicated)
+//        allocCreateInfo.memoryTypeBits = 1u << 0;
     const VkResult createBufferResult = vmaCreateBuffer(g_allocator, &createInfo, &allocCreateInfo, &vertexBuffer, &allocation, &allocInfo);
     //    vkCreateBuffer(context._device, &createInfo, nullptr, &vertexBuffer);
     assert(createBufferResult == VK_SUCCESS);
@@ -2525,7 +2541,7 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
         return Vulkan::BufferDescriptorPtr();
     }
     
-    stagingBufferDescriptor.copyFrom(context._device, srcData, bufferSize);
+    stagingBufferDescriptor.copyFrom(context._device, srcData, bufferSize, 0);
     vertexBufferDescriptor->copyFrom(context._device, context._commandPool, context._graphicsQueue, stagingBufferDescriptor, bufferSize);
     
 	destroyBufferDescriptor(stagingBufferDescriptor);
@@ -2711,7 +2727,7 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
             Uniform* uniform = uniforms[uniformIndex];
             unsigned int uniformUpdateSize = effect->_updateUniform(*uniform, updateData);
             if (uniformUpdateSize != 0)
-                uniform->_frames[context._currentFrame]._buffer.copyFrom(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
+                uniform->_frames[context._currentFrame]._buffer.copyFrom(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize, 0);
         }
 
 
@@ -2773,13 +2789,63 @@ bool Vulkan::initializeIndexAndVertexBuffers(AppDescriptor & appDesc,
     return true;
 }
 
-bool Vulkan::setupAllocator(Context& context)
+namespace
+{
+    std::array<VkDeviceSize, 10> memoryTypes = {};
+    VkDeviceSize totalMem = 0;
+    void allocateRecord(
+        VmaAllocator VMA_NOT_NULL                    allocator,
+        uint32_t                                     memoryType,
+        VkDeviceMemory VMA_NOT_NULL_NON_DISPATCHABLE memory,
+        VkDeviceSize                                 size,
+        void* VMA_NULLABLE                           pUserData)
+    {
+        totalMem += size;
+        memoryTypes[memoryType] += size;
+        std::string info = std::string("AllocateGPU: memoryType=") + std::to_string(memoryType) + ", thisAllocation=" + std::to_string(size) + ", MemUsageOfThisType=" + std::to_string(memoryTypes[memoryType]) + ", totalMemUsage=" + std::to_string(totalMem) + " ,megaByteTotal=" + std::to_string(totalMem/(1024*1024)) + "\n";
+        g_logger->log(Vulkan::Logger::Level::Verbose, info);
+        if (memoryType == 2)
+        {
+            int k = 0;
+            k = 1;
+        }
+    }
+
+    void deallocateRecord(
+        VmaAllocator VMA_NOT_NULL                    allocator,
+        uint32_t                                     memoryType,
+        VkDeviceMemory VMA_NOT_NULL_NON_DISPATCHABLE memory,
+        VkDeviceSize                                 size,
+        void* VMA_NULLABLE                           pUserData)
+    {
+        totalMem -= size;
+        memoryTypes[memoryType] -= size;
+        std::string info = std::string("DeallocateGPU: memoryType=") + std::to_string(memoryType) + ", thisAllocation=" + std::to_string(size) + ", MemUsageOfThisType=" + std::to_string(memoryTypes[memoryType]) + ", totalMemUsage=" + std::to_string(totalMem) + " ,megaByteTotal=" + std::to_string(totalMem / (1024 * 1024)) + "\n";
+        g_logger->log(Vulkan::Logger::Level::Verbose, info);
+    }
+}
+
+bool Vulkan::setupAllocator(AppDescriptor& appDesc, Context& context)
 {
     static VmaAllocatorCreateInfo allocatorInfo = {};
+    static VkDeviceSize heapSizeLimit = 3 * 1024 * 1024 * 1024;
     allocatorInfo.physicalDevice = context._physicalDevice;
     allocatorInfo.device = context._device;
     allocatorInfo.instance = context._instance;
-    allocatorInfo.preferredLargeHeapBlockSize = 32 * 1024 ^ 3;
+    allocatorInfo.preferredLargeHeapBlockSize = 512 * 1024 * 1024;
+    allocatorInfo.flags = 0;
+    allocatorInfo.vulkanApiVersion = 0;
+//    allocatorInfo.pHeapSizeLimit = &heapSizeLimit;
+//    allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_1;
+
+    VmaDeviceMemoryCallbacks* callbacks = new VmaDeviceMemoryCallbacks();
+    callbacks->pfnAllocate = allocateRecord;
+    callbacks->pfnFree = deallocateRecord;
+    allocatorInfo.pDeviceMemoryCallbacks = callbacks;
+
+//    allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
+//    if (appDesc.hasExtension("VK_EXT_memory_budget"))
+//        allocatorInfo.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 
     vmaCreateAllocator(&allocatorInfo, &g_allocator);
     return true;
@@ -2838,14 +2904,14 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create device!\n"));
         return false;
     }
-    
+
     if (!createQueue(appDesc, context))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create queue!\n"));
         return false;
     }
 
-    if (!setupAllocator(context))
+    if (!setupAllocator(appDesc, context))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to setup allocator!\n"));
         return false;

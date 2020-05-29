@@ -551,7 +551,8 @@ namespace Vulkan
     bool recreateEffectDescriptor(AppDescriptor& appDesc, Context& context, EffectDescriptorPtr effect);
 
     BufferDescriptorPtr createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
-    PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool shared = true, int numBuffers = -1);
+    PersistentBufferPtr lookupPersistentBuffer(Context& context, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, int numBuffers = -1, const std::string tag = std::string(""));
+    PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool shared = true, int numBuffers = -1, const std::string tag = std::string(""));
 
     bool createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferView& result);
 

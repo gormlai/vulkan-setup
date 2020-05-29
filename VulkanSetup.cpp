@@ -567,7 +567,7 @@ namespace
 {
     constexpr unsigned int g_persistentBufferSize = 32 * 1024 * 1024;
 
-    typedef std::tuple<unsigned int, VkBufferUsageFlags, VkMemoryPropertyFlags> PersistentBufferKey;
+    typedef std::tuple<unsigned int, VkBufferUsageFlags, VkMemoryPropertyFlags, std::string> PersistentBufferKey;
     typedef std::map<PersistentBufferKey,Vulkan::PersistentBufferPtr> PersistentBufferMap;
     PersistentBufferMap g_persistentBuffers;
 
@@ -2437,7 +2437,18 @@ Vulkan::BufferDescriptorPtr Vulkan::createBuffer(Context& context, VkDeviceSize 
     return buffer;
 }
 
-Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool shared, int numBuffers)
+Vulkan::PersistentBufferPtr Vulkan::lookupPersistentBuffer(Context& context, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, int numBuffers, const std::string tag)
+{
+    const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
+    const PersistentBufferKey key(numInternalBuffers, usage, properties, tag);
+    PersistentBufferMap::iterator it = g_persistentBuffers.find(key);
+    if (it != g_persistentBuffers.end())
+        return it->second;
+    return nullptr;
+}
+
+
+Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool shared, int numBuffers, const std::string tag)
 {
     auto createBuffers = [&context, usage, properties, shared, numBuffers](Vulkan::PersistentBufferPtr pBuffer, unsigned int size) {
         for (unsigned int i = 0; i < pBuffer->_buffers.size(); i++)
@@ -2449,7 +2460,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
     };
 
     const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
-    const PersistentBufferKey key(numInternalBuffers, usage, properties);
+    const PersistentBufferKey key(numInternalBuffers, usage, properties, tag);
     PersistentBufferMap::iterator it = g_persistentBuffers.find(key);
     if (!shared || it == g_persistentBuffers.end())
     {

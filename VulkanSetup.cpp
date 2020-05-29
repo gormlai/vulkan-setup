@@ -2528,11 +2528,16 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
 
 Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context, const void * srcData, VkDeviceSize bufferSize, BufferType type)
 {    
-    Vulkan::BufferDescriptor stagingBufferDescriptor;
-    if(!createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBufferDescriptor))
+    // costs to create and recreate this all the time
+    static Vulkan::BufferDescriptor stagingBufferDescriptor;
+    if (stagingBufferDescriptor._size < bufferSize)
     {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create staging buffer of size ") + std::to_string((int)bufferSize) + " bytes\n");
-        return Vulkan::BufferDescriptorPtr();
+        destroyBufferDescriptor(stagingBufferDescriptor);
+        if (!createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBufferDescriptor))
+        {
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create staging buffer of size ") + std::to_string((int)bufferSize) + " bytes\n");
+            return Vulkan::BufferDescriptorPtr();
+        }
     }
     
     Vulkan::BufferDescriptorPtr vertexBufferDescriptor = createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | ((type == BufferType::Vertex) ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -2545,7 +2550,6 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
     stagingBufferDescriptor.copyFrom(context._device, srcData, bufferSize, 0);
     vertexBufferDescriptor->copyFrom(context._device, context._commandPool, context._graphicsQueue, stagingBufferDescriptor, bufferSize);
     
-	destroyBufferDescriptor(stagingBufferDescriptor);
     return vertexBufferDescriptor;
     
 }

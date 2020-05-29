@@ -567,7 +567,7 @@ namespace
 {
     constexpr unsigned int g_persistentBufferSize = 32 * 1024 * 1024;
 
-    typedef std::pair< VkBufferUsageFlags, VkMemoryPropertyFlags> PersistentBufferKey;
+    typedef std::tuple<unsigned int, VkBufferUsageFlags, VkMemoryPropertyFlags> PersistentBufferKey;
     typedef std::map<PersistentBufferKey,Vulkan::PersistentBufferPtr> PersistentBufferMap;
     PersistentBufferMap g_persistentBuffers;
 
@@ -711,6 +711,7 @@ void Vulkan::PersistentBuffer::destroy()
 
 bool Vulkan::PersistentBuffer::copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize offset)
 {
+    frameIndex = frameIndex % _offsets.size();
     const unsigned int lOffset =  (UINT64_MAX==offset) ? _offsets[frameIndex] : (unsigned int)offset;
     if (lOffset + (VkDeviceSize)amount > _buffers[frameIndex]._size)
         return false;
@@ -2447,11 +2448,11 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
         return true;
     };
 
-    PersistentBufferMap::iterator it = g_persistentBuffers.find(PersistentBufferKey(usage, properties));
+    const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
+    const PersistentBufferKey key(numInternalBuffers, usage, properties);
+    PersistentBufferMap::iterator it = g_persistentBuffers.find(key);
     if (!shared || it == g_persistentBuffers.end())
     {
-        const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
-//        const int realSize = shared ? g_persistentBufferSize : (int)size;
         const int realSize = (int)size;
         Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer(numInternalBuffers));
         if(!createBuffers(pBuffer, realSize))
@@ -2460,7 +2461,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
         pBuffer->_shared = shared;
         pBuffer->_registeredSize = (unsigned int)size;
         if(shared)
-            g_persistentBuffers[PersistentBufferKey(usage, properties)] = pBuffer;
+            g_persistentBuffers[key] = pBuffer;
         return pBuffer;
     }
     else

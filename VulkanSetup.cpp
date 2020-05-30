@@ -2499,11 +2499,18 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
     const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
     const PersistentBufferKey key(numInternalBuffers, usage, properties, tag);
     PersistentBufferMap::iterator it = g_persistentBuffers.find(key);
-    if (it == g_persistentBuffers.end())
+    if (it == g_persistentBuffers.end() || it->second->_registeredSize < (unsigned int)size)
     {
-        const int realSize = (int)size;
-        Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer(numInternalBuffers));
-        if(!createBuffers(pBuffer, realSize))
+        Vulkan::PersistentBufferPtr pBuffer;
+        if (it == g_persistentBuffers.end())
+            pBuffer = Vulkan::PersistentBufferPtr(new Vulkan::PersistentBuffer(numInternalBuffers));
+        else
+            pBuffer = it->second;
+
+        for (auto buf : pBuffer->_buffers)
+            destroyBufferDescriptor(buf);
+
+        if(!createBuffers(pBuffer, (unsigned int)size))
             return Vulkan::PersistentBufferPtr();
 
         pBuffer->_registeredSize = (unsigned int)size;
@@ -2511,19 +2518,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
         return pBuffer;
     }
     else
-    {
-        Vulkan::PersistentBufferPtr pBuffer = it->second;
-        pBuffer->_registeredSize += (unsigned int)size;
-        if (pBuffer->_registeredSize > pBuffer->_buffers[0]._size) {
-            unsigned int newSize = pBuffer->_registeredSize;
-            for (Vulkan::BufferDescriptor& desc : pBuffer->_buffers)
-                destroyBufferDescriptor(desc);
-            if(!createBuffers(pBuffer, newSize))
-                return Vulkan::PersistentBufferPtr();
-
-        }
         return it->second;
-    }
 }
 
 

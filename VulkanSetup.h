@@ -381,7 +381,7 @@ namespace Vulkan
     struct UniformAggregate
     {
         VkBufferView _bufferView;
-        BufferDescriptor _buffer;
+        PersistentBufferPtr _buffer;
         VkSampler _sampler;
         VkImageView _imageView;
 
@@ -396,12 +396,14 @@ namespace Vulkan
         VkDescriptorType _type;
         uint32_t _binding;
         uint32_t _set;
+        uint32_t _size;
         std::string _name;
         std::vector<UniformAggregate> _frames;
         std::vector<ShaderStage> _stages;
 
         Uniform()
             :_binding(UINT32_MAX)
+            ,_size(0)
             , _set(UINT32_MAX) {}
     };
 

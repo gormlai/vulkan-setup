@@ -16,6 +16,7 @@ namespace
 {
     Vulkan::Logger * g_logger = new Vulkan::Logger();
     constexpr unsigned int stagingBufferSize = 32 * 1024 * 1024;
+    constexpr unsigned int uniformBufferSize = 16 * 1024 * 1024;
     Vulkan::PersistentBufferPtr g_stagingBuffer;
 }
 
@@ -403,6 +404,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
         newUniform._name = name;
         newUniform._type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         newUniform._stages.push_back(stage);
+        newUniform._size = size;
 
         if (binding < 0)
             newUniform._binding = numUniforms(*this);
@@ -411,8 +413,12 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
 
         for (uint32_t i = 0; i < (uint32_t)context._swapChainImages.size(); i++)
         {
+            std::string tag = std::string("UniformBuffer") + std::to_string(i);
             UniformAggregate aggregate;
-            aggregate._buffer._size = size;
+            Vulkan::PersistentBufferPtr buffer = Vulkan::lookupPersistentBuffer(context, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, tag, 1);
+            if (buffer == nullptr)
+                buffer = Vulkan::createPersistentBuffer(context, uniformBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, tag, 1);
+            aggregate._buffer = buffer;
             newUniform._frames.push_back(aggregate);
         }
         _uniforms.push_back(newUniform);
@@ -2732,9 +2738,9 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
             {
                 VkDescriptorBufferInfo bufferInfo;
                 memset(&bufferInfo, 0, sizeof(bufferInfo));
-                bufferInfo.buffer = uniform._frames[frame]._buffer._buffer;
+                bufferInfo.buffer = uniform._frames[frame]._buffer->getBuffer(0)._buffer;
                 bufferInfo.offset = 0;
-                bufferInfo.range = uniform._frames[frame]._buffer._size;
+                bufferInfo.range = uniform._size;
 
                 VkWriteDescriptorSet descriptorWrite = {};
                 descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2772,7 +2778,7 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
             Uniform* uniform = uniforms[uniformIndex];
             unsigned int uniformUpdateSize = effect->_updateUniform(*uniform, updateData);
             if (uniformUpdateSize != 0)
-                uniform->_frames[context._currentFrame]._buffer.copyFrom(context._device, context._commandPool, context._graphicsQueue, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize, 0);
+                uniform->_frames[context._currentFrame]._buffer->copyFrom(0, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
         }
 
 
@@ -3204,7 +3210,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
         effect.collectUniformsOfType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &uniforms[0]);
         for (unsigned int uniformIndex = 0; uniformIndex < uniformCount; uniformIndex++)
         {
-            Uniform* uniform = uniforms[uniformIndex];
+/*            Uniform* uniform = uniforms[uniformIndex];
             for (unsigned int frame = 0; frame < context._swapChainImages.size(); frame++)
             {
                 Vulkan::BufferDescriptor& buffer = uniform->_frames[frame]._buffer;
@@ -3214,7 +3220,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
                     return false;
                 }
 
-            }
+            }*/
         }
 
     }

@@ -232,24 +232,29 @@ namespace Vulkan
     {
         VkBuffer _buffer;
         VmaAllocation _memory;
+        bool _mappable;
         unsigned int _size;
   
         BufferDescriptor()
             :_buffer(VK_NULL_HANDLE)
             , _memory(VK_NULL_HANDLE)
             , _size(0)
+            , _mappable(false)
         {
         }
 
         void destroy() override;
 
-        virtual bool copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount, VkDeviceSize offset);
+        virtual bool copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, const void * srcData, VkDeviceSize amount, VkDeviceSize dstOffset);
 
         bool copyFrom(VkDevice device,
-                      VkCommandPool commandPool,
-                      VkQueue queue,
-                      BufferDescriptor & src,
-                      VkDeviceSize amount);
+            VkCommandPool commandPool,
+            VkQueue queue,
+            BufferDescriptor& src,
+            VkDeviceSize amount,
+            VkDeviceSize srcOffset,
+            VkDeviceSize dstOffset);
+
 
         bool copyTo(VkDevice device,
                     VkCommandPool commandPool,
@@ -270,14 +275,12 @@ namespace Vulkan
         std::vector<unsigned int> _offsets;
         std::vector<VmaAllocationInfo> _allocInfos;
         std::vector<Vulkan::BufferDescriptor> _buffers;
-        bool _shared;
         unsigned int _registeredSize;
 
         PersistentBuffer(unsigned int numBuffers)
             :_offsets(numBuffers)
             ,_allocInfos(numBuffers)
             ,_buffers(numBuffers)
-            ,_shared(true)
             ,_registeredSize(0)
         {
             memset(&_offsets[0], 0, sizeof(unsigned int) * numBuffers);
@@ -287,7 +290,7 @@ namespace Vulkan
         static bool submitFrame(unsigned int frameIndex);
 
         inline Vulkan::BufferDescriptor & getBuffer(const unsigned int index)  { return _buffers[index % (unsigned int)_buffers.size()]; }
-        bool copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize offset = UINT64_MAX);
+        bool copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset = UINT64_MAX);
         void destroy() override;
 
     };
@@ -551,8 +554,8 @@ namespace Vulkan
     bool recreateEffectDescriptor(AppDescriptor& appDesc, Context& context, EffectDescriptorPtr effect);
 
     BufferDescriptorPtr createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
-    PersistentBufferPtr lookupPersistentBuffer(Context& context, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, int numBuffers = -1, const std::string tag = std::string(""));
-    PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool shared = true, int numBuffers = -1, const std::string tag = std::string(""));
+    PersistentBufferPtr lookupPersistentBuffer(Context& context, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, const std::string tag, int numBuffers = -1);
+    PersistentBufferPtr createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, const std::string tag, int numBuffers = -1);
 
     bool createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferView& result);
 

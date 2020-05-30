@@ -15,6 +15,8 @@
 namespace
 {
     Vulkan::Logger * g_logger = new Vulkan::Logger();
+    constexpr unsigned int stagingBufferSize = 32 * 1024 * 1024;
+    Vulkan::PersistentBufferPtr g_stagingBuffer;
 }
 
 namespace Vulkan
@@ -59,7 +61,7 @@ namespace Vulkan
 
     bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
     bool createComputePipeline(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
-    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc, VmaAllocationInfo* aInfo = nullptr, bool dedicated = false);
+    bool createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor& bufDesc, VmaAllocationInfo* aInfo = nullptr);
 
     static VmaAllocator g_allocator;
 }
@@ -584,25 +586,49 @@ void Vulkan::BufferDescriptor::destroy()
 
 
 
-bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, const void * srcData, VkDeviceSize amount, VkDeviceSize offset)
+bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, const void * srcData, VkDeviceSize amount, VkDeviceSize dstOffset)
 {
-    void* data = nullptr;
-    const VkResult mapResult = vmaMapMemory(g_allocator, _memory, &data);
-    assert(mapResult == VK_SUCCESS);
-    if (mapResult != VK_SUCCESS)
+    if (_mappable)
     {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to map vertex buffer memory\n"));
-        return false;
+        void* data = nullptr;
+        const VkResult mapResult = vmaMapMemory(g_allocator, _memory, &data);
+        assert(mapResult == VK_SUCCESS);
+        if (mapResult != VK_SUCCESS)
+        {
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to map vertex buffer memory\n"));
+            return false;
+        }
+
+        unsigned char* dstData = reinterpret_cast<unsigned char*>(data);
+        void* fPointer = reinterpret_cast<void*>(dstData + dstOffset);
+        memcpy(data, srcData, amount);
+        vmaUnmapMemory(g_allocator, _memory);
+    }
+    else
+    {
+        // use a staging buffer to copy data
+        int64_t amountOfDataLeftToCopy = (int64_t)amount;
+        int64_t currentDstOffset = (int64_t)dstOffset;
+        while (amountOfDataLeftToCopy > 0)
+        {
+            int64_t amountToCopy = std::min(amountOfDataLeftToCopy, (int64_t)stagingBufferSize);
+
+            const char* cData = reinterpret_cast<const char*>(srcData);
+            g_stagingBuffer->_offsets[0] = 0;
+            g_stagingBuffer->copyFrom(0, cData, amountToCopy, 0);
+            vmaFlushAllocation(g_allocator, g_stagingBuffer->_buffers[0]._memory, 0, amountToCopy);
+            copyFrom(device, commandPool, queue, g_stagingBuffer->_buffers[0], amountToCopy, 0, currentDstOffset);
+            currentDstOffset += amountToCopy;
+            amountOfDataLeftToCopy -= amountToCopy;
+        }
+
     }
 
-    unsigned char* dstData = reinterpret_cast<unsigned char*>(data);
-    void* fPointer = reinterpret_cast<void*>(dstData + offset);
-    memcpy(data, srcData, amount);
-    vmaUnmapMemory(g_allocator, _memory);
+
     return true;
 }
 
-bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, BufferDescriptor & src, VkDeviceSize amount)
+bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, BufferDescriptor & src, VkDeviceSize amount, VkDeviceSize srcOffset, VkDeviceSize dstOffset)
 {
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -622,8 +648,8 @@ bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, VkCommandPool commandPo
 	assert(beginCommandBufferResult == VK_SUCCESS);
 
     VkBufferCopy copyRegion = {};
-    copyRegion.srcOffset = 0; // Optional
-    copyRegion.dstOffset = 0; // Optional
+    copyRegion.srcOffset = srcOffset;
+    copyRegion.dstOffset = dstOffset;
     copyRegion.size = amount;
     vkCmdCopyBuffer(commandBuffer, src._buffer, _buffer, 1, &copyRegion);
     
@@ -713,13 +739,16 @@ bool Vulkan::PersistentBuffer::copyFrom(unsigned int frameIndex, const void* src
 {
     frameIndex = frameIndex % _offsets.size();
     const unsigned int lOffset =  (UINT64_MAX==offset) ? _offsets[frameIndex] : (unsigned int)offset;
+    assert(lOffset + (VkDeviceSize)amount <= this->_registeredSize);
     if (lOffset + (VkDeviceSize)amount > _buffers[frameIndex]._size)
         return false;
 
     unsigned char* dstData = reinterpret_cast<unsigned char*>(_allocInfos[frameIndex].pMappedData);
+    // data is mapped - just copy it
     void* fPointer = reinterpret_cast<void*>(dstData + lOffset);
     memcpy(fPointer, srcData, amount);
     _offsets[frameIndex] = lOffset + (unsigned int)amount;
+
     return true;
 }
 
@@ -727,8 +756,7 @@ bool Vulkan::PersistentBuffer::startFrame(unsigned int frameIndex)
 {
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers)
     {
-        if(keyValue.second->_shared)
-            keyValue.second->_offsets[frameIndex] = 0;
+        keyValue.second->_offsets[frameIndex % (unsigned int)keyValue.second->_offsets.size()] = 0;
     }
 
     return true;
@@ -737,7 +765,10 @@ bool Vulkan::PersistentBuffer::startFrame(unsigned int frameIndex)
 bool Vulkan::PersistentBuffer::submitFrame(unsigned int frameIndex)
 {
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers) {
-        vmaFlushAllocation(g_allocator, keyValue.second->_buffers[frameIndex]._memory, 0, keyValue.second->_offsets[frameIndex]);
+        vmaFlushAllocation(g_allocator, 
+            keyValue.second->_buffers[frameIndex % keyValue.second->_buffers.size()]._memory, 
+            0, 
+            keyValue.second->_offsets[frameIndex % keyValue.second->_offsets.size()]);
     }
     return true;
 }
@@ -917,7 +948,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
             return false;
         }
 
-        if (!stagingBuffer.copyFrom(context._device, reinterpret_cast<const void*>(pixels), size, 0))
+        if (!stagingBuffer.copyFrom(context._device, context._commandPool, context._graphicsQueue, reinterpret_cast<const void*>(pixels), size, 0))
         {
             g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
             return false;
@@ -2437,7 +2468,7 @@ Vulkan::BufferDescriptorPtr Vulkan::createBuffer(Context& context, VkDeviceSize 
     return buffer;
 }
 
-Vulkan::PersistentBufferPtr Vulkan::lookupPersistentBuffer(Context& context, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, int numBuffers, const std::string tag)
+Vulkan::PersistentBufferPtr Vulkan::lookupPersistentBuffer(Context& context, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, const std::string tag, int numBuffers)
 {
     const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
     const PersistentBufferKey key(numInternalBuffers, usage, properties, tag);
@@ -2448,12 +2479,12 @@ Vulkan::PersistentBufferPtr Vulkan::lookupPersistentBuffer(Context& context, VkB
 }
 
 
-Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool shared, int numBuffers, const std::string tag)
+Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, const std::string tag, int numBuffers)
 {
-    auto createBuffers = [&context, usage, properties, shared, numBuffers](Vulkan::PersistentBufferPtr pBuffer, unsigned int size) {
+    auto createBuffers = [&context, usage, properties, numBuffers](Vulkan::PersistentBufferPtr pBuffer, unsigned int size) {
         for (unsigned int i = 0; i < pBuffer->_buffers.size(); i++)
         {
-            if (!Vulkan::createBuffer(context, size, usage, properties, pBuffer->_buffers[i], &pBuffer->_allocInfos[i], !shared))
+            if (!Vulkan::createBuffer(context, size, usage, properties, pBuffer->_buffers[i], &pBuffer->_allocInfos[i]))
                 return false;
         }
         return true;
@@ -2462,17 +2493,15 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
     const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
     const PersistentBufferKey key(numInternalBuffers, usage, properties, tag);
     PersistentBufferMap::iterator it = g_persistentBuffers.find(key);
-    if (!shared || it == g_persistentBuffers.end())
+    if (it == g_persistentBuffers.end())
     {
         const int realSize = (int)size;
         Vulkan::PersistentBufferPtr pBuffer(new Vulkan::PersistentBuffer(numInternalBuffers));
         if(!createBuffers(pBuffer, realSize))
             return Vulkan::PersistentBufferPtr();
 
-        pBuffer->_shared = shared;
         pBuffer->_registeredSize = (unsigned int)size;
-        if(shared)
-            g_persistentBuffers[key] = pBuffer;
+        g_persistentBuffers[key] = pBuffer;
         return pBuffer;
     }
     else
@@ -2492,7 +2521,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
 }
 
 
-bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc, VmaAllocationInfo * aInfo, bool dedicated)
+bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, BufferDescriptor & bufDesc, VmaAllocationInfo * aInfo)
 {
     VkBufferCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkBufferCreateInfo));
@@ -2503,11 +2532,9 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
 
     VmaAllocationCreateInfo allocCreateInfo = {};
     allocCreateInfo.flags = 0;
-    allocCreateInfo.usage = (dedicated) ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_GPU_ONLY;
+    allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
     if (aInfo != nullptr)
         allocCreateInfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    if (dedicated)
-        allocCreateInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 
     allocCreateInfo.requiredFlags = properties;
     allocCreateInfo.preferredFlags = properties;
@@ -2515,10 +2542,7 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     VkBuffer vertexBuffer;
     VmaAllocationInfo allocInfo = {};
     VmaAllocation allocation;
-//    if(dedicated)
-//        allocCreateInfo.memoryTypeBits = 1u << 0;
     const VkResult createBufferResult = vmaCreateBuffer(g_allocator, &createInfo, &allocCreateInfo, &vertexBuffer, &allocation, &allocInfo);
-    //    vkCreateBuffer(context._device, &createInfo, nullptr, &vertexBuffer);
     assert(createBufferResult == VK_SUCCESS);
     if (createBufferResult != VK_SUCCESS)
     {
@@ -2532,6 +2556,11 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     if (aInfo != nullptr) {
         *aInfo = allocInfo;
     }
+
+
+    if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+        bufDesc._mappable = true;
+
     return true;
 }
 
@@ -2558,8 +2587,8 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
         return Vulkan::BufferDescriptorPtr();
     }
     
-    stagingBufferDescriptor.copyFrom(context._device, srcData, bufferSize, 0);
-    vertexBufferDescriptor->copyFrom(context._device, context._commandPool, context._graphicsQueue, stagingBufferDescriptor, bufferSize);
+    stagingBufferDescriptor.copyFrom(context._device, context._commandPool, context._graphicsQueue, srcData, bufferSize, 0);
+    vertexBufferDescriptor->copyFrom(context._device, context._commandPool, context._graphicsQueue, stagingBufferDescriptor, bufferSize, 0, 0);
     
     return vertexBufferDescriptor;
     
@@ -2743,7 +2772,7 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
             Uniform* uniform = uniforms[uniformIndex];
             unsigned int uniformUpdateSize = effect->_updateUniform(*uniform, updateData);
             if (uniformUpdateSize != 0)
-                uniform->_frames[context._currentFrame]._buffer.copyFrom(context._device, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize, 0);
+                uniform->_frames[context._currentFrame]._buffer.copyFrom(context._device, context._commandPool, context._graphicsQueue, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize, 0);
         }
 
 
@@ -3014,6 +3043,9 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         return false;
     }
     
+    g_stagingBuffer = Vulkan::createPersistentBuffer(context, stagingBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, "StagingBuffer", 1);
+
+
     return true;
 }
 

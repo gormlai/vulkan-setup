@@ -2724,6 +2724,14 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
     std::vector<VkDescriptorSetLayout> descriptorSetLayouts(1, effect._descriptorSetLayout);
     allocInfo.pSetLayouts = &descriptorSetLayouts[0];
 
+    static VkDeviceSize currentOffset = 0;
+    std::vector<VkDeviceSize> offsets;
+    for (Vulkan::Uniform& uniform : effect._uniforms)
+    {
+        offsets.push_back(currentOffset);
+        currentOffset += uniform._size;
+    }
+
     effect._descriptorSets.resize(framesCount);
     for (uint32_t frame = 0; frame < framesCount; frame++)
     {
@@ -2732,14 +2740,16 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
         if (allocationResult != VK_SUCCESS)
             return false;
 
-        for (Vulkan::Uniform& uniform : effect._uniforms)
+        for (unsigned int i=0 ; i < offsets.size() ; i++)
         {
+            Vulkan::Uniform& uniform = effect._uniforms[i];
             if (uniform._type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
             {
                 VkDescriptorBufferInfo bufferInfo;
                 memset(&bufferInfo, 0, sizeof(bufferInfo));
                 bufferInfo.buffer = uniform._frames[frame]._buffer->getBuffer(0)._buffer;
-                bufferInfo.offset = 0;
+
+                bufferInfo.offset = offsets[i];
                 bufferInfo.range = uniform._size;
 
                 VkWriteDescriptorSet descriptorWrite = {};

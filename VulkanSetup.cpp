@@ -1467,6 +1467,34 @@ bool Vulkan::createVulkanSurface(SDL_Window * window, Vulkan::Context & context)
     return true;
 }
 
+namespace
+{
+    void logChosenPhysicalDeviceFeatures(VkPhysicalDeviceFeatures& features)
+    {
+        std::string message;
+        message += "VkPhysicalDeviceFeatures\n";
+        message += "------------------------\n";
+        message += "multiDrawIndirect = " + std::to_string(features.multiDrawIndirect) + "\n";
+        message += "drawIndirectFirstInstance = " + std::to_string(features.drawIndirectFirstInstance) + "\n";
+        g_logger->log(Vulkan::Logger::Level::Verbose, message);
+    }
+
+    void logPhysicalDeviceProperties(VkPhysicalDeviceProperties& properties)
+    {
+        std::string message;
+        message += "VkPhysicalDeviceProperties\n";
+        message += "--------------------------\n";
+        message += "apiVersion = " + std::to_string(properties.apiVersion) + "\n";
+        message += "driverVersion = " + std::to_string(properties.driverVersion) + "\n";
+        message += "vendorID = " + std::to_string(properties.vendorID) + "\n";
+        message += "deviceID = " + std::to_string(properties.deviceID) + "\n";
+        message += "VkPhysicalDeviceTyp = " + std::to_string((int)properties.deviceType) + "\n";
+        message += "deviceName = " + std::string(properties.deviceName) + "\n";
+        g_logger->log(Vulkan::Logger::Level::Verbose, message);
+    }
+}
+
+
 bool Vulkan::enumeratePhysicalDevices(Vulkan::AppDescriptor & appDesc, Vulkan::Context & context)
 {
     uint32_t deviceCount = 0;
@@ -1506,8 +1534,10 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppDescriptor & appDesc, Vulkan::C
         return false;
     
     appDesc._physicalDevices = devices;
+    logPhysicalDeviceProperties(context._deviceProperties);
     return true;
 }
+
 
 // prioritise discrete over integrated
 bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, Context & Context) {
@@ -1541,6 +1571,7 @@ bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, Context & Context) {
     
 	// get the device features, so we can check against them later on
 	vkGetPhysicalDeviceFeatures(Context._physicalDevice, &Context._physicalDeviceFeatures);
+    logChosenPhysicalDeviceFeatures(Context._physicalDeviceFeatures);
 
     return true;
 }

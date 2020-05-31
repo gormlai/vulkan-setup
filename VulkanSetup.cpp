@@ -2539,7 +2539,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
         else
             pBuffer = it->second;
 
-        for (auto buf : pBuffer->_buffers)
+        for (auto & buf : pBuffer->_buffers)
             destroyBufferDescriptor(buf);
 
         if(!createBuffers(pBuffer, (unsigned int)size))

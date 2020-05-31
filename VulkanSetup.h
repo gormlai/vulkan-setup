@@ -243,6 +243,10 @@ namespace Vulkan
         {
         }
 
+        virtual ~BufferDescriptor() {
+            destroy();
+        }
+
         void destroy() override;
 
         virtual bool copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, const void * srcData, VkDeviceSize amount, VkDeviceSize dstOffset);
@@ -263,6 +267,7 @@ namespace Vulkan
                     unsigned int width,
                     unsigned int height,
                     unsigned int depth);
+
 
     private:
 
@@ -285,6 +290,11 @@ namespace Vulkan
         {
             memset(&_offsets[0], 0, sizeof(unsigned int) * numBuffers);
         }
+
+        virtual ~PersistentBuffer() {
+            destroy();
+        }
+
 
         static bool startFrame(unsigned int frameIndex);
         static bool submitFrame(unsigned int frameIndex);

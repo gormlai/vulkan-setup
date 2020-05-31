@@ -364,6 +364,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformSamplerOrImage(Vulkan::Context& con
         Vulkan::Uniform newUniform{};
         newUniform._name = name;
         newUniform._type = type;
+        newUniform._size = 0;
         newUniform._frames.resize(context._swapChainImages.size());
         newUniform._stages.push_back(stage);
 
@@ -2720,10 +2721,9 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
     allocInfo.pSetLayouts = &descriptorSetLayouts[0];
 
     static VkDeviceSize currentOffset = 0;
-    std::vector<VkDeviceSize> offsets;
     for (Vulkan::Uniform& uniform : effect._uniforms)
     {
-        offsets.push_back(currentOffset);
+        uniform._offset = currentOffset;
         currentOffset += uniform._size;
     }
 
@@ -2735,16 +2735,15 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
         if (allocationResult != VK_SUCCESS)
             return false;
 
-        for (unsigned int i=0 ; i < offsets.size() ; i++)
+        for (Vulkan::Uniform& uniform : effect._uniforms)
         {
-            Vulkan::Uniform& uniform = effect._uniforms[i];
             if (uniform._type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
             {
                 VkDescriptorBufferInfo bufferInfo;
                 memset(&bufferInfo, 0, sizeof(bufferInfo));
                 bufferInfo.buffer = uniform._frames[frame]._buffer->getBuffer(0)._buffer;
 
-                bufferInfo.offset = offsets[i];
+                bufferInfo.offset = uniform._offset;
                 bufferInfo.range = uniform._size;
 
                 VkWriteDescriptorSet descriptorWrite = {};
@@ -2783,7 +2782,7 @@ void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t
             Uniform* uniform = uniforms[uniformIndex];
             unsigned int uniformUpdateSize = effect->_updateUniform(*uniform, updateData);
             if (uniformUpdateSize != 0)
-                uniform->_frames[context._currentFrame]._buffer->copyFrom(0, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize);
+                uniform->_frames[context._currentFrame]._buffer->copyFrom(0, reinterpret_cast<const void*>(&updateData[0]), uniformUpdateSize, uniform->_offset);
         }
 
 

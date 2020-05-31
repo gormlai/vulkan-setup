@@ -397,6 +397,7 @@ namespace Vulkan
         uint32_t _binding;
         uint32_t _set;
         uint32_t _size;
+        uint32_t _offset;
         std::string _name;
         std::vector<UniformAggregate> _frames;
         std::vector<ShaderStage> _stages;

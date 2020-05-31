@@ -978,14 +978,6 @@ bool Vulkan::createImage(Vulkan::Context& context,
         return false;
     }
 
-    /*
-    if (!Vulkan::allocateAndBindImageMemory(context, result, imageMemory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to allocate imageMemory\n"));
-        return false;
-    }
-    */
-
     if (!Vulkan::transitionImageLayoutAndSubmit(context, result._image,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL))

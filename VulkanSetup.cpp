@@ -2916,10 +2916,14 @@ bool Vulkan::setupAllocator(AppDescriptor& appDesc, Context& context)
 //    allocatorInfo.pHeapSizeLimit = &heapSizeLimit;
 //    allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_1;
 
-    VmaDeviceMemoryCallbacks* callbacks = new VmaDeviceMemoryCallbacks();
-    callbacks->pfnAllocate = allocateRecord;
-    callbacks->pfnFree = deallocateRecord;
-    allocatorInfo.pDeviceMemoryCallbacks = callbacks;
+    // this is for debug info only
+    if (validationLayersEnabled)
+    {
+        VmaDeviceMemoryCallbacks* callbacks = new VmaDeviceMemoryCallbacks();
+        callbacks->pfnAllocate = allocateRecord;
+        callbacks->pfnFree = deallocateRecord;
+        allocatorInfo.pDeviceMemoryCallbacks = callbacks;
+    }
 
 //    allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
 //    if (appDesc.hasExtension("VK_EXT_memory_budget"))

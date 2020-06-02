@@ -941,21 +941,10 @@ bool Vulkan::createImage(Vulkan::Context& context,
     VkImageLayout finalLayout)
 {
     assert(mipMapLevels > 0);
-    Vulkan::BufferDescriptor stagingBuffer;
     const VkDeviceSize size = pixelSize * width * height * depth;
     if (pixels != nullptr)
     {
-        if (!Vulkan::createBuffer(context,
-            size,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer))
-        {
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to create staging buffer for image\n"));
-            return false;
-        }
-
-        if (!stagingBuffer.copyFrom(context._device, context._commandPool, context._graphicsQueue, reinterpret_cast<const void*>(pixels), size, 0))
+        if (!g_stagingBuffer->copyFrom(0, reinterpret_cast<const void*>(pixels), size, 0))
         {
             g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
             return false;
@@ -988,7 +977,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
 
     if (pixels != nullptr)
     {
-        if (!stagingBuffer.copyTo(context._device,
+        if (!g_stagingBuffer->getBuffer(0).copyTo(context._device,
             context._commandPool,
             context._graphicsQueue,
             result._image,
@@ -1010,7 +999,6 @@ bool Vulkan::createImage(Vulkan::Context& context,
         return false;
     }
 
-    stagingBuffer.destroy();
     return true;
 }
 

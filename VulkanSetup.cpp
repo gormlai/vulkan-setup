@@ -16,7 +16,7 @@ namespace
 {
     Vulkan::Logger * g_logger = new Vulkan::Logger();
     constexpr unsigned int stagingBufferSize = 32 * 1024 * 1024;
-    constexpr unsigned int uniformBufferSize = 16 * 1024 * 1024;
+    constexpr unsigned int uniformBufferSize = 1 * 1024 * 1024;
     Vulkan::PersistentBufferPtr g_stagingBuffer;
 }
 
@@ -622,8 +622,7 @@ bool Vulkan::BufferDescriptor::copyFrom(VkDevice device, VkCommandPool commandPo
 
             const char* cData = reinterpret_cast<const char*>(srcData);
             g_stagingBuffer->_offsets[0] = 0;
-            g_stagingBuffer->copyFrom(0, cData, amountToCopy, 0);
-            vmaFlushAllocation(g_allocator, g_stagingBuffer->_buffers[0]._memory, 0, amountToCopy);
+            g_stagingBuffer->copyFromAndFlush(0, cData, amountToCopy, 0);
             copyFrom(device, commandPool, queue, g_stagingBuffer->_buffers[0], amountToCopy, 0, currentDstOffset);
             currentDstOffset += amountToCopy;
             amountOfDataLeftToCopy -= amountToCopy;
@@ -759,6 +758,16 @@ bool Vulkan::PersistentBuffer::copyFrom(unsigned int frameIndex, const void* src
     return true;
 }
 
+bool Vulkan::PersistentBuffer::copyFromAndFlush(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset)
+{
+    const bool successfullyCopied = copyFrom(frameIndex, srcData, amount, dstOffset);
+    assert(successfullyCopied);
+    const bool successfullyFlushed = flushData(frameIndex);
+    assert(successfullyFlushed);
+    return successfullyCopied && successfullyFlushed;
+}
+
+
 bool Vulkan::PersistentBuffer::startFrame(unsigned int frameIndex)
 {
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers)
@@ -769,14 +778,21 @@ bool Vulkan::PersistentBuffer::startFrame(unsigned int frameIndex)
     return true;
 }
 
+bool Vulkan::PersistentBuffer::flushData(unsigned int frameIndex)
+{
+    VkResult success = vmaFlushAllocation(g_allocator,
+        _buffers[frameIndex % _buffers.size()]._memory,
+        0,
+        _offsets[frameIndex % _offsets.size()]);
+    assert(success == VK_SUCCESS);
+    return success == VK_SUCCESS;
+}
+
+
 bool Vulkan::PersistentBuffer::submitFrame(unsigned int frameIndex)
 {
-    for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers) {
-        vmaFlushAllocation(g_allocator, 
-            keyValue.second->_buffers[frameIndex % keyValue.second->_buffers.size()]._memory, 
-            0, 
-            keyValue.second->_offsets[frameIndex % keyValue.second->_offsets.size()]);
-    }
+    for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers)
+        keyValue.second->flushData(0);
     return true;
 }
 
@@ -944,7 +960,8 @@ bool Vulkan::createImage(Vulkan::Context& context,
     const VkDeviceSize size = pixelSize * width * height * depth;
     if (pixels != nullptr)
     {
-        if (!g_stagingBuffer->copyFrom(0, reinterpret_cast<const void*>(pixels), size, 0))
+        assert(g_stagingBuffer->_registeredSize > size);
+        if (!g_stagingBuffer->copyFromAndFlush(0, reinterpret_cast<const void*>(pixels), size, 0))
         {
             g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
             return false;
@@ -1470,6 +1487,7 @@ namespace
         message += "deviceID = " + std::to_string(properties.deviceID) + "\n";
         message += "VkPhysicalDeviceTyp = " + std::to_string((int)properties.deviceType) + "\n";
         message += "deviceName = " + std::string(properties.deviceName) + "\n";
+        message += "deviceName = " + std::to_string(properties.limits.minUniformBufferOffsetAlignment);
         g_logger->log(Vulkan::Logger::Level::Verbose, message);
     }
 }
@@ -2581,18 +2599,7 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
 
 Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context, const void * srcData, VkDeviceSize bufferSize, BufferType type)
 {    
-    // costs to create and recreate this all the time
-    static Vulkan::BufferDescriptor stagingBufferDescriptor;
-    if (stagingBufferDescriptor._size < bufferSize)
-    {
-        destroyBufferDescriptor(stagingBufferDescriptor);
-        if (!createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBufferDescriptor))
-        {
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create staging buffer of size ") + std::to_string((int)bufferSize) + " bytes\n");
-            return Vulkan::BufferDescriptorPtr();
-        }
-    }
-    
+    assert(g_stagingBuffer->_registeredSize > bufferSize);
     Vulkan::BufferDescriptorPtr vertexBufferDescriptor = createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | ((type == BufferType::Vertex) ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if(vertexBufferDescriptor==nullptr)
     {
@@ -2600,8 +2607,8 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
         return Vulkan::BufferDescriptorPtr();
     }
     
-    stagingBufferDescriptor.copyFrom(context._device, context._commandPool, context._graphicsQueue, srcData, bufferSize, 0);
-    vertexBufferDescriptor->copyFrom(context._device, context._commandPool, context._graphicsQueue, stagingBufferDescriptor, bufferSize, 0, 0);
+    g_stagingBuffer->copyFromAndFlush(0, srcData, bufferSize, 0);
+    vertexBufferDescriptor->copyFrom(context._device, context._commandPool, context._graphicsQueue, g_stagingBuffer->getBuffer(0), bufferSize, 0, 0);
     
     return vertexBufferDescriptor;
     
@@ -2731,11 +2738,24 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
     std::vector<VkDescriptorSetLayout> descriptorSetLayouts(1, effect._descriptorSetLayout);
     allocInfo.pSetLayouts = &descriptorSetLayouts[0];
 
+
     static VkDeviceSize currentOffset = 0;
     for (Vulkan::Uniform& uniform : effect._uniforms)
     {
         uniform._offset = currentOffset;
-        currentOffset += uniform._size;
+        if(context._deviceProperties.limits.minUniformBufferOffsetAlignment != 0  && uniform._size!=0)
+        {
+            uint32_t offsetRemainder = uniform._size % context._deviceProperties.limits.minUniformBufferOffsetAlignment;
+            uint32_t nearestSize = (offsetRemainder == 0 ) 
+                ? context._deviceProperties.limits.minUniformBufferOffsetAlignment 
+                : uniform._size + context._deviceProperties.limits.minUniformBufferOffsetAlignment - offsetRemainder;
+            currentOffset = currentOffset + nearestSize;
+            assert(currentOffset % context._deviceProperties.limits.minUniformBufferOffsetAlignment == 0);
+        }
+        else
+        {
+            currentOffset += uniform._size;
+        }
     }
 
     effect._descriptorSets.resize(framesCount);
@@ -2898,7 +2918,7 @@ bool Vulkan::setupAllocator(AppDescriptor& appDesc, Context& context)
     allocatorInfo.physicalDevice = context._physicalDevice;
     allocatorInfo.device = context._device;
     allocatorInfo.instance = context._instance;
-    allocatorInfo.preferredLargeHeapBlockSize = 512 * 1024 * 1024;
+    allocatorInfo.preferredLargeHeapBlockSize = 32 * 1024 * 1024;
     allocatorInfo.flags = 0;
     allocatorInfo.vulkanApiVersion = 0;
 //    allocatorInfo.pHeapSizeLimit = &heapSizeLimit;

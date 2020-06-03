@@ -228,6 +228,7 @@ namespace Vulkan
     };
     typedef std::shared_ptr<Buffer> BufferPtr;
 
+    struct Context;
     struct BufferDescriptor : public Buffer
     {
         VkBuffer _buffer;
@@ -249,9 +250,9 @@ namespace Vulkan
 
         void destroy() override;
 
-        virtual bool copyFrom(VkDevice device, VkCommandPool commandPool, VkQueue queue, const void * srcData, VkDeviceSize amount, VkDeviceSize dstOffset);
+        virtual bool copyFrom(Vulkan::Context & context, VkCommandPool commandPool, VkQueue queue, const void * srcData, VkDeviceSize amount, VkDeviceSize dstOffset);
 
-        bool copyFrom(VkDevice device,
+        bool copyFrom(Vulkan::Context& context,
             VkCommandPool commandPool,
             VkQueue queue,
             BufferDescriptor& src,

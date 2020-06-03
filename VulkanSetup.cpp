@@ -2754,7 +2754,6 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
     std::vector<VkDescriptorSetLayout> descriptorSetLayouts(1, effect._descriptorSetLayout);
     allocInfo.pSetLayouts = &descriptorSetLayouts[0];
 
-
     static VkDeviceSize currentOffset = 0;
     for (Vulkan::Uniform& uniform : effect._uniforms)
     {
@@ -2763,7 +2762,7 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
         {
             uint32_t offsetRemainder = uniform._size % context._deviceProperties.limits.minUniformBufferOffsetAlignment;
             uint32_t nearestSize = (offsetRemainder == 0 ) 
-                ? context._deviceProperties.limits.minUniformBufferOffsetAlignment 
+                ? uniform._size
                 : uniform._size + context._deviceProperties.limits.minUniformBufferOffsetAlignment - offsetRemainder;
             currentOffset = currentOffset + nearestSize;
             assert(currentOffset % context._deviceProperties.limits.minUniformBufferOffsetAlignment == 0);

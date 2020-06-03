@@ -2935,7 +2935,7 @@ bool Vulkan::setupAllocator(AppDescriptor& appDesc, Context& context)
     allocatorInfo.physicalDevice = context._physicalDevice;
     allocatorInfo.device = context._device;
     allocatorInfo.instance = context._instance;
-    allocatorInfo.preferredLargeHeapBlockSize = 512 * 1024 * 1024;
+    allocatorInfo.preferredLargeHeapBlockSize = 32 * 1024 * 1024;
     allocatorInfo.flags = 0;
     allocatorInfo.vulkanApiVersion = 0;
 //    allocatorInfo.pHeapSizeLimit = &heapSizeLimit;

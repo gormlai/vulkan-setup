@@ -369,6 +369,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformSamplerOrImage(Vulkan::Context& con
     {
         assert(uniform->_name == name);
         assert(uniform->_binding == binding);
+	assert(uniform->_type == type);
         uniform->_stages.push_back(stage);
         return binding;
     }
@@ -409,6 +410,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
     {
         assert(uniform->_name == name);
         assert(uniform->_binding == binding);
+	assert(uniform->_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         uniform->_stages.push_back(stage);
         return binding;
     }
@@ -418,6 +420,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
         newUniform._name = name;
         newUniform._type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         newUniform._stages.push_back(stage);
+	assert(size > 0);
         newUniform._size = size;
 
         if (binding < 0)

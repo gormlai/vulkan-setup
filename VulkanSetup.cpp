@@ -582,7 +582,8 @@ Vulkan::AppDescriptor::AppDescriptor()
 :_window(nullptr)
 , _chosenPhysicalDevice(0)
 , _enableVSync(true)
-, _numSamples(1)
+, _requestedNumSamples(1)
+, _actualNumSamples(1)
 {
 }
 
@@ -868,7 +869,7 @@ namespace
 		default:
             g_logger->log(Vulkan::Logger::Level::Info, std::string(callbackData->pMessage));
 			break;
-		}
+        }
 
 		return VK_TRUE;
 	}
@@ -1674,6 +1675,8 @@ bool Vulkan::createQueue(AppDescriptor & appDesc, Context & context)
 
 bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
 {
+    appDesc._actualNumSamples = requestNumAASamples(context, appDesc._requestedNumSamples);
+
     // get surface capabilities
     VkResult surfaceCapabilitiesResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context._physicalDevice, context._surface, &context._surfaceCapabilities);
 	assert(surfaceCapabilitiesResult == VK_SUCCESS);
@@ -1764,7 +1767,7 @@ bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, Vulkan:
         context._swapChainSize.height,
         1,
         1,
-        appDesc._numSamples,
+        appDesc._actualNumSamples,
         depthFormat,
         requiredTiling,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -2195,7 +2198,7 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     memset(&multisamplingCreateInfo, 0, sizeof(VkPipelineMultisampleStateCreateInfo));
     multisamplingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisamplingCreateInfo.sampleShadingEnable = VK_FALSE;
-    multisamplingCreateInfo.rasterizationSamples = (VkSampleCountFlagBits)appDesc._numSamples;
+    multisamplingCreateInfo.rasterizationSamples = (VkSampleCountFlagBits)appDesc._actualNumSamples;
     multisamplingCreateInfo.minSampleShading = 1.0f;
     multisamplingCreateInfo.pSampleMask = nullptr;
     multisamplingCreateInfo.alphaToCoverageEnable = VK_FALSE;
@@ -3039,7 +3042,7 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         return false;
     }
 
-    if (!createRenderPass(context, appDesc._numSamples, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
+    if (!createRenderPass(context, appDesc._actualNumSamples, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create standard render pass\n"));
         return false;
@@ -3064,7 +3067,7 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
 		return false;
 	}
     
-    if (appDesc._numSamples > 1)
+    if (appDesc._actualNumSamples > 1)
     {       
         const unsigned int width = context._swapChainSize.width;
         const unsigned int height = context._swapChainSize.height;
@@ -3074,7 +3077,7 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         context._msaaColourImageViews.resize(numSwapBuffers);
         for (unsigned int i = 0; i < numSwapBuffers; i++)
         {
-            if(!createImage(context, width, height, depth, 1, appDesc._numSamples, context._surfaceFormat.format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, context._msaaColourImages[i]))
+            if(!createImage(context, width, height, depth, 1, appDesc._actualNumSamples, context._surfaceFormat.format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, context._msaaColourImages[i]))
             {
                 g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image ") + std::to_string(i) + "\n");
                 return false;
@@ -3120,7 +3123,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-    if (!createRenderPass(context, appDesc._numSamples, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
+    if (!createRenderPass(context, appDesc._actualNumSamples, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create standard render pass\n"));
         return false;
@@ -3138,7 +3141,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-    if (appDesc._numSamples > 1)
+    if (appDesc._actualNumSamples > 1)
     {
         const unsigned int width = context._swapChainSize.width;
         const unsigned int height = context._swapChainSize.height;
@@ -3154,7 +3157,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
                 width, 
                 height, 
                 1, 
-                appDesc._numSamples, 
+                appDesc._actualNumSamples,
                 context._surfaceFormat.format, 
                 context._msaaColourImages[i], 
                 1,
@@ -3359,7 +3362,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc,
         return false;
     }
 
-    if (!createRenderPass(context, appDesc._numSamples, &effect._renderPass, renderPassCreationCallback))
+    if (!createRenderPass(context, appDesc._actualNumSamples, &effect._renderPass, renderPassCreationCallback))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create render pass for effect\n"));
         return false;
@@ -3390,7 +3393,7 @@ bool Vulkan::recreateEffectDescriptor(AppDescriptor& appDesc, Context& context, 
     // compute or graphics pipeline???
     if (effect->_graphicsPipelineCreationCallback != nullptr)
     {
-        if (!createRenderPass(context, appDesc._numSamples, &effect->_renderPass, effect->_renderPassCreationCallback))
+        if (!createRenderPass(context, appDesc._actualNumSamples, &effect->_renderPass, effect->_renderPassCreationCallback))
         {
             g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to recreate render pass for effect\n"));
             return false;
@@ -3487,4 +3490,23 @@ VkCommandBuffer Vulkan::createCommandBuffer(Vulkan::Context& context, VkCommandP
 void Vulkan::setLogger(Vulkan::Logger * logger) 
 { 
     g_logger = logger; 
+}
+
+uint32_t Vulkan::maxAASamples(Context& context)
+{
+    if (context._physicalDevice == VK_NULL_HANDLE)
+        return 1;
+
+    const uint32_t dAA = static_cast<uint32_t>(context._deviceProperties.limits.framebufferDepthSampleCounts);
+    const uint32_t cAA = static_cast<uint32_t>(context._deviceProperties.limits.framebufferColorSampleCounts);
+    return std::min(dAA, cAA);
+}
+
+uint32_t Vulkan::requestNumAASamples(Context& context, uint32_t count)
+{
+    const uint32_t maxAA = maxAASamples(context);
+    const uint32_t log2AA = uint32_t(log2(maxAA));
+    const uint32_t correctedValue = 1 << log2AA;
+    const uint32_t rValue = std::min(count, correctedValue);
+    return rValue;
 }

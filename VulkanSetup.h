@@ -198,7 +198,8 @@ namespace Vulkan
         std::string _appName;
         uint32_t _requiredVulkanVersion;
         bool _enableVSync;
-        uint32_t _numSamples;
+        uint32_t _requestedNumSamples;
+        uint32_t _actualNumSamples;
         SDL_Window * _window;
         std::vector<VkPhysicalDevice> _physicalDevices;
         unsigned int _chosenPhysicalDevice;
@@ -652,6 +653,9 @@ namespace Vulkan
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<ImageDescriptor>& images, std::vector<VkImageView>& imageViews);
 
     void setLogger(Vulkan::Logger * logger);
+    
+    uint32_t maxAASamples(Context& context);
+    uint32_t requestNumAASamples(Context& context, uint32_t count);
 
 }
 

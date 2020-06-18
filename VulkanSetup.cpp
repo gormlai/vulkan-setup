@@ -1506,9 +1506,9 @@ namespace
         message += "deviceID = " + std::to_string(properties.deviceID) + "\n";
         message += "VkPhysicalDeviceTyp = " + std::to_string((int)properties.deviceType) + "\n";
         message += "deviceName = " + std::string(properties.deviceName) + "\n";
-        message += "limits.minUniformBufferOffsetAlignment = " + std::to_string(properties.limits.minUniformBufferOffsetAlignment);
-        message += "limits.framebufferDepthSampleCounts = " + std::to_string(properties.limits.framebufferDepthSampleCounts);
-        message += "limits.framebufferColorSampleCounts = " + std::to_string(properties.limits.framebufferColorSampleCounts);
+        message += "limits.minUniformBufferOffsetAlignment = " + std::to_string(properties.limits.minUniformBufferOffsetAlignment) + "\n";
+        message += "limits.framebufferDepthSampleCounts = " + std::to_string(properties.limits.framebufferDepthSampleCounts) + "\n";
+        message += "limits.framebufferColorSampleCounts = " + std::to_string(properties.limits.framebufferColorSampleCounts) + "\n";
         g_logger->log(Vulkan::Logger::Level::Verbose, message);
     }
 }

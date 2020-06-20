@@ -639,7 +639,7 @@ bool Vulkan::BufferDescriptor::copyFrom(Vulkan::Context & context, VkCommandPool
 
             const char* cData = reinterpret_cast<const char*>(srcData);
             Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, amount);
-            stagingBuffer->copyFromAndFlush(0, cData, amountToCopy, 0);
+            stagingBuffer->copyFromAndFlush(context, 0, cData, amountToCopy, 0);
             copyFrom(context, commandPool, queue, stagingBuffer->_buffers[0], amountToCopy, 0, currentDstOffset);
             currentDstOffset += amountToCopy;
             amountOfDataLeftToCopy -= amountToCopy;
@@ -775,11 +775,11 @@ bool Vulkan::PersistentBuffer::copyFrom(unsigned int frameIndex, const void* src
     return true;
 }
 
-bool Vulkan::PersistentBuffer::copyFromAndFlush(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset)
+bool Vulkan::PersistentBuffer::copyFromAndFlush(Vulkan::Context& context, unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset)
 {
     const bool successfullyCopied = copyFrom(frameIndex, srcData, amount, dstOffset);
     assert(successfullyCopied);
-    const bool successfullyFlushed = flushData(frameIndex);
+    const bool successfullyFlushed = flushData(context, frameIndex);
     assert(successfullyFlushed);
     return successfullyCopied && successfullyFlushed;
 }
@@ -795,21 +795,25 @@ bool Vulkan::PersistentBuffer::startFrame(unsigned int frameIndex)
     return true;
 }
 
-bool Vulkan::PersistentBuffer::flushData(unsigned int frameIndex)
+bool Vulkan::PersistentBuffer::flushData(Vulkan::Context& context, unsigned int frameIndex)
 {
+    VkDeviceSize size = _offsets[frameIndex % _offsets.size()];
+    size = size + size % context._deviceProperties.limits.nonCoherentAtomSize;
+    size = (size > _registeredSize) ? VK_WHOLE_SIZE : size;
+
     VkResult success = vmaFlushAllocation(g_allocator,
         _buffers[frameIndex % _buffers.size()]._memory,
         0,
-        _offsets[frameIndex % _offsets.size()]);
+        size);
     assert(success == VK_SUCCESS);
     return success == VK_SUCCESS;
 }
 
 
-bool Vulkan::PersistentBuffer::submitFrame(unsigned int frameIndex)
+bool Vulkan::PersistentBuffer::submitFrame(Vulkan::Context& context, unsigned int frameIndex)
 {
     for (std::pair<const PersistentBufferKey, PersistentBufferPtr>& keyValue : g_persistentBuffers)
-        keyValue.second->flushData(0);
+        keyValue.second->flushData(context, frameIndex);
     return true;
 }
 
@@ -980,7 +984,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
     {
         stagingBuffer = getStagingBuffer(context, size);
         assert(stagingBuffer->_registeredSize >= size);
-        if (!stagingBuffer->copyFromAndFlush(0, reinterpret_cast<const void*>(pixels), size, 0))
+        if (!stagingBuffer->copyFromAndFlush(context, 0, reinterpret_cast<const void*>(pixels), size, 0))
         {
             g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
             return false;
@@ -1449,7 +1453,7 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
     {
         static const std::vector<const char*> validationLayers = {
            "MoltenVK",
-           "VK_LAYER_NV_optimus",
+//           "VK_LAYER_NV_optimus",
 //           "VK_LAYER_RENDERDOC_Capture",
 //           "GalaxyOverlayVkLayer",
 //           "GalaxyOverlayVkLayer_VERBOSE",
@@ -1462,7 +1466,7 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
 //            "VK_LAYER_VALVE_steam_fossilize",
 //            "VK_LAYER_EOS_Overlay", 
 //            "VK_LAYER_LUNARG_api_dump",
-            "VK_LAYER_LUNARG_device_simulation",
+//            "VK_LAYER_LUNARG_device_simulation",
             "VK_LAYER_KHRONOS_validation",
 //            "VK_LAYER_LUNARG_monitor",
 //            "VK_LAYER_LUNARG_screenshot",
@@ -1951,8 +1955,8 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
         memset(&dependency, 0, sizeof(dependency));
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         dependency.dstSubpass = 0;
-        dependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        dependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         dependency.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         dependency.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         dependency.dependencyFlags = 0;
@@ -2659,7 +2663,7 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
     
     Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, bufferSize);
     assert(stagingBuffer->_registeredSize > bufferSize);
-    stagingBuffer->copyFromAndFlush(0, srcData, bufferSize, 0);
+    stagingBuffer->copyFromAndFlush(context, 0, srcData, bufferSize, 0);
     vertexBufferDescriptor->copyFrom(context, context._commandPool, context._graphicsQueue, stagingBuffer->getBuffer(0), bufferSize, 0, 0);
     
     return vertexBufferDescriptor;

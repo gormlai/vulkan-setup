@@ -299,12 +299,12 @@ namespace Vulkan
 
 
         static bool startFrame(unsigned int frameIndex);
-        static bool submitFrame(unsigned int frameIndex);
-        bool flushData(unsigned int frameIndex);
+        static bool submitFrame(Vulkan::Context& context, unsigned int frameIndex);
+        bool flushData(Vulkan::Context & context, unsigned int frameIndex);
 
         inline Vulkan::BufferDescriptor & getBuffer(const unsigned int index)  { return _buffers[index % (unsigned int)_buffers.size()]; }
         bool copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset = UINT64_MAX);
-        bool copyFromAndFlush(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset = UINT64_MAX);
+        bool copyFromAndFlush(Vulkan::Context& context, unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset = UINT64_MAX);
         void destroy() override;
 
     };

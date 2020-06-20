@@ -1722,6 +1722,20 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
 #endif
     if (width <= 0 || height <= 0)
         return false;
+
+    uint32_t presentModeCount = 0;
+    VkResult getPossiblePresentModes0 = vkGetPhysicalDeviceSurfacePresentModesKHR(context._physicalDevice, context._surface, &presentModeCount, nullptr);
+    assert(getPossiblePresentModes0 == VK_SUCCESS && presentModeCount != 0);
+    std::vector< VkPresentModeKHR> possiblePresentModes(presentModeCount);
+    VkResult getPossiblePresentModes1 = vkGetPhysicalDeviceSurfacePresentModesKHR(context._physicalDevice, context._surface, &presentModeCount, &possiblePresentModes[0]);
+    assert(getPossiblePresentModes1 == VK_SUCCESS && presentModeCount != 0);
+
+    // we are betting that at least VK_PRESENT_MODE_FIFO_KHR or VK_PRESENT_MODE_IMMEDIATE_KHR is present
+    // TODO should we add mailboxing if possible?
+    VkPresentModeKHR presentModeWithVSync = (std::find(possiblePresentModes.begin(), possiblePresentModes.end(), VK_PRESENT_MODE_FIFO_KHR) != possiblePresentModes.end()) ?
+        VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+    VkPresentModeKHR presentModeWithoutVSync = (std::find(possiblePresentModes.begin(), possiblePresentModes.end(), VK_PRESENT_MODE_IMMEDIATE_KHR) != possiblePresentModes.end()) ?
+        VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_FIFO_KHR;
     
     context._surfaceFormat = appDesc._surfaceFormats[0];
     context._swapChainSize.width = width;
@@ -1738,7 +1752,7 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
     swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swapChainCreateInfo.preTransform = context._surfaceCapabilities.currentTransform;
     swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapChainCreateInfo.presentMode = appDesc._enableVSync ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+    swapChainCreateInfo.presentMode = appDesc._enableVSync ? presentModeWithVSync : presentModeWithoutVSync;
     swapChainCreateInfo.clipped = VK_TRUE;
 //    swapChainCreateInfo.oldSwapchain = context._swapChain;
     swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;

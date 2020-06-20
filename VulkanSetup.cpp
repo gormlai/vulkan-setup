@@ -1929,7 +1929,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
         dependency.dstSubpass = 0;
         dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.srcAccessMask = 0;
+        dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         dependency.dependencyFlags = 0;
     }
@@ -1949,9 +1949,6 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     VkRenderPassCreateInfo& createInfo = renderPassInfoDescriptor._createInfo;
     memset(&createInfo, 0, sizeof(createInfo));
     std::array<VkAttachmentDescription, 10> & attachmentDescriptions = renderPassInfoDescriptor._attachmentDescriptions;
- //   attachmentDescriptions[0] = colorAttachment;
-    attachmentDescriptions[0] = depthAttachment;
-//    attachmentDescriptions[2] = colorAttachmentResolve;
     createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     createInfo.attachmentCount = (numAASamples> 1) ? 3 : 2;
 	createInfo.pAttachments = &attachmentDescriptions[0];

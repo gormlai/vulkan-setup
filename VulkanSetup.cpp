@@ -1492,6 +1492,8 @@ namespace
         message += "------------------------\n";
         message += "multiDrawIndirect = " + std::to_string(features.multiDrawIndirect) + "\n";
         message += "drawIndirectFirstInstance = " + std::to_string(features.drawIndirectFirstInstance) + "\n";
+        message += "fullDrawIndexUint32 = " + std::to_string(features.fullDrawIndexUint32) + "\n";
+        message += "robustBufferAccess = " + std::to_string(features.robustBufferAccess) + "\n";
         g_logger->log(Vulkan::Logger::Level::Verbose, message);
     }
 
@@ -1509,6 +1511,9 @@ namespace
         message += "limits.minUniformBufferOffsetAlignment = " + std::to_string(properties.limits.minUniformBufferOffsetAlignment) + "\n";
         message += "limits.framebufferDepthSampleCounts = " + std::to_string(properties.limits.framebufferDepthSampleCounts) + "\n";
         message += "limits.framebufferColorSampleCounts = " + std::to_string(properties.limits.framebufferColorSampleCounts) + "\n";
+        message += "limits.maxDrawIndexedIndexValue = " + std::to_string(properties.limits.maxDrawIndexedIndexValue) + "\n";
+        message += "limits.maxDrawIndirectCount = " + std::to_string(properties.limits.maxDrawIndirectCount) + "\n";
+        message += "limits.nonCoherentAtomSize = " + std::to_string(properties.limits.nonCoherentAtomSize) + "\n";
         g_logger->log(Vulkan::Logger::Level::Verbose, message);
     }
 }

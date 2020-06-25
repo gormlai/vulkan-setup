@@ -1522,7 +1522,7 @@ namespace
         message += "driverVersion = " + std::to_string(properties.driverVersion) + "\n";
         message += "vendorID = " + std::to_string(properties.vendorID) + "\n";
         message += "deviceID = " + std::to_string(properties.deviceID) + "\n";
-        message += "VkPhysicalDeviceTyp = " + std::to_string((int)properties.deviceType) + "\n";
+        message += "VkPhysicalDeviceType = " + std::to_string((int)properties.deviceType) + "\n";
         message += "deviceName = " + std::string(properties.deviceName) + "\n";
         message += "limits.minUniformBufferOffsetAlignment = " + std::to_string(properties.limits.minUniformBufferOffsetAlignment) + "\n";
         message += "limits.framebufferDepthSampleCounts = " + std::to_string(properties.limits.framebufferDepthSampleCounts) + "\n";
@@ -1530,6 +1530,14 @@ namespace
         message += "limits.maxDrawIndexedIndexValue = " + std::to_string(properties.limits.maxDrawIndexedIndexValue) + "\n";
         message += "limits.maxDrawIndirectCount = " + std::to_string(properties.limits.maxDrawIndirectCount) + "\n";
         message += "limits.nonCoherentAtomSize = " + std::to_string(properties.limits.nonCoherentAtomSize) + "\n";
+        message += "limits.maxDescriptorSetUniformBuffers = " + std::to_string(properties.limits.maxDescriptorSetUniformBuffers) + "\n";
+        message += "limits.maxDescriptorSetUniformBuffersDynamic = " + std::to_string(properties.limits.maxDescriptorSetUniformBuffersDynamic) + "\n";
+        message += "limits.maxDescriptorSetStorageBuffers = " + std::to_string(properties.limits.maxDescriptorSetStorageBuffers) + "\n";
+        message += "limits.maxDescriptorSetStorageBuffersDynamic = " + std::to_string(properties.limits.maxDescriptorSetStorageBuffersDynamic) + "\n";
+        message += "limits.maxVertexInputAttributes = " + std::to_string(properties.limits.maxVertexInputAttributes) + "\n";
+        message += "limits.maxVertexInputBindings = " + std::to_string(properties.limits.maxVertexInputBindings) + "\n";
+        message += "limits.maxVertexInputAttributeOffset = " + std::to_string(properties.limits.maxVertexInputAttributeOffset) + "\n";
+        message += "limits.maxVertexInputBindingStride = " + std::to_string(properties.limits.maxVertexInputBindingStride) + "\n";
         g_logger->log(Vulkan::Logger::Level::Verbose, message);
     }
 }

@@ -1228,42 +1228,42 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 		{
 #if !defined(__APPLE__) // function doesn't seeem to exist with moltenvk
             g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not create function: vkCreateDebugUtilsMessengerEXT") + "\n");
-            return false;
 #endif
 		}
-
-
+		else
+        {
 #if !defined(__APPLE__) // function doesn't seeem to exist with moltenvk
-		VkDebugUtilsMessengerCreateInfoEXT createInfo;
-		memset(&createInfo, 0, sizeof(createInfo));
+            VkDebugUtilsMessengerCreateInfoEXT createInfo;
+            memset(&createInfo, 0, sizeof(createInfo));
 
-		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		createInfo.messageSeverity =
-			VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-		createInfo.messageType =
-			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		createInfo.pNext = nullptr;
-		createInfo.flags = 0;
-		createInfo.pUserData = nullptr;
-		createInfo.pfnUserCallback = VulkanDebugUtilsCallback;
+            createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+            createInfo.messageSeverity =
+                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+            createInfo.messageType =
+                    VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                    VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                    VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+            createInfo.pNext = nullptr;
+            createInfo.flags = 0;
+            createInfo.pUserData = nullptr;
+            createInfo.pfnUserCallback = VulkanDebugUtilsCallback;
 
 
-		VkResult debugUtilsCreationResult = debugUtilsMessengerCreator(context._instance, &createInfo, nullptr, &context._debugUtilsCallback);
-		assert(debugUtilsCreationResult == VK_SUCCESS);
-		if (debugUtilsCreationResult != VK_SUCCESS)
-		{
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method: ") + "\n");
-			// TODO: should probably destroy the callbackCreator here
-			return false;
-		}
+            VkResult debugUtilsCreationResult = debugUtilsMessengerCreator(context._instance, &createInfo, nullptr, &context._debugUtilsCallback);
+            assert(debugUtilsCreationResult == VK_SUCCESS);
+            if (debugUtilsCreationResult != VK_SUCCESS)
+            {
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method: ") + "\n");
+                // TODO: should probably destroy the callbackCreator here
+            }
 #endif
+        }
+
 	}
-    
+
 	// debug report
 	{
         auto debugReportMessengerCreator = vkCreateDebugReportCallbackEXT;
@@ -1273,34 +1273,32 @@ bool Vulkan::setupDebugCallback(Vulkan::Context & context)
 			return true;
 #else
             g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not create function: vkCreateDebugReportCallbackEXT") +  + "\n");
-			return false;
 #endif
 		}
+		else
+	    {
+            VkDebugReportCallbackCreateInfoEXT createInfo;
+            memset(&createInfo, 0, sizeof(createInfo));
 
+            createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
+            createInfo.pNext = nullptr;
+            createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT
+                               | VK_DEBUG_REPORT_WARNING_BIT_EXT
+                               | VK_DEBUG_REPORT_DEBUG_BIT_EXT
+                               | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+            createInfo.pUserData = nullptr;
+            createInfo.pfnCallback = &VulkanDebugReportCallback;
 
-		VkDebugReportCallbackCreateInfoEXT createInfo;
-		memset(&createInfo, 0, sizeof(createInfo));
+            VkResult debugReportCreationResult = debugReportMessengerCreator(context._instance, &createInfo, nullptr, &context._debugReportCallback);
+            assert(debugReportCreationResult == VK_SUCCESS);
+            if (debugReportCreationResult != VK_SUCCESS)
+            {
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method ") + "\n");
+            }
 
-		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
-		createInfo.pNext = nullptr;
-		createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT 
-            | VK_DEBUG_REPORT_WARNING_BIT_EXT 
-            | VK_DEBUG_REPORT_DEBUG_BIT_EXT
-            | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
-		createInfo.pUserData = nullptr;
-		createInfo.pfnCallback = &VulkanDebugReportCallback;
-
-		VkResult debugReportCreationResult = debugReportMessengerCreator(context._instance, &createInfo, nullptr, &context._debugReportCallback);
-		assert(debugReportCreationResult == VK_SUCCESS);
-		if (debugReportCreationResult != VK_SUCCESS)
-		{
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create callback for method ") + "\n");
-			return false;
-		}
+        }
 	}
 
-
-    
     return true;
 }
 
@@ -1396,8 +1394,10 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
     
     if (validationLayersEnabled)
     {
-#if !defined(__APPLE__)
         requiredInstanceExtensionCount++;
+#if defined(__ANDROID__)
+        requiredInstanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+#else
         requiredInstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
     }
@@ -1444,7 +1444,6 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
     
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCreateInfo.pApplicationInfo = &vkAppInfo;
-	requiredInstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     instanceCreateInfo.enabledExtensionCount = (uint32_t)requiredInstanceExtensions.size();
     instanceCreateInfo.ppEnabledExtensionNames = &requiredInstanceExtensions[0];
     

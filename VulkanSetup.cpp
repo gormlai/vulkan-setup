@@ -3068,89 +3068,26 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to setup allocator!\n"));
         return false;
     }
-    
-    if (!createSwapChain(appDesc, context))
+
+    // create standard command pool
+    if (!createCommandPool(appDesc, context, &context._commandPool))
+    {
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create standard command pool\n"));
+        return false;
+    }
+
+    if (!createSwapChainDependents(appDesc, context))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create and setup swap chain!\n"));
         return false;
     }
-    
-    if (!createColorBuffers(context))
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create color buffers\n"));
-        return false;
-    }
-
-    if (!createRenderPass(context, appDesc._actualNumSamples, &context._renderPass, [](Vulkan::VkRenderPassCreateInfoDescriptor&) {}))
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create standard render pass\n"));
-        return false;
-    }
-
-	
+    	
 	if (!createPipelineCache(appDesc, context))
 	{
         g_logger->log(Vulkan::Logger::Level::Warn, std::string("Failed to create pipeline cache. This is non-fatal.\n"));
 	}
 	
-	// create standard command pool
-    if(!createCommandPool(appDesc, context, &context._commandPool))
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create standard command pool\n"));
-        return false;
-    }
         
-	if (!createDepthBuffers(appDesc, context, context._depthImages, context._depthImageViews))
-	{
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create depth buffers\n"));
-		return false;
-	}
-    
-    if (appDesc._actualNumSamples > 1)
-    {       
-        const unsigned int width = context._swapChainSize.width;
-        const unsigned int height = context._swapChainSize.height;
-        const unsigned int depth = 1;
-        const unsigned int numSwapBuffers = Vulkan::getNumSwapBuffers(context);
-        context._msaaColourImages.resize(numSwapBuffers);
-        context._msaaColourImageViews.resize(numSwapBuffers);
-        for (unsigned int i = 0; i < numSwapBuffers; i++)
-        {
-            if(!createImage(context, width, height, depth, 1, appDesc._actualNumSamples, context._surfaceFormat.format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, context._msaaColourImages[i]))
-            {
-                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image ") + std::to_string(i) + "\n");
-                return false;
-            }
-
-            /*
-            if (!allocateAndBindImageMemory(context, context._msaaColourImages[i], context._msaaColourMemory[i], VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-            {
-                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to allocate and bind msaa image ") + std::to_string(i) + "\n");
-                return false;
-            }*/
-
-            if (!createImageView(context, context._msaaColourImages[i]._image, context._surfaceFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, context._msaaColourImageViews[i]))
-            {
-                g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create msaa image view") + std::to_string(i) + "\n");
-                return false;
-            }
-        }
-    }
-
-
-	if (!createFrameBuffers(context, context._renderPass, context._swapChainImageViews, context._msaaColourImageViews, context._depthImageViews, context._frameBuffers))
-	{
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create frame buffers\n"));
-		return false;
-	}
-
-    if(!createSemaphores(appDesc, context))
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create semaphores\n"));
-        return false;
-    }
-   
-
     return true;
 }
 

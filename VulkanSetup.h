@@ -206,6 +206,13 @@ namespace Vulkan
         std::vector<VkExtensionProperties> _deviceExtensions;
         std::vector<VkSurfaceFormatKHR> _surfaceFormats;
 
+        void addRequiredInstanceExtensions(std::vector<std::string>& extensions);
+        void addRequiredDeviceExtensions(std::vector<std::string>& extensions);
+        void addRequiredInstanceExtension(const std::string& extension);
+        void addRequiredDeviceExtension(const std::string& extension);
+        std::vector<std::string> getRequiredDeviceExtensions() const { return _requiredDeviceExtensions; }
+        std::vector<std::string> getRequiredInstanceExtensions() const { return _requiredInstanceExtensions; }
+         
         bool hasExtension(const std::string& name)
         {
             for (auto ext : _deviceExtensions)
@@ -217,6 +224,10 @@ namespace Vulkan
         }
         
         AppDescriptor();
+
+    private:
+        std::vector<std::string> _requiredInstanceExtensions;
+        std::vector<std::string> _requiredDeviceExtensions;
     };
 
     struct Buffer

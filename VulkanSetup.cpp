@@ -30,7 +30,7 @@ namespace Vulkan
     void areValidationLayersAvailable(const std::vector<const char*>& validationLayers, std::vector<const char*> & output);
     bool loadVulkanLibrary();
     bool loadVulkanFunctions();
-    bool createInstanceAndLoadExtensions(const AppDescriptor& appDesc, Context& context);
+    bool createInstanceAndLoadExtensions(AppDescriptor& appDesc, Context& context);
     bool createVulkanSurface(SDL_Window* window, Context& context);
     bool enumeratePhysicalDevices(AppDescriptor& appDesc, Context& context);
     bool choosePhysicalDevice(AppDescriptor& appDesc, Context& Context);
@@ -586,6 +586,31 @@ Vulkan::AppDescriptor::AppDescriptor()
 , _actualNumSamples(1)
 {
 }
+
+void Vulkan::AppDescriptor::addRequiredInstanceExtensions(std::vector<std::string>& extensions)
+{
+    for (const std::string& extension : extensions)
+        addRequiredInstanceExtension(extension);
+}
+
+void Vulkan::AppDescriptor::addRequiredDeviceExtensions(std::vector<std::string>& extensions)
+{
+    for (const std::string& extension : extensions)
+        addRequiredDeviceExtension(extension);
+}
+
+void Vulkan::AppDescriptor::addRequiredInstanceExtension(const std::string& extension)
+{
+    if (std::find(_requiredInstanceExtensions.begin(), _requiredInstanceExtensions.end(), extension) == _requiredInstanceExtensions.end())
+        _requiredInstanceExtensions.push_back(extension);
+}
+
+void Vulkan::AppDescriptor::addRequiredDeviceExtension(const std::string& extension)
+{
+    if (std::find(_requiredDeviceExtensions.begin(), _requiredDeviceExtensions.end(), extension) == _requiredDeviceExtensions.end())
+        _requiredDeviceExtensions.push_back(extension);
+}
+
 
 ///////////////////////////////////// Vulkan BufferDescriptor ///////////////////////////////////////////////////////////////////
 
@@ -1350,7 +1375,7 @@ bool Vulkan::loadVulkanFunctions() {
     return procAddr != nullptr;
 }
 
-bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDesc, Vulkan::Context & context)
+bool Vulkan::createInstanceAndLoadExtensions(Vulkan::AppDescriptor & appDesc, Vulkan::Context & context)
 {
     
     // first count the number of instance extensions
@@ -1402,18 +1427,22 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
 #endif
     }
     
+    for (const char* extension : requiredInstanceExtensions)
+        appDesc.addRequiredInstanceExtension(extension);
+
     
     // log all the required extensions
+    std::vector<std::string> sRequiredInstanceExtensions = appDesc.getRequiredInstanceExtensions();
     g_logger->log(Vulkan::Logger::Level::Info, std::string("Required Vulkan Instance Extensions. Count = ") + std::to_string(requiredInstanceExtensionCount) + "\n");
     for (unsigned int i = 0; i < requiredInstanceExtensionCount; i++)
-        g_logger->log(Vulkan::Logger::Level::Info, std::string("\t") + std::to_string(i) + std::string(": ") + std::string(requiredInstanceExtensions[i]) + "\n");
+        g_logger->log(Vulkan::Logger::Level::Info, std::string("\t") + std::to_string(i) + std::string(": ") + sRequiredInstanceExtensions[i] + "\n");
     
     // check if required extensions are available
     {
         unsigned int requiredIndex = 0;
         for (requiredIndex = 0; requiredIndex < requiredInstanceExtensionCount; requiredIndex++)
         {
-            const char * requiredExtension = requiredInstanceExtensions[requiredIndex];
+            const char* requiredExtension = sRequiredInstanceExtensions[requiredIndex].c_str();
             unsigned int instanceIndex = 0;
             for (unsigned int instanceIndex = 0; instanceIndex < instanceExtensionCount; instanceIndex++)
             {
@@ -1441,7 +1470,10 @@ bool Vulkan::createInstanceAndLoadExtensions(const Vulkan::AppDescriptor & appDe
     VkInstanceCreateInfo instanceCreateInfo;
     memset(&instanceCreateInfo, 0, sizeof(instanceCreateInfo));
     
-    
+    requiredInstanceExtensions.clear();
+    for (const std::string& extension : sRequiredInstanceExtensions)
+        requiredInstanceExtensions.push_back(extension.c_str());
+
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCreateInfo.pApplicationInfo = &vkAppInfo;
     instanceCreateInfo.enabledExtensionCount = (uint32_t)requiredInstanceExtensions.size();
@@ -1675,19 +1707,33 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
   deviceCreateInfo.queueCreateInfoCount = 1;
   deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
   deviceCreateInfo.pEnabledFeatures = &context._physicalDeviceFeatures;
-    
-  std::vector<const char*> deviceExtensionNames;
-  deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-  if (appDesc.hasExtension(std::string("VK_EXT_memory_budget")))
-      deviceExtensionNames.push_back("VK_EXT_memory_budget");
-  if (appDesc.hasExtension(std::string("VK_KHR_get_physical_device_properties2")))
-      deviceExtensionNames.push_back("VK_KHR_get_physical_device_properties2");
+
+  // add up required device extensions
+  {
+      std::vector<const char*> deviceExtensionNames;
+      deviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+      if (appDesc.hasExtension(std::string("VK_EXT_memory_budget")))
+          deviceExtensionNames.push_back("VK_EXT_memory_budget");
+      if (appDesc.hasExtension(std::string("VK_KHR_get_physical_device_properties2")))
+          deviceExtensionNames.push_back("VK_KHR_get_physical_device_properties2");
+
+      for (const char* extension : deviceExtensionNames)
+          appDesc.addRequiredDeviceExtension(extension);
+  }
+
+  std::vector<std::string> sRequiredDeviceExtensions = appDesc.getRequiredDeviceExtensions();
+  std::vector<const char*> cRequiredDeviceExtensions;
+  for (const std::string& requiredExtension : sRequiredDeviceExtensions)
+      cRequiredDeviceExtensions.push_back(requiredExtension.c_str());
+
+  // log all the required device extensions
+  g_logger->log(Vulkan::Logger::Level::Info, std::string("Required Vulkan Device Extensions. Count = ") + std::to_string(sRequiredDeviceExtensions.size()) + "\n");
+  for (unsigned int i = 0; i < sRequiredDeviceExtensions.size(); i++)
+      g_logger->log(Vulkan::Logger::Level::Info, std::string("\t") + std::to_string(i) + std::string(": ") + sRequiredDeviceExtensions[i] + "\n");
 
 
-  
-
-  deviceCreateInfo.ppEnabledExtensionNames = &deviceExtensionNames[0];
-  deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensionNames.size();
+  deviceCreateInfo.ppEnabledExtensionNames = &cRequiredDeviceExtensions[0];
+  deviceCreateInfo.enabledExtensionCount = (uint32_t)cRequiredDeviceExtensions.size();
   
   VkResult creationResult = vkCreateDevice(appDesc._physicalDevices[appDesc._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
   assert(creationResult == VK_SUCCESS);

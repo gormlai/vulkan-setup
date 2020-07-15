@@ -1646,11 +1646,19 @@ bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, Context & Context) {
     
     appDesc._chosenPhysicalDevice = currentPhysicalDevice;
     Context._physicalDevice = appDesc._physicalDevices[currentPhysicalDevice];
-    g_logger->log(Vulkan::Logger::Level::Error, std::string("Chosen Vulkan Physical Device = ") + currentPhysicalProperties.deviceName + ". Driver version = " + std::to_string(currentPhysicalProperties.driverVersion) + "\n");
+    std::string chosenPhysicalDeviceName(currentPhysicalProperties.deviceName);
+    g_logger->log(Vulkan::Logger::Level::Error, std::string("Chosen Vulkan Physical Device = ") + chosenPhysicalDeviceName + ". Driver version = " + std::to_string(currentPhysicalProperties.driverVersion) + "\n");
     
 	// get the device features, so we can check against them later on
 	vkGetPhysicalDeviceFeatures(Context._physicalDevice, &Context._physicalDeviceFeatures);
     logChosenPhysicalDeviceFeatures(Context._physicalDeviceFeatures);
+
+    // check if chosen device is intel - then return false;
+    std::transform(chosenPhysicalDeviceName.begin(), chosenPhysicalDeviceName.end(), chosenPhysicalDeviceName.begin(), ::tolower);
+    if (chosenPhysicalDeviceName.find("intel") != std::string::npos) {
+        g_logger->log(Vulkan::Logger::Level::Error, "Intel graphics cards not supported\n");
+        return false;
+    }
 
     return true;
 }

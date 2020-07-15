@@ -205,11 +205,15 @@ namespace Vulkan
         unsigned int _chosenPhysicalDevice;
         std::vector<VkExtensionProperties> _deviceExtensions;
         std::vector<VkSurfaceFormatKHR> _surfaceFormats;
+        int _drawableSurfaceWidth;
+        int _drawableSurfaceHeight;
 
         void addRequiredInstanceExtensions(std::vector<std::string>& extensions);
         void addRequiredDeviceExtensions(std::vector<std::string>& extensions);
         void addRequiredInstanceExtension(const std::string& extension);
         void addRequiredDeviceExtension(const std::string& extension);
+
+        inline void setPreferredSurfaceFormat(VkFormat format) { _preferredSurfaceFormat = format;}
         std::vector<std::string> getRequiredDeviceExtensions() const { return _requiredDeviceExtensions; }
         std::vector<std::string> getRequiredInstanceExtensions() const { return _requiredInstanceExtensions; }
          
@@ -228,6 +232,7 @@ namespace Vulkan
     private:
         std::vector<std::string> _requiredInstanceExtensions;
         std::vector<std::string> _requiredDeviceExtensions;
+        VkFormat _preferredSurfaceFormat;
     };
 
     struct Buffer

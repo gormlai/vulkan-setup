@@ -584,6 +584,8 @@ Vulkan::AppDescriptor::AppDescriptor()
 , _enableVSync(true)
 , _requestedNumSamples(1)
 , _actualNumSamples(1)
+,_drawableSurfaceWidth(0)
+,_drawableSurfaceHeight(0)
 {
 }
 
@@ -1786,19 +1788,11 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
     
     VkSwapchainCreateInfoKHR swapChainCreateInfo;
     memset(&swapChainCreateInfo, 0, sizeof(swapChainCreateInfo));
-    int width = 0, height = 0;
     
     const unsigned int imageCount = std::max<uint32_t>(std::min<uint32_t>(3, context._surfaceCapabilities.maxImageCount), context._surfaceCapabilities.minImageCount);
     if (imageCount == 0)
         return false;
     
-#if defined(__APPLE__)
-    SDL_GL_GetDrawableSize(appDesc._window, &width, &height);
-#else
-    SDL_Vulkan_GetDrawableSize(appDesc._window, &width, &height);
-#endif
-    if (width <= 0 || height <= 0)
-        return false;
 
     uint32_t presentModeCount = 0;
     VkResult getPossiblePresentModes0 = vkGetPhysicalDeviceSurfacePresentModesKHR(context._physicalDevice, context._surface, &presentModeCount, nullptr);
@@ -1815,8 +1809,8 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
         VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_FIFO_KHR;
     
     context._surfaceFormat = appDesc._surfaceFormats[0];
-    context._swapChainSize.width = width;
-    context._swapChainSize.height = height;
+    context._swapChainSize.width = appDesc._drawableSurfaceWidth;
+    context._swapChainSize.height = appDesc._drawableSurfaceHeight;
     
     swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapChainCreateInfo.surface = context._surface;

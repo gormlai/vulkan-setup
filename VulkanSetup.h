@@ -547,6 +547,7 @@ namespace Vulkan
         VkPipelineCache _pipelineCache;
         VkRenderPass _renderPass;
 
+        unsigned int _numInflightFrames;
         unsigned int _currentFrame;
         std::vector<EffectDescriptorPtr> _potentialEffects;
         std::vector<EffectDescriptorPtr> _frameReadyEffects;
@@ -659,12 +660,12 @@ namespace Vulkan
     std::vector<VkFence> createFences(Context& context, unsigned int count, VkFenceCreateFlags flags);
     bool createFence(Context& context, VkFenceCreateFlags flags, VkFence& result);
 
-    inline unsigned int getNumSwapBuffers(Context& context) {
-        return (unsigned int)context._swapChainImages.size();
+    inline unsigned int getNumInflightFrames(Context& context) {
+        return context._numInflightFrames == 0 ? (unsigned int)context._swapChainImages.size() : context._numInflightFrames;
     }
 
     VkCommandBuffer createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool, bool beginCommandBuffer);
-    bool createFrameBuffers(Context& Context, VkRenderPass& renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& msaaViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
+    bool createFrameBuffers(Context& Context, VkExtent2D frameBufferSize, VkRenderPass& renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& msaaViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
     bool createDepthBuffer(AppDescriptor& appDesc, Context& context, ImageDescriptor & image, VkImageView& imageView);
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<ImageDescriptor>& images, std::vector<VkImageView>& imageViews);
 

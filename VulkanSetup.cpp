@@ -221,12 +221,13 @@ namespace
 ///////////////////////////////////// Vulkan Context ///////////////////////////////////////////////////////////////////
 
 Vulkan::Context::Context()
-:_currentFrame(0)
-,_swapChain(nullptr)
-,_pipelineCache(VK_NULL_HANDLE)
-,_allocator(nullptr)
-,_debugReportCallback(VK_NULL_HANDLE)
-,_debugUtilsCallback(VK_NULL_HANDLE)
+    :_currentFrame(0)
+    , _swapChain(nullptr)
+    , _pipelineCache(VK_NULL_HANDLE)
+    , _allocator(nullptr)
+    , _debugReportCallback(VK_NULL_HANDLE)
+    , _debugUtilsCallback(VK_NULL_HANDLE)
+    , _numInflightFrames(0)
 {
 
 }
@@ -379,7 +380,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformSamplerOrImage(Vulkan::Context& con
         newUniform._name = name;
         newUniform._type = type;
         newUniform._size = 0;
-        newUniform._frames.resize(context._swapChainImages.size());
+        newUniform._frames.resize(Vulkan::getNumInflightFrames(context));
         newUniform._stages.push_back(stage);
 
         if (binding < 0)
@@ -428,7 +429,7 @@ uint32_t Vulkan::EffectDescriptor::addUniformBuffer(Vulkan::Context& context, Vu
         else
             newUniform._binding = binding;
 
-        for (uint32_t i = 0; i < (uint32_t)context._swapChainImages.size(); i++)
+        for (uint32_t i = 0; i < (uint32_t)Vulkan::getNumInflightFrames(context); i++)
         {
             std::string tag = std::string("UniformBuffer") + std::to_string(i);
             UniformAggregate aggregate;
@@ -1881,7 +1882,7 @@ bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, Vulkan:
 
 bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context, std::vector<Vulkan::ImageDescriptor> & images, std::vector<VkImageView> & imageViews)
 {
-    const unsigned int numBuffers = Vulkan::getNumSwapBuffers(context);
+    const unsigned int numBuffers = (unsigned int)context._swapChainImages.size();
 	imageViews.resize(numBuffers);
 	images.resize(numBuffers);
 	for (unsigned int i = 0; i < numBuffers; i++)
@@ -2048,7 +2049,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     return true;
 }
 
-bool Vulkan::createFrameBuffers(Context & Context, VkRenderPass & renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView> & msaaViews, std::vector<VkImageView>& depthViews, std::vector<VkFramebuffer>& result)
+bool Vulkan::createFrameBuffers(Context & Context, VkExtent2D frameBufferSize, VkRenderPass & renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView> & msaaViews, std::vector<VkImageView>& depthViews, std::vector<VkFramebuffer>& result)
 {
     result.resize(colorViews.size());
 	for(unsigned int i=0 ; i < (unsigned int)colorViews.size() ; i++ )
@@ -2076,8 +2077,8 @@ bool Vulkan::createFrameBuffers(Context & Context, VkRenderPass & renderPass, st
         createInfo.renderPass = renderPass;
         createInfo.attachmentCount = (uint32_t)attachments.size();
 		createInfo.pAttachments = &attachments[0];
-        createInfo.width = Context._swapChainSize.width;
-        createInfo.height = Context._swapChainSize.height;
+        createInfo.width = frameBufferSize.width;
+        createInfo.height = frameBufferSize.height;
 		createInfo.layers = 1;
         
         VkFramebuffer frameBuffer;
@@ -2243,9 +2244,9 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     // viewport
     VkViewport viewport;
     viewport.x = 0;
-    viewport.y = (float)context._swapChainSize.height;
+    viewport.y = 0;
     viewport.width = (float)context._swapChainSize.width;
-    viewport.height = -(float)context._swapChainSize.height;
+    viewport.height = (float)context._swapChainSize.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -2616,7 +2617,7 @@ Vulkan::BufferDescriptorPtr Vulkan::createBuffer(Context& context, VkDeviceSize 
 
 Vulkan::PersistentBufferPtr Vulkan::lookupPersistentBuffer(Context& context, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, const std::string tag, int numBuffers)
 {
-    const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
+    const int numInternalBuffers = (numBuffers <= 0) ? Vulkan::getNumInflightFrames(context) : numBuffers;
     const PersistentBufferKey key(numInternalBuffers, usage, properties, tag);
     PersistentBufferMap::iterator it = g_persistentBuffers.find(key);
     if (it != g_persistentBuffers.end())
@@ -2636,7 +2637,7 @@ Vulkan::PersistentBufferPtr Vulkan::createPersistentBuffer(Context& context, VkD
         return true;
     };
 
-    const int numInternalBuffers = (numBuffers <= 0) ? (int)context._swapChainImages.size() : numBuffers;
+    const int numInternalBuffers = (numBuffers <= 0) ? (int)Vulkan::getNumInflightFrames(context) : numBuffers;
     const PersistentBufferKey key(numInternalBuffers, usage, properties, tag);
     PersistentBufferMap::iterator it = g_persistentBuffers.find(key);
     if (it == g_persistentBuffers.end() || it->second->_registeredSize < (unsigned int)size)
@@ -2789,28 +2790,28 @@ bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
     if (effect.totalNumUniformBuffers() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalNumUniformBuffers() * context._swapChainImages.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalNumUniformBuffers() * Vulkan::getNumInflightFrames(context));
         poolIndex++;
     }
 
     if (effect.totalSamplerCount() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalSamplerCount() * context._swapChainImages.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalSamplerCount() * Vulkan::getNumInflightFrames(context));
         poolIndex++;
     }
 
     if (effect.totalImagesCount() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalImagesCount() * context._swapChainImages.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalImagesCount() * Vulkan::getNumInflightFrames(context));
         poolIndex++;
     }
 
     if (effect.totalTexelBufferCount() > 0)
     {
         poolSizes[poolIndex].type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalTexelBufferCount() * context._swapChainImages.size());
+        poolSizes[poolIndex].descriptorCount = static_cast<uint32_t>(effect.totalTexelBufferCount() * Vulkan::getNumInflightFrames(context));
         poolIndex++;
     }
 
@@ -2818,7 +2819,7 @@ bool Vulkan::createDescriptorPool(Context & context, EffectDescriptor& effect)
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = poolIndex;
 	poolInfo.pPoolSizes = &poolSizes[0];
-    poolInfo.maxSets = static_cast<uint32_t>(effect.totalNumUniforms() * context._swapChainImages.size());
+    poolInfo.maxSets = static_cast<uint32_t>(effect.totalNumUniforms() * Vulkan::getNumInflightFrames(context));
 
 	VkResult creationResult = vkCreateDescriptorPool(context._device, &poolInfo, nullptr, &effect._descriptorPool);
 	assert(creationResult == VK_SUCCESS);
@@ -2834,7 +2835,7 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
         return true;
 
 
-    const uint32_t framesCount = (uint32_t)context._swapChainImages.size();
+    const uint32_t framesCount = (uint32_t)Vulkan::getNumInflightFrames(context);
 
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -3169,7 +3170,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
     {
         const unsigned int width = context._swapChainSize.width;
         const unsigned int height = context._swapChainSize.height;
-        const unsigned int numSwapBuffers = Vulkan::getNumSwapBuffers(context);
+        const unsigned int numSwapBuffers = (unsigned int)Vulkan::getNumInflightFrames(context);
         context._msaaColourImages.resize(numSwapBuffers);
         context._msaaColourImageViews.resize(numSwapBuffers);
         for (unsigned int i = 0; i < numSwapBuffers; i++)
@@ -3199,7 +3200,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
         }
     }
 
-	if (!createFrameBuffers(context, context._renderPass, context._swapChainImageViews, context._msaaColourImageViews, context._depthImageViews, context._frameBuffers))
+	if (!createFrameBuffers(context, context._swapChainSize, context._renderPass, context._swapChainImageViews, context._msaaColourImageViews, context._depthImageViews, context._frameBuffers))
 	{
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create frame buffers\n"));
 		return false;
@@ -3328,7 +3329,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
     }
 
 
-    if (!createCommandBuffers(context, context._commandPool, (unsigned int)context._swapChainImages.size(), &effect._commandBuffers))
+    if (!createCommandBuffers(context, context._commandPool, Vulkan::getNumInflightFrames(context), &effect._commandBuffers))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create command buffers\n"));
         return false;
@@ -3344,7 +3345,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
         }
     }
 
-    effect._recordCommandsNeeded.resize(Vulkan::getNumSwapBuffers(context));
+    effect._recordCommandsNeeded.resize(Vulkan::getNumInflightFrames(context));
     effect.setRerecordNeeded();
 
     return true;

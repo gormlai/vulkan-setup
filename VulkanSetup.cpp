@@ -2540,7 +2540,7 @@ std::vector<VkFence> Vulkan::createFences(Context & context, unsigned int count,
 
 std::vector<VkSemaphore> Vulkan::createSemaphores(Context & context)
 {
-    std::vector<VkSemaphore> semaphores(context._frameBuffers.size());
+    std::vector<VkSemaphore> semaphores(getNumInflightFrames(context));
     for(unsigned int i=0 ; i < (unsigned int)semaphores.size() ; i++)
     {
         VkSemaphoreCreateInfo createInfo;
@@ -2562,7 +2562,7 @@ bool Vulkan::createSemaphores(AppDescriptor & appDesc, Context & context)
 {
     context._imageAvailableSemaphores = createSemaphores(context);
     context._renderFinishedSemaphores = createSemaphores(context);
-    context._fences = createFences(context, (unsigned int)context._frameBuffers.size(), VK_FENCE_CREATE_SIGNALED_BIT);
+    context._fences = createFences(context, (unsigned int)getNumInflightFrames(context), VK_FENCE_CREATE_SIGNALED_BIT);
     
     return context._imageAvailableSemaphores.size() == context._renderFinishedSemaphores.size()
     && context._imageAvailableSemaphores.size() == context._fences.size()

@@ -2909,8 +2909,7 @@ bool Vulkan::createDescriptorSet(AppDescriptor& appDesc, Context& context, Effec
 
 void Vulkan::updateUniforms(AppDescriptor & appDesc, Context & context, uint32_t currentImage)
 {
-    context._frameReadyEffects.clear();
-    for(EffectDescriptorPtr & effect : context._potentialEffects)
+   for(EffectDescriptorPtr & effect : context._potentialEffects)
     {
         static std::vector<unsigned char> updateData;
         const uint32_t uniformCount = effect->totalTypeCount(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);

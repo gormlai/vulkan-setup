@@ -666,8 +666,8 @@ namespace Vulkan
 
     VkCommandBuffer createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool, bool beginCommandBuffer);
     bool createFrameBuffers(Context& Context, VkExtent2D frameBufferSize, VkRenderPass& renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& msaaViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
-    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, ImageDescriptor & image, VkImageView& imageView);
-    bool createDepthBuffers(AppDescriptor& appDesc, Context& context, std::vector<ImageDescriptor>& images, std::vector<VkImageView>& imageViews);
+    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExtent2D size, ImageDescriptor & image, VkImageView& imageView);
+    bool createDepthBuffers(AppDescriptor& appDesc, Context& context, VkExtent2D size, std::vector<ImageDescriptor>& images, std::vector<VkImageView>& imageViews);
 
     void setLogger(Vulkan::Logger * logger);
     

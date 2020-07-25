@@ -903,7 +903,7 @@ namespace
 			break;
         }
 
-		return VK_TRUE;
+        return VK_TRUE;
 	}
 
 	VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugReportCallback(
@@ -1168,6 +1168,12 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
             dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+            srcAccessMask = 0;
+            dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
             break;
         default:
             return false;

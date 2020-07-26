@@ -68,11 +68,7 @@ namespace Vulkan
 
 ///////////////////////////////////// Vulkan Variable ///////////////////////////////////////////////////////////////////
 
-#if defined(FUGL_INSTALL)
 bool Vulkan::validationLayersEnabled = false;
-#else
-bool Vulkan::validationLayersEnabled = true;
-#endif
 
 ///////////////////////////////////// Vulkan Helper Function ////////////////////////////////////////////////////////////
 
@@ -3058,8 +3054,10 @@ bool Vulkan::setupAllocator(AppDescriptor& appDesc, Context& context)
 }
 
 
-bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
+bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context, bool enableValidationLayers)
 {
+    Vulkan::validationLayersEnabled = enableValidationLayers;
+
     if (!loadVulkanLibrary()) {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to load vulkan library\n"));
         return false;

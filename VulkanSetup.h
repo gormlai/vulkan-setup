@@ -571,7 +571,7 @@ namespace Vulkan
     BufferDescriptorPtr createIndexOrVertexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferType type);
 
 
-    bool handleVulkanSetup(AppDescriptor& appDesc, Context& context);
+    bool handleVulkanSetup(AppDescriptor& appDesc, Context& context, bool enableValidationLayers);
     bool recreateSwapChain(AppDescriptor& appDesc, Context& context);
     void updateUniforms(AppDescriptor& appDesc, Context& context, uint32_t currentImage);
 

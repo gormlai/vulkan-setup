@@ -1776,8 +1776,9 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
 	if (surfaceFormatsCountResult != VK_SUCCESS || surfaceFormatsCount == 0)
         return false;
     
-    appDesc._surfaceFormats.resize(surfaceFormatsCount);
-    VkResult surfaceFormatsResult = vkGetPhysicalDeviceSurfaceFormatsKHR(context._physicalDevice, context._surface, &surfaceFormatsCount, &appDesc._surfaceFormats[0]);
+    std::vector<VkSurfaceFormatKHR> surfaceFormats;
+    surfaceFormats.resize(surfaceFormatsCount);
+    VkResult surfaceFormatsResult = vkGetPhysicalDeviceSurfaceFormatsKHR(context._physicalDevice, context._surface, &surfaceFormatsCount, &surfaceFormats[0]);
 	assert(surfaceFormatsResult == VK_SUCCESS);
 	if (surfaceFormatsResult != VK_SUCCESS || surfaceFormatsCount == 0)
         return false;
@@ -1788,7 +1789,19 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
 	assert(surfaceSupportedResult == VK_SUCCESS);
 	if(!presentSupported)
 		return false;
-    
+
+    context._surfaceFormat = surfaceFormats[0];
+    VkSurfaceFormatKHR preferredSurfaceFormat = appDesc.getPreferredSurfaceFormat();
+    for (unsigned int i = 0; i < (unsigned int)surfaceFormats.size(); i++)
+    {
+        if (preferredSurfaceFormat.format == surfaceFormats[i].format &&
+            preferredSurfaceFormat.colorSpace == surfaceFormats[i].colorSpace)
+        {
+            context._surfaceFormat = preferredSurfaceFormat;
+            break;
+        }
+    }
+
     VkSwapchainCreateInfoKHR swapChainCreateInfo;
     memset(&swapChainCreateInfo, 0, sizeof(swapChainCreateInfo));
     
@@ -1810,8 +1823,7 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
         VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
     VkPresentModeKHR presentModeWithoutVSync = (std::find(possiblePresentModes.begin(), possiblePresentModes.end(), VK_PRESENT_MODE_IMMEDIATE_KHR) != possiblePresentModes.end()) ?
         VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_FIFO_KHR;
-    
-    context._surfaceFormat = appDesc._surfaceFormats[0];
+
     context._swapChainSize.width = appDesc._drawableSurfaceWidth;
     context._swapChainSize.height = appDesc._drawableSurfaceHeight;
     
@@ -3287,31 +3299,6 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 
 bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulkan::EffectDescriptor& effect)
 {
-    // create uniform buffers
-    for (unsigned int stage = 0; stage < static_cast<unsigned int> (Vulkan::ShaderStage::ShaderStageCount); stage++)
-    {
-        const uint32_t uniformCount = effect.totalTypeCount(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-        static std::vector<Uniform*> uniforms(1);
-        if (uniforms.size() < uniformCount)
-            uniforms.resize(2 * (uniformCount + 1)); // amortise resizing
-
-        effect.collectUniformsOfType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &uniforms[0]);
-        for (unsigned int uniformIndex = 0; uniformIndex < uniformCount; uniformIndex++)
-        {
-/*            Uniform* uniform = uniforms[uniformIndex];
-            for (unsigned int frame = 0; frame < context._swapChainImages.size(); frame++)
-            {
-                Vulkan::BufferDescriptor& buffer = uniform->_frames[frame]._buffer;
-                if (!Vulkan::createUniformBuffer(appDesc, context, buffer._size, buffer))
-                {
-                    g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create uniform buffer\n"));
-                    return false;
-                }
-
-            }*/
-        }
-
-    }
 
     if (!createDescriptorSetLayout(context, effect))
     {

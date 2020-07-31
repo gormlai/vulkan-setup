@@ -204,7 +204,6 @@ namespace Vulkan
         std::vector<VkPhysicalDevice> _physicalDevices;
         unsigned int _chosenPhysicalDevice;
         std::vector<VkExtensionProperties> _deviceExtensions;
-        std::vector<VkSurfaceFormatKHR> _surfaceFormats;
         int _drawableSurfaceWidth;
         int _drawableSurfaceHeight;
 
@@ -213,7 +212,8 @@ namespace Vulkan
         void addRequiredInstanceExtension(const std::string& extension);
         void addRequiredDeviceExtension(const std::string& extension);
 
-        inline void setPreferredSurfaceFormat(VkFormat format) { _preferredSurfaceFormat = format;}
+        inline void setPreferredSurfaceFormat(VkSurfaceFormatKHR  format) { _preferredSurfaceFormat = format;}
+        VkSurfaceFormatKHR  getPreferredSurfaceFormat() const { return _preferredSurfaceFormat; }
         std::vector<std::string> getRequiredDeviceExtensions() const { return _requiredDeviceExtensions; }
         std::vector<std::string> getRequiredInstanceExtensions() const { return _requiredInstanceExtensions; }
          
@@ -232,7 +232,7 @@ namespace Vulkan
     private:
         std::vector<std::string> _requiredInstanceExtensions;
         std::vector<std::string> _requiredDeviceExtensions;
-        VkFormat _preferredSurfaceFormat;
+        VkSurfaceFormatKHR  _preferredSurfaceFormat;
     };
 
     struct Buffer
@@ -438,6 +438,17 @@ namespace Vulkan
             , _set(UINT32_MAX) {}
     };
 
+
+    struct RenderPass
+    {
+        VkRenderPass _renderPass;
+    };
+
+    struct Pipeline
+    {
+        VkPipeline _renderPipeline;
+    };
+
     struct EffectDescriptor
     {
         GraphicsPipelineCustomizationCallback _graphicsPipelineCreationCallback;
@@ -457,6 +468,11 @@ namespace Vulkan
 
         VkRenderPass _renderPass; 
 
+        inline void setPreferredSurfaceFormat(VkSurfaceFormatKHR  format) { _preferredSurfaceFormat = format; _hasPreferredSurfaceFormat = true; }
+        VkSurfaceFormatKHR  getPreferredSurfaceFormat() const { return _preferredSurfaceFormat; }
+        VkSurfaceFormatKHR  _preferredSurfaceFormat;
+        bool _hasPreferredSurfaceFormat;
+
         UpdateUniformFunction _updateUniform = [](const Vulkan::Uniform& uniform, std::vector<unsigned char>&) { return 0; };
         std::vector<Uniform> _uniforms;
 
@@ -473,6 +489,7 @@ namespace Vulkan
             , _computePipelineCreationCallback(nullptr)
             , _renderPassCreationCallback(nullptr)
             , _createPipeline(true)
+            , _hasPreferredSurfaceFormat(false)
         {
         }
 

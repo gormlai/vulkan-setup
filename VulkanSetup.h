@@ -212,8 +212,10 @@ namespace Vulkan
         void addRequiredInstanceExtension(const std::string& extension);
         void addRequiredDeviceExtension(const std::string& extension);
 
-        inline void setPreferredSurfaceFormat(VkSurfaceFormatKHR  format) { _preferredSurfaceFormat = format;}
+        inline void setPreferredSurfaceFormat(VkSurfaceFormatKHR  format) { _preferredSurfaceFormat = format; _hasPreferredSurfaceFormat = true; }
         VkSurfaceFormatKHR  getPreferredSurfaceFormat() const { return _preferredSurfaceFormat; }
+        inline bool hasPreferredSurfaceFormat() const { return _hasPreferredSurfaceFormat; }
+
         std::vector<std::string> getRequiredDeviceExtensions() const { return _requiredDeviceExtensions; }
         std::vector<std::string> getRequiredInstanceExtensions() const { return _requiredInstanceExtensions; }
          
@@ -233,6 +235,7 @@ namespace Vulkan
         std::vector<std::string> _requiredInstanceExtensions;
         std::vector<std::string> _requiredDeviceExtensions;
         VkSurfaceFormatKHR  _preferredSurfaceFormat;
+        bool _hasPreferredSurfaceFormat;
     };
 
     struct Buffer
@@ -682,7 +685,7 @@ namespace Vulkan
     }
 
     VkCommandBuffer createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool, bool beginCommandBuffer);
-    bool createFrameBuffers(Context& Context, VkExtent2D frameBufferSize, VkRenderPass& renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& msaaViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
+    bool createFrameBuffers(VkDevice device, VkExtent2D frameBufferSize, VkRenderPass& renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& msaaViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
     bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExtent2D size, ImageDescriptor & image, VkImageView& imageView);
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context, VkExtent2D size, std::vector<ImageDescriptor>& images, std::vector<VkImageView>& imageViews);
 

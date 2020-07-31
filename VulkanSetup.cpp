@@ -576,13 +576,14 @@ Vulkan::Shader::Shader(const std::string & filename, VkShaderStageFlagBits  type
 ///////////////////////////////////// Vulkan AppDescriptor ///////////////////////////////////////////////////////////////////
 
 Vulkan::AppDescriptor::AppDescriptor()
-:_window(nullptr)
-, _chosenPhysicalDevice(0)
-, _enableVSync(true)
-, _requestedNumSamples(1)
-, _actualNumSamples(1)
-,_drawableSurfaceWidth(0)
-,_drawableSurfaceHeight(0)
+    :_window(nullptr)
+    , _chosenPhysicalDevice(0)
+    , _enableVSync(true)
+    , _requestedNumSamples(1)
+    , _actualNumSamples(1)
+    , _drawableSurfaceWidth(0)
+    , _drawableSurfaceHeight(0)
+    , _hasPreferredSurfaceFormat(false)
 {
 }
 
@@ -1791,16 +1792,20 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
 		return false;
 
     context._surfaceFormat = surfaceFormats[0];
-    VkSurfaceFormatKHR preferredSurfaceFormat = appDesc.getPreferredSurfaceFormat();
-    for (unsigned int i = 0; i < (unsigned int)surfaceFormats.size(); i++)
+    if (appDesc.hasPreferredSurfaceFormat())
     {
-        if (preferredSurfaceFormat.format == surfaceFormats[i].format &&
-            preferredSurfaceFormat.colorSpace == surfaceFormats[i].colorSpace)
+        VkSurfaceFormatKHR preferredSurfaceFormat = appDesc.getPreferredSurfaceFormat();
+        for (unsigned int i = 0; i < (unsigned int)surfaceFormats.size(); i++)
         {
-            context._surfaceFormat = preferredSurfaceFormat;
-            break;
+            if (preferredSurfaceFormat.format == surfaceFormats[i].format &&
+                preferredSurfaceFormat.colorSpace == surfaceFormats[i].colorSpace)
+            {
+                context._surfaceFormat = preferredSurfaceFormat;
+                break;
+            }
         }
     }
+
 
     VkSwapchainCreateInfoKHR swapChainCreateInfo;
     memset(&swapChainCreateInfo, 0, sizeof(swapChainCreateInfo));
@@ -2063,7 +2068,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     return true;
 }
 
-bool Vulkan::createFrameBuffers(Context & Context, VkExtent2D frameBufferSize, VkRenderPass & renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView> & msaaViews, std::vector<VkImageView>& depthViews, std::vector<VkFramebuffer>& result)
+bool Vulkan::createFrameBuffers(VkDevice device, VkExtent2D frameBufferSize, VkRenderPass & renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView> & msaaViews, std::vector<VkImageView>& depthViews, std::vector<VkFramebuffer>& result)
 {
     result.resize(colorViews.size());
 	for(unsigned int i=0 ; i < (unsigned int)colorViews.size() ; i++ )
@@ -2096,7 +2101,7 @@ bool Vulkan::createFrameBuffers(Context & Context, VkExtent2D frameBufferSize, V
 		createInfo.layers = 1;
         
         VkFramebuffer frameBuffer;
-        VkResult frameBufferCreationResult = vkCreateFramebuffer(Context._device, &createInfo, nullptr, &frameBuffer);
+        VkResult frameBufferCreationResult = vkCreateFramebuffer(device, &createInfo, nullptr, &frameBuffer);
 		assert(frameBufferCreationResult == VK_SUCCESS);
 		if (frameBufferCreationResult != VK_SUCCESS)
             return false;
@@ -3215,7 +3220,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
         }
     }
 
-	if (!createFrameBuffers(context, context._swapChainSize, context._renderPass, context._swapChainImageViews, context._msaaColourImageViews, context._depthImageViews, context._frameBuffers))
+	if (!createFrameBuffers(context._device, context._swapChainSize, context._renderPass, context._swapChainImageViews, context._msaaColourImageViews, context._depthImageViews, context._frameBuffers))
 	{
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create frame buffers\n"));
 		return false;

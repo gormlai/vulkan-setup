@@ -272,7 +272,7 @@ namespace Vulkan
 
         virtual bool copyFrom(Vulkan::Context & context, VkCommandPool commandPool, VkQueue queue, const void * srcData, VkDeviceSize amount, VkDeviceSize dstOffset);
 
-        bool copyFrom(Vulkan::Context& context,
+        bool copyFromAndFlush(Vulkan::Context& context,
             VkCommandPool commandPool,
             VkQueue queue,
             BufferDescriptor& src,
@@ -281,13 +281,12 @@ namespace Vulkan
             VkDeviceSize dstOffset);
 
 
-        bool copyTo(VkDevice device,
-                    VkCommandPool commandPool,
-                    VkQueue queue,
-                    VkImage image,
-                    unsigned int width,
-                    unsigned int height,
-                    unsigned int depth);
+        bool copyToAndFlush(VkDevice device,
+            VkCommandPool commandPool,
+            VkQueue queue,
+            VkImage image,
+            VkOffset3D offset,
+            VkExtent3D extent);
 
 
     private:
@@ -305,9 +304,9 @@ namespace Vulkan
 
         PersistentBuffer(unsigned int numBuffers)
             :_offsets(numBuffers)
-            ,_allocInfos(numBuffers)
-            ,_buffers(numBuffers)
-            ,_registeredSize(0)
+            , _allocInfos(numBuffers)
+            , _buffers(numBuffers)
+            , _registeredSize(0)
         {
             memset(&_offsets[0], 0, sizeof(unsigned int) * numBuffers);
         }
@@ -319,9 +318,10 @@ namespace Vulkan
 
         static bool startFrame(unsigned int frameIndex);
         static bool submitFrame(Vulkan::Context& context, unsigned int frameIndex);
-        bool flushData(Vulkan::Context & context, unsigned int frameIndex);
+        bool flushData(Vulkan::Context& context, unsigned int frameIndex);
 
-        inline Vulkan::BufferDescriptor & getBuffer(const unsigned int index)  { return _buffers[index % (unsigned int)_buffers.size()]; }
+        inline Vulkan::BufferDescriptor& getBuffer(const unsigned int index) { return _buffers[index % (unsigned int)_buffers.size()]; }
+        inline unsigned int getOffset(const unsigned int index) const { return _offsets[index % (unsigned int)_offsets.size()]; }
         bool copyFrom(unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset = UINT64_MAX);
         bool copyFromAndFlush(Vulkan::Context& context, unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset = UINT64_MAX);
         void destroy() override;
@@ -688,6 +688,7 @@ namespace Vulkan
     bool createFrameBuffers(VkDevice device, VkExtent2D frameBufferSize, VkRenderPass& renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& msaaViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
     bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExtent2D size, ImageDescriptor & image, VkImageView& imageView);
     bool createDepthBuffers(AppDescriptor& appDesc, Context& context, VkExtent2D size, std::vector<ImageDescriptor>& images, std::vector<VkImageView>& imageViews);
+    bool createRenderPass(Context& Context, uint32_t numAASamples, VkRenderPass* result, RenderPassCustomizationCallback renderPassCreationCallback);
 
     void setLogger(Vulkan::Logger * logger);
     

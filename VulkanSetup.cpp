@@ -41,7 +41,6 @@ namespace Vulkan
     bool createColorBuffers(Context& context);
 //    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExtent2D size, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory);
  //   bool createDepthBuffers(AppDescriptor& appDesc, Context& context, VkExtent2D size, std::vector<VkImage>& images, std::vector<VkImageView>& imageViews, std::vector<VkDeviceMemory>& memory);
-    bool createRenderPass(Context& Context, uint32_t numAASamples, VkRenderPass* result, RenderPassCustomizationCallback renderPassCreationCallback);
     bool createDescriptorSetLayout(Context& Context, EffectDescriptor& effect);
     bool createPipelineCache(AppDescriptor& appDesc, Context& context);
     bool createCommandPool(AppDescriptor& appDesc, Context& context, VkCommandPool* result);
@@ -76,7 +75,7 @@ namespace Vulkan
 {
     Vulkan::PersistentBufferPtr getStagingBuffer(Vulkan::Context& context, uint32_t size)
     {
-        size = std::max(size, stagingBufferSize); // make sure the staging buffer has a minimum size
+        size = std::min(size, stagingBufferSize); // make sure the staging buffer has a minimum size
         static Vulkan::PersistentBufferPtr stagingBuffer;
         if (stagingBuffer == nullptr || stagingBuffer->_registeredSize < size)
         {
@@ -84,7 +83,6 @@ namespace Vulkan
             stagingBuffer = Vulkan::createPersistentBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, "StagingBuffer", 1);
         }
         return stagingBuffer;
-
     }
 
 
@@ -658,16 +656,18 @@ bool Vulkan::BufferDescriptor::copyFrom(Vulkan::Context & context, VkCommandPool
         // use a staging buffer to copy data
         int64_t amountOfDataLeftToCopy = (int64_t)amount;
         int64_t currentDstOffset = (int64_t)dstOffset;
+        int64_t srcOffset = 0;
         while (amountOfDataLeftToCopy > 0)
         {
-            int64_t amountToCopy = std::min(amountOfDataLeftToCopy, (int64_t)stagingBufferSize);
-
-            const char* cData = reinterpret_cast<const char*>(srcData);
             Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, amount);
+            int64_t amountToCopy = std::min(amountOfDataLeftToCopy, (int64_t)stagingBuffer->_registeredSize);
+
+            const char* cData = reinterpret_cast<const char*>(srcData)  + srcOffset;
             stagingBuffer->copyFromAndFlush(context, 0, cData, amountToCopy, 0);
-            copyFrom(context, commandPool, queue, stagingBuffer->_buffers[0], amountToCopy, 0, currentDstOffset);
+            copyFromAndFlush(context, commandPool, queue, stagingBuffer->_buffers[0], amountToCopy, 0, currentDstOffset);
             currentDstOffset += amountToCopy;
             amountOfDataLeftToCopy -= amountToCopy;
+            srcOffset += amountToCopy;
         }
 
     }
@@ -676,7 +676,7 @@ bool Vulkan::BufferDescriptor::copyFrom(Vulkan::Context & context, VkCommandPool
     return true;
 }
 
-bool Vulkan::BufferDescriptor::copyFrom(Vulkan::Context& context, VkCommandPool commandPool, VkQueue queue, BufferDescriptor & src, VkDeviceSize amount, VkDeviceSize srcOffset, VkDeviceSize dstOffset)
+bool Vulkan::BufferDescriptor::copyFromAndFlush(Vulkan::Context& context, VkCommandPool commandPool, VkQueue queue, BufferDescriptor & src, VkDeviceSize amount, VkDeviceSize srcOffset, VkDeviceSize dstOffset)
 {
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -718,13 +718,13 @@ bool Vulkan::BufferDescriptor::copyFrom(Vulkan::Context& context, VkCommandPool 
     return true;
 }
 
-bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
-            VkCommandPool commandPool,
-            VkQueue queue,
-            VkImage image,
-            unsigned int width,
-            unsigned int height,
-            unsigned int depth)
+bool Vulkan::BufferDescriptor::copyToAndFlush(
+    VkDevice device,
+    VkCommandPool commandPool,
+    VkQueue queue,
+    VkImage image,
+    VkOffset3D offset,
+    VkExtent3D extent)
 {
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -751,8 +751,8 @@ bool Vulkan::BufferDescriptor::copyTo(VkDevice device,
     region.imageSubresource.mipLevel = 0;
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
-    region.imageOffset = VkOffset3D{0, 0, 0};
-    region.imageExtent = VkExtent3D{width, height, depth};
+    region.imageOffset = offset;
+    region.imageExtent = extent;
 
     vkCmdCopyBufferToImage(commandBuffer, _buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
@@ -802,6 +802,7 @@ bool Vulkan::PersistentBuffer::copyFrom(unsigned int frameIndex, const void* src
 
 bool Vulkan::PersistentBuffer::copyFromAndFlush(Vulkan::Context& context, unsigned int frameIndex, const void* srcData, VkDeviceSize amount, VkDeviceSize dstOffset)
 {
+
     const bool successfullyCopied = copyFrom(frameIndex, srcData, amount, dstOffset);
     assert(successfullyCopied);
     const bool successfullyFlushed = flushData(context, frameIndex);
@@ -1002,20 +1003,6 @@ bool Vulkan::createImage(Vulkan::Context& context,
     unsigned int mipMapLevels,
     VkImageLayout finalLayout)
 {
-    Vulkan::PersistentBufferPtr stagingBuffer;
-    assert(mipMapLevels > 0);
-    const VkDeviceSize size = pixelSize * width * height * depth;
-    if (pixels != nullptr)
-    {
-        stagingBuffer = getStagingBuffer(context, size);
-        assert(stagingBuffer->_registeredSize >= size);
-        if (!stagingBuffer->copyFromAndFlush(context, 0, reinterpret_cast<const void*>(pixels), size, 0))
-        {
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
-            return false;
-        }
-    }
-
     if (!Vulkan::createImage(context,
         width,
         height,
@@ -1042,16 +1029,31 @@ bool Vulkan::createImage(Vulkan::Context& context,
 
     if (pixels != nullptr)
     {
-        if (!stagingBuffer->getBuffer(0).copyTo(context._device,
-            context._commandPool,
-            context._graphicsQueue,
-            result._image,
-            width,
-            height,
-            depth))
+        assert(mipMapLevels > 0);
+        VkDeviceSize size = pixelSize * width * height * depth;
+        Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, size);
+        for (int32_t depthLevel = 0; depthLevel < (int32_t)depth; depthLevel++)
         {
-            g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - copyData\n"));
-            return false;
+            VkDeviceSize amountToCopy = pixelSize * width * height;
+            assert(amountToCopy <= stagingBuffer->_registeredSize);
+
+            const char* dataPointer = reinterpret_cast<const char*>(pixels) + depthLevel * amountToCopy;
+            if (!stagingBuffer->copyFromAndFlush(context, 0, reinterpret_cast<const void*>(dataPointer), amountToCopy, 0))
+            {
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to fill staging buffer\n"));
+                return false;
+            }
+
+            if (!stagingBuffer->getBuffer(0).copyToAndFlush(context._device,
+                context._commandPool,
+                context._graphicsQueue,
+                result._image,
+                VkOffset3D{ 0, 0, depthLevel },
+                VkExtent3D{ width, height, 1 }))
+            {
+                g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - copyData\n"));
+                return false;
+            }
         }
     }
 
@@ -2736,10 +2738,19 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
         return Vulkan::BufferDescriptorPtr();
     }
     
-    Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, bufferSize);
-    assert(stagingBuffer->_registeredSize > bufferSize);
-    stagingBuffer->copyFromAndFlush(context, 0, srcData, bufferSize, 0);
-    vertexBufferDescriptor->copyFrom(context, context._commandPool, context._graphicsQueue, stagingBuffer->getBuffer(0), bufferSize, 0, 0);
+    VkDeviceSize amountLeftToCopy = bufferSize;
+    VkDeviceSize dstOffset = 0;
+    while (amountLeftToCopy > 0)
+    {
+        Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, bufferSize);
+        VkDeviceSize amountToCopy = std::min<VkDeviceSize>(stagingBuffer->_registeredSize, amountLeftToCopy);
+        stagingBuffer->copyFromAndFlush(context, 0, srcData, bufferSize, 0);
+        vertexBufferDescriptor->copyFromAndFlush(context, context._commandPool, context._graphicsQueue, stagingBuffer->getBuffer(0), bufferSize, 0, dstOffset);
+
+        amountLeftToCopy -= amountToCopy;
+        dstOffset += amountToCopy;
+    }
+
     
     return vertexBufferDescriptor;
     

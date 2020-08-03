@@ -1080,7 +1080,7 @@ bool Vulkan::createImageView(Vulkan::Context& context, VkImage image, VkFormat r
     createInfo.image = image;
     createInfo.viewType = imageViewType;
     createInfo.format = requiredFormat;
-    createInfo.components = VkComponentMapping{ VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
+    createInfo.components = VkComponentMapping{ VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
     createInfo.subresourceRange.aspectMask = requiredAspectFlags;
     createInfo.subresourceRange.baseMipLevel = 0;
     createInfo.subresourceRange.levelCount = 1;

@@ -1794,6 +1794,11 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
 		return false;
 
     context._surfaceFormat = surfaceFormats[0];
+    // avoid SRGB if we can
+    if(context._surfaceFormat.format==VK_FORMAT_B8G8R8A8_SRGB && surfaceFormats.size()>1) {
+      context._surfaceFormat = surfaceFormats[1];
+    }
+    
     if (appDesc.hasPreferredSurfaceFormat())
     {
         VkSurfaceFormatKHR preferredSurfaceFormat = appDesc.getPreferredSurfaceFormat();

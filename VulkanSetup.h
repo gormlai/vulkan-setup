@@ -481,6 +481,7 @@ namespace Vulkan
 
         RecordCommandBuffersFunction _recordCommandBuffers = [](AppDescriptor& appDesc, Context& context, EffectDescriptor& effectDescriptor) { return true; };
         std::string _name;
+        unsigned int _queueFlagBits;
 
         EffectDescriptor()
             :_descriptorPool(VK_NULL_HANDLE)
@@ -493,6 +494,7 @@ namespace Vulkan
             , _renderPassCreationCallback(nullptr)
             , _createPipeline(true)
             , _hasPreferredSurfaceFormat(false)
+            , _queueFlagBits(0)
         {
         }
 
@@ -529,8 +531,18 @@ namespace Vulkan
         VkPhysicalDeviceProperties _deviceProperties;
         VkPhysicalDeviceFeatures _physicalDeviceFeatures;
         
-        VkQueue _presentQueue;
-        VkQueue _graphicsQueue;
+        struct Queue
+        {
+            unsigned int _flagBits;
+            unsigned int _id;
+            unsigned int _familyIndex;
+            unsigned int _queueIndex;
+            VkExtent3D _minGranularity;
+            bool _presentable; // not used
+            VkQueue _queue;
+        };
+        std::vector<Queue> _queues[8];
+        unsigned int _numQueueFamilies;
         
         VkSurfaceKHR _surface;
         VkSurfaceCapabilitiesKHR _surfaceCapabilities;
@@ -558,7 +570,7 @@ namespace Vulkan
 		VkDebugReportCallbackEXT _debugReportCallback;
 		VkAllocationCallbacks * _allocator;
         
-        VkCommandPool _commandPool;
+        std::vector<VkCommandPool> _commandPools;
 
         std::vector<VkSemaphore> _renderFinishedSemaphores;
         std::vector<VkSemaphore> _imageAvailableSemaphores;
@@ -595,16 +607,58 @@ namespace Vulkan
     bool recreateSwapChain(AppDescriptor& appDesc, Context& context);
     void updateUniforms(AppDescriptor& appDesc, Context& context, uint32_t currentImage);
 
+    // flagBits are OR'ed version of VkQueueFlagBits 
+    inline Context::Queue & getQueue(Context& context, unsigned int flagBits, unsigned int queueIndex) {
+        assert(queueIndex < (unsigned int)context._queues[flagBits].size());
+        return context._queues[flagBits][queueIndex]; 
+    }
+
+    inline Context::Queue & getQueue(Context& context, unsigned int flagBits) {
+        assert( !context._queues[flagBits].empty());
+        return context._queues[flagBits][0];
+    }
+
+    inline Context::Queue & getQueue(Context& context, unsigned int flagBits, VkExtent3D minExtents) {
+        assert(!context._queues[flagBits].empty());
+        unsigned int bestMatch = 0;
+        unsigned int bestMinDistance = (unsigned int)-1;
+        for (unsigned int queueIndex = 0; queueIndex < (unsigned int)context._queues[flagBits].size(); queueIndex++)
+        {
+            Context::Queue& queue = context._queues[flagBits][queueIndex];
+            int xDist = queue._minGranularity.width - minExtents.width;
+            int yDist = queue._minGranularity.height - minExtents.height;
+            int zDist = queue._minGranularity.depth - minExtents.depth;
+            if (xDist <= 0 && yDist <= 0 && zDist <= 0)
+                return queue;
+
+            int mDist = std::max<int>(xDist, std::max<int>(yDist, zDist));
+            if (mDist < bestMinDistance)
+            {
+                mDist = bestMinDistance;
+                bestMatch = queueIndex;
+            }
+        }
+
+        return context._queues[flagBits][0];
+    }
+
+
+    inline unsigned int getNumQueues(Context& context, unsigned int flagBits) {
+        return (unsigned int)context._queues[flagBits].size();
+    }
+
+
     bool resetCommandBuffer(Context& context, VkCommandBuffer & commandBuffers, unsigned int index);
     bool resetCommandBuffers(Context& context, std::vector<VkCommandBuffer>& commandBuffers);
     bool createShaderModules(AppDescriptor& appDesc, Context& context, std::vector<Shader>& shaders);
-    bool initEffectDescriptor(AppDescriptor& appDesc, 
-        Context& context, 
+    bool initEffectDescriptor(AppDescriptor& appDesc,
+        Context& context,
+        unsigned int queueFlagBits,
         const bool createGraphicsPipeline, 
         GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, 
         RenderPassCustomizationCallback renderPassCreationCallback,
         Vulkan::EffectDescriptor& effect);
-    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
+    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, unsigned int queueFlagBits, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect);
     bool recreateEffectDescriptor(AppDescriptor& appDesc, Context& context, EffectDescriptorPtr effect);
 
     BufferDescriptorPtr createBuffer(Context& context, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);

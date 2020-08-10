@@ -15,7 +15,7 @@
 namespace
 {
     Vulkan::Logger * g_logger = new Vulkan::Logger();
-    constexpr unsigned int stagingBufferSize = 32 * 1024 * 1024;
+    constexpr unsigned int stagingBufferSize = 42 * 1024 * 1024;
     constexpr unsigned int uniformBufferSize = 1 * 1024 * 1024;
 }
 
@@ -36,14 +36,13 @@ namespace Vulkan
     bool choosePhysicalDevice(AppDescriptor& appDesc, Context& Context);
     bool lookupDeviceExtensions(AppDescriptor& appDesc);
     bool createDevice(AppDescriptor& appDesc, Context& context);
-    bool createQueue(AppDescriptor& appDesc, Context& context);
     bool createSwapChain(AppDescriptor& appDesc, Context& context);
     bool createColorBuffers(Context& context);
 //    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExtent2D size, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory);
  //   bool createDepthBuffers(AppDescriptor& appDesc, Context& context, VkExtent2D size, std::vector<VkImage>& images, std::vector<VkImageView>& imageViews, std::vector<VkDeviceMemory>& memory);
     bool createDescriptorSetLayout(Context& Context, EffectDescriptor& effect);
     bool createPipelineCache(AppDescriptor& appDesc, Context& context);
-    bool createCommandPool(AppDescriptor& appDesc, Context& context, VkCommandPool* result);
+    bool createCommandPools(Context& context);
     bool recordStandardCommandBuffers(AppDescriptor& appDesc, Context& context);
     std::vector<VkSemaphore> createSemaphores(Context& context);
     bool createSemaphores(AppDescriptor& appDesc, Context& context);
@@ -55,7 +54,7 @@ namespace Vulkan
     void updateUniforms(AppDescriptor& appDesc, Context& context, unsigned int bufferIndex, uint32_t meshIndex);
     bool createSwapChainDependents(AppDescriptor& appDesc, Context& context);
     bool cleanupSwapChain(AppDescriptor& appDesc, Context& context);
-    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulkan::EffectDescriptor& effect);
+    bool initEffectDescriptor(AppDescriptor& appDesc, Context& context, unsigned int queueFlagBits, Vulkan::EffectDescriptor& effect);
     bool setupAllocator(AppDescriptor& appDesc, Context& context);
 
     bool createGraphicsPipeline(AppDescriptor& appDesc, Context& context, GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, Vulkan::EffectDescriptor& effect);
@@ -1032,9 +1031,10 @@ bool Vulkan::createImage(Vulkan::Context& context,
         assert(mipMapLevels > 0);
         VkDeviceSize size = pixelSize * width * height * depth;
         Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, size);
-        for (int32_t depthLevel = 0; depthLevel < (int32_t)depth; depthLevel++)
+        Context::Queue& queue = getQueue(context, VK_QUEUE_TRANSFER_BIT, { 8,8,1 });
+        for (int32_t depthLevel = 0; depthLevel < (int32_t)depth; depthLevel = depthLevel + queue._minGranularity.depth)
         {
-            VkDeviceSize amountToCopy = pixelSize * width * height;
+            VkDeviceSize amountToCopy = pixelSize * width * height * queue._minGranularity.depth;
             assert(amountToCopy <= stagingBuffer->_registeredSize);
 
             const char* dataPointer = reinterpret_cast<const char*>(pixels) + depthLevel * amountToCopy;
@@ -1044,12 +1044,13 @@ bool Vulkan::createImage(Vulkan::Context& context,
                 return false;
             }
 
+
             if (!stagingBuffer->getBuffer(0).copyToAndFlush(context._device,
-                context._commandPool,
-                context._graphicsQueue,
+                context._commandPools[queue._familyIndex],
+                queue._queue,
                 result._image,
                 VkOffset3D{ 0, 0, depthLevel },
-                VkExtent3D{ width, height, 1 }))
+                VkExtent3D{ width, height,  queue._minGranularity.depth }))
             {
                 g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - copyData\n"));
                 return false;
@@ -1159,20 +1160,26 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
         case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
             srcAccessMask = 0;
             dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             break;
         case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
             srcAccessMask = 0;
-            dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             break;
         case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
             srcAccessMask = 0;
-            dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+            srcAccessMask = 0;
+            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             break;
         default:
             return false;
@@ -1184,22 +1191,22 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
         switch (newLayout)
         {
         case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-            srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcAccessMask = 0;
+            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             break;
         case VK_IMAGE_LAYOUT_GENERAL:
             srcAccessMask = 0;
             dstAccessMask = 0;
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             break;
         case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-            srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            srcAccessMask = 0;
+            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             break;
         default:
             return false;
@@ -1216,7 +1223,8 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
 bool Vulkan::transitionImageLayoutAndSubmit(Vulkan::Context & context, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
     std::vector<VkCommandBuffer> commandBuffers;
-    if (!createCommandBuffers(context, context._commandPool, 1, &commandBuffers))
+    Context::Queue& queue = getQueue(context, VK_QUEUE_TRANSFER_BIT);
+    if (!createCommandBuffers(context, context._commandPools[queue._familyIndex], 1, &commandBuffers))
         return false;
 
     VkCommandBuffer & commandBuffer = commandBuffers[0];
@@ -1240,10 +1248,10 @@ bool Vulkan::transitionImageLayoutAndSubmit(Vulkan::Context & context, VkImage i
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    vkQueueSubmit(context._graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(context._graphicsQueue);
+    vkQueueSubmit(queue._queue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(queue._queue);
 
-    vkFreeCommandBuffers(context._device, context._commandPool, 1, &commandBuffers[0]);
+    vkFreeCommandBuffers(context._device, context._commandPools[queue._familyIndex], 1, &commandBuffers[0]);
 
     return true;
 }
@@ -1703,25 +1711,39 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
   if(pQueueFamilyCount == 0)
     return false;
 
+
   std::vector<VkQueueFamilyProperties> queueProperties(pQueueFamilyCount);
   vkGetPhysicalDeviceQueueFamilyProperties(appDesc._physicalDevices[appDesc._chosenPhysicalDevice], &pQueueFamilyCount, &queueProperties[0]);
+  std::vector<float> fQueuePriorities;
+
+  // count max size of queues and set all queue priorities to the same value
+  unsigned int maxQueueCount = 0;
+  for (VkQueueFamilyProperties& queueProperty : queueProperties)
+  {
+      maxQueueCount = std::max<unsigned int>(maxQueueCount, queueProperty.queueCount);
+  }
+  fQueuePriorities.resize(maxQueueCount);
+  for (float& priority : fQueuePriorities)
+      priority = 1.0f;
+
+  std::vector<VkDeviceQueueCreateInfo> deviceQueueCreateInfos;
+  for (uint32_t familyIndex = 0; familyIndex < pQueueFamilyCount; familyIndex++)
+  {
+      VkDeviceQueueCreateInfo deviceQueueCreateInfo;
+      memset(&deviceQueueCreateInfo, 0, sizeof(deviceQueueCreateInfo));
+      deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+      deviceQueueCreateInfo.queueFamilyIndex = familyIndex;
+      deviceQueueCreateInfo.queueCount = queueProperties[familyIndex].queueCount;
+      deviceQueueCreateInfo.pQueuePriorities = &fQueuePriorities[0];
+      deviceQueueCreateInfos.push_back(deviceQueueCreateInfo);
+  }
   
-  
-  
-  VkDeviceQueueCreateInfo deviceQueueCreateInfo;
   VkDeviceCreateInfo deviceCreateInfo;
-  memset(&deviceQueueCreateInfo, 0, sizeof(deviceQueueCreateInfo));
   memset(&deviceCreateInfo, 0, sizeof(deviceCreateInfo));
-  
-  deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  deviceQueueCreateInfo.queueFamilyIndex = appDesc._chosenPhysicalDevice;
-  deviceQueueCreateInfo.queueCount = 1;
-  static constexpr float fQueuePriority = 1.0f;
-  deviceQueueCreateInfo.pQueuePriorities = &fQueuePriority;
-  
+    
   deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  deviceCreateInfo.queueCreateInfoCount = 1;
-  deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
+  deviceCreateInfo.queueCreateInfoCount = (uint32_t)deviceQueueCreateInfos.size();
+  deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfos[0];
   deviceCreateInfo.pEnabledFeatures = &context._physicalDeviceFeatures;
 
   // add up required device extensions
@@ -1753,14 +1775,41 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
   
   VkResult creationResult = vkCreateDevice(appDesc._physicalDevices[appDesc._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
   assert(creationResult == VK_SUCCESS);
-  return creationResult == VK_SUCCESS;
-}
 
-bool Vulkan::createQueue(AppDescriptor & appDesc, Context & context)
-{
-    vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._graphicsQueue);
-    vkGetDeviceQueue(context._device, appDesc._chosenPhysicalDevice, 0, &context._presentQueue);
-    return true;
+  static unsigned int id = 0;
+  for (uint32_t familyIndex = 0; familyIndex < pQueueFamilyCount; familyIndex++)
+  {
+      VkQueueFamilyProperties& queueProperty = queueProperties[familyIndex];
+      for (unsigned int i = 0; i < queueProperty.queueCount; i++)
+      {
+          Vulkan::Context::Queue queue;
+          vkGetDeviceQueue(context._device, familyIndex, i, &queue._queue);
+
+          queue._flagBits = queueProperty.queueFlags;
+          queue._id = id++;
+          queue._familyIndex = familyIndex;
+          queue._queueIndex = i;
+          queue._minGranularity = queueProperty.minImageTransferGranularity;
+          // assign the queue to all the relevant buckets
+          for (unsigned int queueMask = 0; queueMask < 8; queueMask++)
+          {
+              if (queue._flagBits & queueMask == queueMask)
+                  context._queues[queueMask].push_back(queue);
+          }
+      }
+  }
+  context._numQueueFamilies = pQueueFamilyCount;
+
+  // sort all the queues, so that the one with the least supported goes first
+  for (unsigned int queueMask = 0; queueMask < 8; queueMask++)
+  {
+      std::sort(context._queues[queueMask].begin(), context._queues[queueMask].end(), [](const Context::Queue & a, const Context::Queue & b) { return a._flagBits < b._flagBits; });
+  }
+
+
+  return creationResult == VK_SUCCESS;
+
+
 }
 
 bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
@@ -2480,23 +2529,31 @@ bool Vulkan::createDescriptorSetLayout(Context & context, Vulkan::EffectDescript
 
 
 
-bool Vulkan::createCommandPool(AppDescriptor & appDesc, Context & context, VkCommandPool * result)
+bool Vulkan::createCommandPools(Context & context)
 {
-    VkCommandPoolCreateInfo createInfo;
-    memset(&createInfo, 0, sizeof(VkCommandPoolCreateInfo));
-    createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    createInfo.queueFamilyIndex = appDesc._chosenPhysicalDevice;
-    createInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    VkCommandPool commandPool;
-	const VkResult createCommandPoolResult = vkCreateCommandPool(context._device, &createInfo, nullptr, &commandPool);
-	assert(createCommandPoolResult == VK_SUCCESS);
-	if (createCommandPoolResult != VK_SUCCESS)
+    bool success = true;
+    context._commandPools.resize(context._numQueueFamilies);
+    for (unsigned int i = 0; i < context._numQueueFamilies; i++)
     {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create command pool\n"));
-        return false;
+        context._commandPools[i] = VK_NULL_HANDLE;
+
+        VkCommandPoolCreateInfo createInfo;
+        memset(&createInfo, 0, sizeof(VkCommandPoolCreateInfo));
+        createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        createInfo.queueFamilyIndex = i;
+        createInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        VkCommandPool commandPool;
+        const VkResult createCommandPoolResult = vkCreateCommandPool(context._device, &createInfo, nullptr, &commandPool);
+        assert(createCommandPoolResult == VK_SUCCESS);
+        if (createCommandPoolResult != VK_SUCCESS)
+        {
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create command pool for queueFamily= \n") + std::to_string(i));
+            success = false;
+            continue;
+        }
+        context._commandPools[i] = commandPool;
     }
-    *result = commandPool;
-    return true;
+    return success;
 }
 
 bool Vulkan::resetCommandBuffer(Context& context, VkCommandBuffer& commandBuffer, unsigned int index)
@@ -2750,7 +2807,9 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
         Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, bufferSize);
         VkDeviceSize amountToCopy = std::min<VkDeviceSize>(stagingBuffer->_registeredSize, amountLeftToCopy);
         stagingBuffer->copyFromAndFlush(context, 0, srcData, bufferSize, 0);
-        vertexBufferDescriptor->copyFromAndFlush(context, context._commandPool, context._graphicsQueue, stagingBuffer->getBuffer(0), bufferSize, 0, dstOffset);
+
+        Context::Queue& queue = getQueue(context, VK_QUEUE_TRANSFER_BIT);
+        vertexBufferDescriptor->copyFromAndFlush(context, context._commandPools[queue._familyIndex], queue._queue, stagingBuffer->getBuffer(0), bufferSize, 0, dstOffset);
 
         amountLeftToCopy -= amountToCopy;
         dstOffset += amountToCopy;
@@ -3142,12 +3201,6 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context, bool 
         return false;
     }
 
-    if (!createQueue(appDesc, context))
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create queue!\n"));
-        return false;
-    }
-
     if (!setupAllocator(appDesc, context))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to setup allocator!\n"));
@@ -3155,9 +3208,9 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context, bool 
     }
 
     // create standard command pool
-    if (!createCommandPool(appDesc, context, &context._commandPool))
+    if (!createCommandPools(context))
     {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create standard command pool\n"));
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create all the standard command pools\n"));
         return false;
     }
 
@@ -3318,9 +3371,9 @@ bool Vulkan::cleanupSwapChain(AppDescriptor & appDesc, Context & context)
 	return true;
 }
 
-bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulkan::EffectDescriptor& effect)
+bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, unsigned int queueFlagBits, Vulkan::EffectDescriptor& effect)
 {
-
+    effect._queueFlagBits = queueFlagBits;
     if (!createDescriptorSetLayout(context, effect))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create descriptor set layouts!\n"));
@@ -3339,8 +3392,8 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
         return false;
     }
 
-
-    if (!createCommandBuffers(context, context._commandPool, Vulkan::getNumInflightFrames(context), &effect._commandBuffers))
+    Vulkan::Context::Queue & queue = getQueue(context, queueFlagBits);
+    if (!createCommandBuffers(context, context._commandPools[queue._familyIndex], Vulkan::getNumInflightFrames(context), &effect._commandBuffers))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create command buffers\n"));
         return false;
@@ -3362,11 +3415,11 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Vulk
     return true;
 }
 
-bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect)
+bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, unsigned int queueFlagBits, ComputePipelineCustomizationCallback computePipelineCreationCallback, Vulkan::EffectDescriptor& effect)
 {
     effect._computePipelineCreationCallback = computePipelineCreationCallback;
 
-    if (!initEffectDescriptor(appDesc, context, effect))
+    if (!initEffectDescriptor(appDesc, context, queueFlagBits, effect))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create pipeline\n"));
         return false;
@@ -3383,7 +3436,8 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, Comp
 
 bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, 
     Context& context, 
-    const bool createPipeline, 
+    unsigned int queueFlagBits,
+    const bool createPipeline,
     GraphicsPipelineCustomizationCallback graphicsPipelineCreationCallback, 
     RenderPassCustomizationCallback renderPassCreationCallback,
     Vulkan::EffectDescriptor& effect)
@@ -3392,7 +3446,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc,
     effect._graphicsPipelineCreationCallback = graphicsPipelineCreationCallback;
     effect._renderPassCreationCallback = renderPassCreationCallback;
 
-    if (!initEffectDescriptor(appDesc, context, effect))
+    if (!initEffectDescriptor(appDesc, context, queueFlagBits, effect))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create pipeline\n"));
         return false;

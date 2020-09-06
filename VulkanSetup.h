@@ -602,8 +602,9 @@ namespace Vulkan
         Vulkan::Mesh& result);
     BufferDescriptorPtr createIndexOrVertexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferType type);
 
-
-    bool handleVulkanSetup(AppDescriptor& appDesc, Context& context, bool enableValidationLayers);
+    // setup has several stages
+    bool createInstance(AppDescriptor& appDesc, Context& context, bool enableValidationLayers);
+    bool handleVulkanSetup(AppDescriptor& appDesc, Context& context);
     bool recreateSwapChain(AppDescriptor& appDesc, Context& context);
     void updateUniforms(AppDescriptor& appDesc, Context& context, uint32_t currentImage);
 

@@ -3145,8 +3145,7 @@ bool Vulkan::setupAllocator(AppDescriptor& appDesc, Context& context)
     return true;
 }
 
-
-bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context, bool enableValidationLayers)
+bool Vulkan::createInstance(AppDescriptor& appDesc, Context& context, bool enableValidationLayers)
 {
     Vulkan::validationLayersEnabled = enableValidationLayers;
 
@@ -3154,23 +3153,29 @@ bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context, bool 
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to load vulkan library\n"));
         return false;
     }
-    
+
     if (!loadVulkanFunctions()) {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to load vulkan functions\n"));
         return false;
     }
-    
+
     if (!createInstanceAndLoadExtensions(appDesc, context)) {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create instance and load extensions\n"));
         return false;
     }
 
     volkLoadInstance(context._instance);
-    
+
     if (validationLayersEnabled && !setupDebugCallback(context))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to setup requested debug callback\n"));
     }
+
+    return true;
+}
+
+bool Vulkan::handleVulkanSetup(AppDescriptor & appDesc, Context & context)
+{
     
     if (!createVulkanSurface(appDesc._window, context)) {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vulkan surface\n"));

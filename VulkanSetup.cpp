@@ -584,13 +584,13 @@ Vulkan::AppDescriptor::AppDescriptor()
 {
 }
 
-void Vulkan::AppDescriptor::addRequiredInstanceExtensions(std::vector<std::string>& extensions)
+void Vulkan::AppDescriptor::addRequiredInstanceExtensions(const std::vector<std::string>& extensions)
 {
     for (const std::string& extension : extensions)
         addRequiredInstanceExtension(extension);
 }
 
-void Vulkan::AppDescriptor::addRequiredDeviceExtensions(std::vector<std::string>& extensions)
+void Vulkan::AppDescriptor::addRequiredDeviceExtensions(const std::vector<std::string>& extensions)
 {
     for (const std::string& extension : extensions)
         addRequiredDeviceExtension(extension);

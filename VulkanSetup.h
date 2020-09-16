@@ -207,8 +207,8 @@ namespace Vulkan
         int _drawableSurfaceWidth;
         int _drawableSurfaceHeight;
 
-        void addRequiredInstanceExtensions(std::vector<std::string>& extensions);
-        void addRequiredDeviceExtensions(std::vector<std::string>& extensions);
+        void addRequiredInstanceExtensions(const std::vector<std::string>& extensions);
+        void addRequiredDeviceExtensions(const std::vector<std::string>& extensions);
         void addRequiredInstanceExtension(const std::string& extension);
         void addRequiredDeviceExtension(const std::string& extension);
 

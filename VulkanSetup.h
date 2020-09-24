@@ -732,8 +732,8 @@ namespace Vulkan
     bool createSampler(Vulkan::Context& context, VkSampler& sampler, VkSamplerCreateInfo & samplerCreateInfo);
     bool createSampler(Vulkan::Context& context, VkSampler& sampler);
 
-    std::vector<VkFence> createFences(Context& context, unsigned int count, VkFenceCreateFlags flags);
-    bool createFence(Context& context, VkFenceCreateFlags flags, VkFence& result);
+    std::vector<VkFence> createFences(VkDevice device, unsigned int count, VkFenceCreateFlags flags);
+    VkFence createFence(VkDevice device, VkFenceCreateFlags flags);
 
     inline unsigned int getNumInflightFrames(Context& context) {
         return context._numInflightFrames == 0 ? (unsigned int)context._swapChainImages.size() : context._numInflightFrames;

@@ -80,6 +80,12 @@ namespace Vulkan
         {
             stagingBuffer = nullptr; // release memory
             stagingBuffer = Vulkan::createPersistentBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, "StagingBuffer", 1);
+            if (stagingBuffer == nullptr)
+            {
+                int k = 0;
+                k = 1;
+            }
+
         }
         return stagingBuffer;
     }
@@ -708,10 +714,14 @@ bool Vulkan::BufferDescriptor::copyFromAndFlush(Vulkan::Context& context, VkComm
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
     
-    const VkResult submitResult = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    VkFence fence = Vulkan::createFence(context._device, 0);
+    assert(fence != VK_NULL_HANDLE);
+
+    const VkResult submitResult = vkQueueSubmit(queue, 1, &submitInfo, fence);
 	assert(submitResult == VK_SUCCESS);
-	const VkResult waitResult = vkQueueWaitIdle(queue);
-	assert(waitResult == VK_SUCCESS);
+
+    const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
+    vkDestroyFence(context._device, fence, nullptr);
 
     vkFreeCommandBuffers(context._device, commandPool, 1, &commandBuffer);
     return true;
@@ -763,10 +773,17 @@ bool Vulkan::BufferDescriptor::copyToAndFlush(
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    const VkResult submitResult = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    VkFence fence = Vulkan::createFence(device, 0);
+    assert(fence != VK_NULL_HANDLE);
+
+    const VkResult submitResult = vkQueueSubmit(queue, 1, &submitInfo, fence);
     assert(submitResult == VK_SUCCESS);
-    const VkResult waitResult = vkQueueWaitIdle(queue);
-    assert(waitResult == VK_SUCCESS);
+
+    const VkResult waitForFencesResult = vkWaitForFences(device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
+    vkDestroyFence(device, fence, nullptr);
+
+//    const VkResult waitResult = vkQueueWaitIdle(queue);
+//    assert(waitResult == VK_SUCCESS);
 
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     return true;
@@ -1248,8 +1265,14 @@ bool Vulkan::transitionImageLayoutAndSubmit(Vulkan::Context & context, VkImage i
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    vkQueueSubmit(queue._queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue._queue);
+    VkFence fence = Vulkan::createFence(context._device, 0);
+    assert(fence != VK_NULL_HANDLE);
+
+    const VkResult submitResult = vkQueueSubmit(queue._queue, 1, &submitInfo, fence);
+    assert(submitResult == VK_SUCCESS);
+
+    const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
+    vkDestroyFence(context._device, fence, nullptr);
 
     vkFreeCommandBuffers(context._device, context._commandPools[queue._familyIndex], 1, &commandBuffers[0]);
 
@@ -2585,37 +2608,36 @@ bool Vulkan::resetCommandBuffers(Context & context, std::vector<VkCommandBuffer>
     return true;
 }
 
-bool Vulkan::createFence(Context & context, VkFenceCreateFlags flags, VkFence & result)
+VkFence Vulkan::createFence(VkDevice device, VkFenceCreateFlags flags)
 {
     VkFenceCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkFenceCreateInfo));
     createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     createInfo.flags = flags;
 
-    const VkResult createFenceResult = vkCreateFence(context._device, &createInfo, nullptr, &result);
+    VkFence result = VK_NULL_HANDLE;
+    const VkResult createFenceResult = vkCreateFence(device, &createInfo, nullptr, &result);
     assert(createFenceResult == VK_SUCCESS);
     if (createFenceResult != VK_SUCCESS)
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create fences\n"));
-        return false;
     }
-    return true;
+    return result;
 }
 
 // VK_FENCE_CREATE_SIGNALED_BIT context._frameBuffers.size()
-std::vector<VkFence> Vulkan::createFences(Context & context, unsigned int count, VkFenceCreateFlags flags)
+std::vector<VkFence> Vulkan::createFences(VkDevice device, unsigned int count, VkFenceCreateFlags flags)
 {
     std::vector<VkFence> fences;
     for(unsigned int i=0 ; i < count ; i++)
     {
-        VkFence result;
-        if (!createFence(context, flags, result))
+        VkFence result = createFence(device, flags);
+        if (result == VK_NULL_HANDLE)
         {
             g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create fence (") + std::to_string(i) + ")\n");
             return std::vector<VkFence>();
         }
         fences.push_back(result);
-
     }
     return fences;
     
@@ -2645,7 +2667,7 @@ bool Vulkan::createSemaphores(AppDescriptor & appDesc, Context & context)
 {
     context._imageAvailableSemaphores = createSemaphores(context);
     context._renderFinishedSemaphores = createSemaphores(context);
-    context._fences = createFences(context, (unsigned int)getNumInflightFrames(context), VK_FENCE_CREATE_SIGNALED_BIT);
+    context._fences = createFences(context._device, (unsigned int)getNumInflightFrames(context), VK_FENCE_CREATE_SIGNALED_BIT);
     
     return context._imageAvailableSemaphores.size() == context._renderFinishedSemaphores.size()
     && context._imageAvailableSemaphores.size() == context._fences.size()

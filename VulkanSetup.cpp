@@ -782,9 +782,6 @@ bool Vulkan::BufferDescriptor::copyToAndFlush(
     const VkResult waitForFencesResult = vkWaitForFences(device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
     vkDestroyFence(device, fence, nullptr);
 
-//    const VkResult waitResult = vkQueueWaitIdle(queue);
-//    assert(waitResult == VK_SUCCESS);
-
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     return true;
 }

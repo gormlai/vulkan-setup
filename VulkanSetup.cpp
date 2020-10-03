@@ -1795,6 +1795,11 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
   
   VkResult creationResult = vkCreateDevice(appDesc._physicalDevices[appDesc._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
   assert(creationResult == VK_SUCCESS);
+  if (creationResult != VK_SUCCESS)
+  {
+      g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vulkan device\n"));
+      return false;
+  }
 
   static unsigned int id = 0;
   for (uint32_t familyIndex = 0; familyIndex < pQueueFamilyCount; familyIndex++)

@@ -741,8 +741,8 @@ namespace Vulkan
 
     VkCommandBuffer createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool, bool beginCommandBuffer);
     bool createFrameBuffers(VkDevice device, VkExtent2D frameBufferSize, VkRenderPass& renderPass, std::vector<VkImageView>& colorViews, std::vector<VkImageView>& msaaViews, std::vector<VkImageView>& depthsViews, std::vector<VkFramebuffer>& result);
-    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExtent2D size, ImageDescriptor & image, VkImageView& imageView);
-    bool createDepthBuffers(AppDescriptor& appDesc, Context& context, VkExtent2D size, std::vector<ImageDescriptor>& images, std::vector<VkImageView>& imageViews);
+    bool createDepthBuffer(Context& context, uint32_t numSamples, VkExtent2D size, ImageDescriptor & image, VkImageView& imageView);
+    bool createDepthBuffers(Context& context, uint32_t numSamples, VkExtent2D size, std::vector<ImageDescriptor>& images, std::vector<VkImageView>& imageViews);
     bool createRenderPass(Context& Context, uint32_t numAASamples, VkRenderPass* result, RenderPassCustomizationCallback renderPassCreationCallback);
 
     void setLogger(Vulkan::Logger * logger);

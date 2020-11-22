@@ -38,8 +38,6 @@ namespace Vulkan
     bool createDevice(AppDescriptor& appDesc, Context& context);
     bool createSwapChain(AppDescriptor& appDesc, Context& context);
     bool createColorBuffers(Context& context);
-//    bool createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExtent2D size, VkImage& image, VkImageView& imageView, VkDeviceMemory& memory);
- //   bool createDepthBuffers(AppDescriptor& appDesc, Context& context, VkExtent2D size, std::vector<VkImage>& images, std::vector<VkImageView>& imageViews, std::vector<VkDeviceMemory>& memory);
     bool createDescriptorSetLayout(Context& Context, EffectDescriptor& effect);
     bool createPipelineCache(AppDescriptor& appDesc, Context& context);
     bool createCommandPools(Context& context);
@@ -1948,7 +1946,7 @@ bool Vulkan::createSwapChain(AppDescriptor & appDesc, Context & context)
     return true;
 }
 
-bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExtent2D size, Vulkan::ImageDescriptor & image, VkImageView& imageView)
+bool Vulkan::createDepthBuffer(Context& context, uint32_t numSamples, VkExtent2D size, Vulkan::ImageDescriptor & image, VkImageView& imageView)
 {
     constexpr VkImageTiling requiredTiling = VK_IMAGE_TILING_OPTIMAL;
     VkFormat depthFormat = findDepthFormat(context, requiredTiling);
@@ -1958,7 +1956,7 @@ bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExten
         size.height,
         1,
         1,
-        appDesc._actualNumSamples,
+        numSamples,
         depthFormat,
         requiredTiling,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -1980,14 +1978,14 @@ bool Vulkan::createDepthBuffer(AppDescriptor& appDesc, Context& context, VkExten
 }
 
 
-bool Vulkan::createDepthBuffers(AppDescriptor & appDesc, Context & context, VkExtent2D size, std::vector<Vulkan::ImageDescriptor> & images, std::vector<VkImageView> & imageViews)
+bool Vulkan::createDepthBuffers(Context & context, uint32_t numSamples, VkExtent2D size, std::vector<Vulkan::ImageDescriptor> & images, std::vector<VkImageView> & imageViews)
 {
     const unsigned int numBuffers = (unsigned int)context._swapChainImages.size();
 	imageViews.resize(numBuffers);
 	images.resize(numBuffers);
 	for (unsigned int i = 0; i < numBuffers; i++)
 	{
-        if (!createDepthBuffer(appDesc, context, size, images[i], imageViews[i]))
+        if (!createDepthBuffer(context, numSamples, size,  images[i], imageViews[i]))
             return false;
 	}
 
@@ -3278,7 +3276,7 @@ bool Vulkan::createSwapChainDependents(AppDescriptor & appDesc, Context & contex
 		return false;
 	}
 
-    if (!createDepthBuffers(appDesc, context, context._swapChainSize, context._depthImages, context._depthImageViews))
+    if (!createDepthBuffers(context, appDesc._actualNumSamples, context._swapChainSize, context._depthImages, context._depthImageViews))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create depth buffers\n"));
 		return false;

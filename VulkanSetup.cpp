@@ -892,25 +892,28 @@ namespace
 		const VkDebugUtilsMessengerCallbackDataEXT * callbackData,
 		void * userData)
 	{
-
-		switch (severity)
-		{
-		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-            g_logger->log(Vulkan::Logger::Level::Info, std::string(callbackData->pMessage));
-			break;
-		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-            g_logger->log(Vulkan::Logger::Level::Warn, std::string(callbackData->pMessage));
-			break;
-		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-            g_logger->log(Vulkan::Logger::Level::Verbose, std::string(callbackData->pMessage));
-			break;
-        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-            g_logger->log(Vulkan::Logger::Level::Debug, std::string(callbackData->pMessage));
-			break;
-		default:
-            g_logger->log(Vulkan::Logger::Level::Info, std::string(callbackData->pMessage));
-			break;
+        if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT || type == VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
+        {
+            switch (severity)
+            {
+            case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+                g_logger->log(Vulkan::Logger::Level::Info, std::string(callbackData->pMessage));
+                break;
+            case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+                g_logger->log(Vulkan::Logger::Level::Warn, std::string(callbackData->pMessage));
+                break;
+            case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+                g_logger->log(Vulkan::Logger::Level::Verbose, std::string(callbackData->pMessage));
+                break;
+            case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+                g_logger->log(Vulkan::Logger::Level::Debug, std::string(callbackData->pMessage));
+                break;
+            default:
+                g_logger->log(Vulkan::Logger::Level::Info, std::string(callbackData->pMessage));
+                break;
+            }
         }
+
 
         return VK_TRUE;
 	}
@@ -925,7 +928,26 @@ namespace
 		const char*                 pMessage,
 		void*                       pUserData) 
 	{
-        g_logger->log(Vulkan::Logger::Level::Debug, std::string("VulkanDebugReportCallback : ") + std::string(pLayerPrefix) + std::string("-") + std::string(pMessage));
+
+        switch (flags)
+        {
+        case VK_DEBUG_REPORT_INFORMATION_BIT_EXT:
+            g_logger->log(Vulkan::Logger::Level::Debug, std::string("VulkanDebugReportCallback[INFO]: ") + std::string(pLayerPrefix) + std::string("-") + std::string(pMessage));
+            break;
+        case VK_DEBUG_REPORT_WARNING_BIT_EXT:
+            g_logger->log(Vulkan::Logger::Level::Debug, std::string("VulkanDebugReportCallback[WARN]: ") + std::string(pLayerPrefix) + std::string("-") + std::string(pMessage));
+            break;
+        case VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT:
+            g_logger->log(Vulkan::Logger::Level::Debug, std::string("VulkanDebugReportCallback[PERFORMANCE]: ") + std::string(pLayerPrefix) + std::string("-") + std::string(pMessage));
+            break;
+        case VK_DEBUG_REPORT_ERROR_BIT_EXT:
+            g_logger->log(Vulkan::Logger::Level::Debug, std::string("VulkanDebugReportCallback[ERROR]: ") + std::string(pLayerPrefix) + std::string("-") + std::string(pMessage));
+            break;
+        case VK_DEBUG_REPORT_DEBUG_BIT_EXT:
+            g_logger->log(Vulkan::Logger::Level::Debug, std::string("VulkanDebugReportCallback[DEBUG]: ") + std::string(pLayerPrefix) + std::string("-") + std::string(pMessage));
+            break;
+        }
+
 		return VK_TRUE;
 	}
 }

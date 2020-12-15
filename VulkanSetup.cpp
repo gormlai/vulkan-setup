@@ -1450,20 +1450,25 @@ bool Vulkan::createInstanceAndLoadExtensions(Vulkan::AppDescriptor & appDesc, Vu
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to acquire possible extensions error\n"));
         return false;
     }
-    
-    if (validationLayersEnabled)
-    {
-        requiredInstanceExtensionCount++;
-#if defined(__ANDROID__)
-        requiredInstanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-#else
-        requiredInstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#endif
-    }
-    
+        
     for (const char* extension : requiredInstanceExtensions)
         appDesc.addRequiredInstanceExtension(extension);
 
+    for (const char* extensionName : instanceExtensionNames)
+    {
+        const char* wantedExtensions[] =
+        {
+            "VK_EXT_debug_report",
+            VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+            VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        };
+
+        for (const char* wantedExtension : wantedExtensions)
+        {
+            if (strcmp(extensionName, wantedExtension) == 0)
+                appDesc.addRequiredInstanceExtension(wantedExtension);
+        }
+    }
     
     // log all the required extensions
     std::vector<std::string> sRequiredInstanceExtensions = appDesc.getRequiredInstanceExtensions();
@@ -1505,8 +1510,11 @@ bool Vulkan::createInstanceAndLoadExtensions(Vulkan::AppDescriptor & appDesc, Vu
     memset(&instanceCreateInfo, 0, sizeof(instanceCreateInfo));
     
     requiredInstanceExtensions.clear();
-    for (const std::string& extension : sRequiredInstanceExtensions)
+    for (const std::string& extension : sRequiredInstanceExtensions) {
+        g_logger->log(Vulkan::Logger::Level::Verbose, "Loading Instance Extension: " + extension);
         requiredInstanceExtensions.push_back(extension.c_str());
+    }
+
 
     instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceCreateInfo.pApplicationInfo = &vkAppInfo;
@@ -1777,7 +1785,22 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
           appDesc.addRequiredDeviceExtension(extension);
   }
 
+  // validate that all the required extensions are there
   std::vector<std::string> sRequiredDeviceExtensions = appDesc.getRequiredDeviceExtensions();
+  for (unsigned int i=0 ; i < sRequiredDeviceExtensions.size() ; )
+  {
+      const std::string& requiredExtension = sRequiredDeviceExtensions[i];
+      if (!appDesc.hasExtension(requiredExtension))
+      {
+          auto it = std::find(sRequiredDeviceExtensions.begin(), sRequiredDeviceExtensions.end(), requiredExtension);
+          sRequiredDeviceExtensions.erase(it);
+          i = 0;
+      }
+      else
+          i++;
+  }
+
+
   std::vector<const char*> cRequiredDeviceExtensions;
   for (const std::string& requiredExtension : sRequiredDeviceExtensions)
       cRequiredDeviceExtensions.push_back(requiredExtension.c_str());

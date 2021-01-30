@@ -1562,7 +1562,7 @@ bool Vulkan::createInstanceAndLoadExtensions(Vulkan::AppDescriptor & appDesc, Vu
 //            "VK_LAYER_EOS_Overlay", 
 //            "VK_LAYER_LUNARG_api_dump",
 //            "VK_LAYER_LUNARG_device_simulation",
-            "VK_LAYER_KHRONOS_validation",
+//            "VK_LAYER_KHRONOS_validation",
 //            "VK_LAYER_LUNARG_monitor",
 //            "VK_LAYER_LUNARG_screenshot",
 //            "VK_LAYER_LUNARG_vktrace" ,

@@ -1562,7 +1562,7 @@ bool Vulkan::createInstanceAndLoadExtensions(Vulkan::AppDescriptor & appDesc, Vu
 //            "VK_LAYER_EOS_Overlay", 
 //            "VK_LAYER_LUNARG_api_dump",
 //            "VK_LAYER_LUNARG_device_simulation",
-//            "VK_LAYER_KHRONOS_validation",
+            "VK_LAYER_KHRONOS_validation",
 //            "VK_LAYER_LUNARG_monitor",
 //            "VK_LAYER_LUNARG_screenshot",
 //            "VK_LAYER_LUNARG_vktrace" ,
@@ -2090,7 +2090,7 @@ bool Vulkan::createRenderPass(Context & Context, uint32_t numAASamples, VkRender
     VkAttachmentReference& colorAttachmentReferenceResolve = renderPassInfoDescriptor._colorAttachmentReferenceResolve;
     memset(&colorAttachmentReferenceResolve, 0, sizeof(colorAttachmentReference));
     colorAttachmentReferenceResolve.attachment = 2;
-    colorAttachmentReferenceResolve.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    colorAttachmentReferenceResolve.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkSubpassDescription& subpassDescription = renderPassInfoDescriptor._subpassDescription;
     memset(&subpassDescription, 0, sizeof(subpassDescription));
@@ -3477,7 +3477,7 @@ bool Vulkan::initEffectDescriptor(AppDescriptor& appDesc, Context& context, unsi
         if (!createShaderModulesSuccess)
         {
             g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create shader modules\n"));
-            return 1;
+            return false;
         }
     }
 

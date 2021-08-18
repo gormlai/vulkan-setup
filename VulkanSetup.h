@@ -2,15 +2,17 @@
 #define _VULKAN_SETUP_H_
 
 #include <volk/volk.h>
+#include "vk_mem_alloc.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
 #include <string>
 #include <vector>
-#include <algorithm>
 #include <array>
 #include <functional>
 #include <memory>
+#include <algorithm>
 #include <string.h>
+#include <math.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -18,7 +20,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
 #include <glm/gtx/rotate_vector.hpp>
-#include "vk_mem_alloc.h"
 
 /*
  LICENSE - this file is public domain
@@ -671,8 +672,8 @@ namespace Vulkan
     bool allocateAndBindImageMemory(Vulkan::Context& context, VkImage& image, VkDeviceMemory& memory, VkMemoryPropertyFlags memoryProperties);
 
     inline unsigned int maxMipMapLevels(unsigned int width) { return static_cast<unsigned int>(floor(log2(width))) + 1; }
-    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height) { return static_cast<unsigned int>(floor(log2(std::max(width, height)))) + 1; }
-    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height, unsigned int depth) { return static_cast<unsigned int>(floor(log2(std::max(width, std::max(height, depth))))) + 1; }
+    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height) { return static_cast<unsigned int>(floor(log2(std::max<unsigned int>(width, height)))) + 1; }
+    inline unsigned int maxMipMapLevels(unsigned int width, unsigned int height, unsigned int depth) { return static_cast<unsigned int>(floor(log2(std::max<unsigned int>(width, std::max<unsigned int>(height, depth))))) + 1; }
 
     bool createImage(Vulkan::Context& context,
         unsigned int width,

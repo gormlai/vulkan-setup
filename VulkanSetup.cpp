@@ -3216,14 +3216,8 @@ bool Vulkan::createInstance(AppDescriptor& appDesc, Context& context, bool enabl
 {
     Vulkan::validationLayersEnabled = enableValidationLayers;
 
-    if (!loadVulkanLibrary()) {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to load vulkan library\n"));
-        return false;
-    }
-
-    if (!loadVulkanFunctions()) {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to load vulkan functions\n"));
-        return false;
+    if (volkInitialize() != VK_SUCCESS) {
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Volk failed to initialize the Vulkan library\n"));
     }
 
     if (!createInstanceAndLoadExtensions(appDesc, context)) {

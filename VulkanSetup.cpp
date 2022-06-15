@@ -3201,6 +3201,7 @@ bool Vulkan::createInstance(AppDescriptor& appDesc, Context& context, bool enabl
 
     if (volkInitialize() != VK_SUCCESS) {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Volk failed to initialize the Vulkan library\n"));
+        return false;
     }
 
     if (!createInstanceAndLoadExtensions(appDesc, context)) {

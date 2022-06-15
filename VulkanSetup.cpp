@@ -28,8 +28,6 @@ namespace Vulkan
 
     bool setupDebugCallback(Context& context);
     void areValidationLayersAvailable(const std::vector<const char*>& validationLayers, std::vector<const char*> & output);
-    bool loadVulkanLibrary();
-    bool loadVulkanFunctions();
     bool createInstanceAndLoadExtensions(AppDescriptor& appDesc, Context& context);
     bool createVulkanSurface(SDL_Window* window, Context& context);
     bool enumeratePhysicalDevices(AppDescriptor& appDesc, Context& context);
@@ -1414,21 +1412,6 @@ void Vulkan::areValidationLayersAvailable(const std::vector<const char*> & valid
             }
         }
     }
-}
-
-bool Vulkan::loadVulkanLibrary() {
-    // load vulkan library (probably SDL already did it)
-    if (SDL_Vulkan_LoadLibrary(NULL) != 0) {
-        // TODO - add error message
-        return false;
-    }
-    return true;
-}
-
-bool Vulkan::loadVulkanFunctions() {
-    // vulkan library should already have been loaded by SDL at this point, so we don't need to do it again
-    void * procAddr = SDL_Vulkan_GetVkGetInstanceProcAddr();
-    return procAddr != nullptr;
 }
 
 bool Vulkan::createInstanceAndLoadExtensions(Vulkan::AppDescriptor & appDesc, Vulkan::Context & context)

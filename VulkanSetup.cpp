@@ -1016,6 +1016,11 @@ bool Vulkan::createImage(Vulkan::Context & context,
     if (result != VK_SUCCESS)
         return false;
 
+    assert(image != nullptr);
+    if (image == nullptr) {
+        int k = 0;
+        k = 1;
+    }
     resultImage._image = image;
     resultImage._memory = allocation;
 
@@ -1818,6 +1823,12 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
 
   deviceCreateInfo.ppEnabledExtensionNames = &cRequiredDeviceExtensions[0];
   deviceCreateInfo.enabledExtensionCount = (uint32_t)cRequiredDeviceExtensions.size();
+
+  VkPhysicalDeviceVulkan11Features neededFeatures = { 0 };
+  neededFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+  neededFeatures.shaderDrawParameters = 1;
+  deviceCreateInfo.pNext = &neededFeatures;
+
   
   VkResult creationResult = vkCreateDevice(appDesc._physicalDevices[appDesc._chosenPhysicalDevice], &deviceCreateInfo, nullptr /* no allocation callbacks at this time */, &context._device);
   assert(creationResult == VK_SUCCESS);
@@ -2719,7 +2730,7 @@ void Vulkan::destroySemaphores(Context& context)
 
 }
 
-bool Vulkan::createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferView& result)
+bool Vulkan::createBufferView(Context& context, VkBuffer buffer, VkFormat requiredFormat, VkDeviceSize size, VkDeviceSize offset, VkBufferViewCreateFlags flags, VkBufferView& result)
 {
     VkBufferViewCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
@@ -2728,6 +2739,7 @@ bool Vulkan::createBufferView(Context& context, VkBuffer buffer, VkFormat requir
     createInfo.format = requiredFormat;
     createInfo.offset = offset;
     createInfo.range = size;
+    createInfo.flags = flags;
     VkResult success = vkCreateBufferView(context._device, &createInfo, NULL, &result);
     assert(success == VK_SUCCESS);
     if (success != VK_SUCCESS)

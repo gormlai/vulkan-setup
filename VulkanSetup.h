@@ -119,7 +119,8 @@ namespace Vulkan
             VkPipelineLayoutCreateInfo& pipelineLayoutCreateInfo,
             VkPipelineDynamicStateCreateInfo& dynamicStateCreateInfo,
             std::vector<VkVertexInputBindingDescription>& vertexInputBindingDescriptions,
-            std::vector<VkVertexInputAttributeDescription>& vertexInputAttributeDescriptions)
+            std::vector<VkVertexInputAttributeDescription>& vertexInputAttributeDescriptions,
+            VkPushConstantRange& pushConstantRange)
             :  _createInfo(createInfo)
             , _pipelineShaderStage(pipelineShaderStage)
             , _vertexInputInfo(vertexInputInfo)
@@ -136,6 +137,7 @@ namespace Vulkan
             , _dynamicStateCreateInfo(dynamicStateCreateInfo)
             , _vertexInputBindingDescriptions(vertexInputBindingDescriptions)
             , _vertexInputAttributeDescriptions(vertexInputAttributeDescriptions)
+            , _pushConstantRange(pushConstantRange)
         {}
 
         VkGraphicsPipelineCreateInfo& _createInfo;
@@ -161,6 +163,9 @@ namespace Vulkan
         // setting up vertex arrays
         std::vector<VkVertexInputBindingDescription> & _vertexInputBindingDescriptions;
         std::vector<VkVertexInputAttributeDescription> & _vertexInputAttributeDescriptions;
+
+        // 
+        VkPushConstantRange& _pushConstantRange;
 
     };
 

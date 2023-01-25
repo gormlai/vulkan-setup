@@ -2468,6 +2468,8 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     memset(&pipelineLayoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateInfo));
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
+    VkPushConstantRange pushConstantRange = {0};
+
 
     std::vector<VkDescriptorSetLayout> layouts;
     effect.collectDescriptorSetLayouts(layouts);
@@ -2475,16 +2477,8 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
 //    pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)effect._descriptorSetLayouts.size();
     pipelineLayoutCreateInfo.pSetLayouts = &layouts[0];
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-    pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+    pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
 
-    VkResult createPipelineLayoutResult = vkCreatePipelineLayout(context._device, &pipelineLayoutCreateInfo, nullptr, &effect._pipelineLayout);
-    assert(createPipelineLayoutResult == VK_SUCCESS);
-    if (createPipelineLayoutResult != VK_SUCCESS)
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create graphics pipeline layout\n"));
-        return false;
-    }
-    createInfo.layout = effect._pipelineLayout;
     createInfo.renderPass = effect._renderPass;
     createInfo.subpass = 0;
     createInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -2526,7 +2520,8 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
         pipelineLayoutCreateInfo,
         dynamicStateCreateInfo,
         vertexInputBindingDescription,
-        vertexInputAttributeDescription
+        vertexInputAttributeDescription,
+        pushConstantRange
     );
     graphicsPipelineCreationCallback(graphicsPipelineCreateInfoDescriptor);
 
@@ -2535,6 +2530,16 @@ bool Vulkan::createGraphicsPipeline(AppDescriptor & appDesc, Context & context, 
     vertexInputInfo.pVertexBindingDescriptions = &vertexInputBindingDescription[0];
     vertexInputInfo.vertexAttributeDescriptionCount = (uint32_t)vertexInputAttributeDescription.size();
     vertexInputInfo.pVertexAttributeDescriptions = &vertexInputAttributeDescription[0];
+
+    VkResult createPipelineLayoutResult = vkCreatePipelineLayout(context._device, &pipelineLayoutCreateInfo, nullptr, &effect._pipelineLayout);
+    assert(createPipelineLayoutResult == VK_SUCCESS);
+    if (createPipelineLayoutResult != VK_SUCCESS)
+    {
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create graphics pipeline layout\n"));
+        return false;
+    }
+
+    createInfo.layout = effect._pipelineLayout;
 
     const VkResult createGraphicsPipelineResult = vkCreateGraphicsPipelines(context._device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &effect._pipeline);
     assert(createGraphicsPipelineResult == VK_SUCCESS);

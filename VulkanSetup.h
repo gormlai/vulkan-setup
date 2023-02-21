@@ -605,8 +605,12 @@ namespace Vulkan
         std::vector<unsigned char>& vertexData, 
         std::vector<unsigned char>& indexData, 
         void* userData, 
+        bool alwaysReallocate,
         Vulkan::Mesh& result);
-    BufferDescriptorPtr createIndexOrVertexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferType type);
+
+    BufferDescriptorPtr createIndexOrVertexBuffer(Context& context, VkDeviceSize bufferSize, BufferType type);
+    BufferDescriptorPtr createIndexOrVertexBufferAndCopyData(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferType type);
+    void copyDataToIndexOrVertexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferDescriptorPtr dstBuffer);
 
     // setup has several stages
     bool createInstance(AppDescriptor& appDesc, Context& context, bool enableValidationLayers);

@@ -43,7 +43,6 @@ namespace Vulkan
     std::vector<VkSemaphore> createSemaphores(Context& context);
     bool createSemaphores(AppDescriptor& appDesc, Context& context);
     void destroySemaphores(Context& context);
-    bool createIndexAndVertexBuffer(AppDescriptor& appDesc, Context& context, std::vector<unsigned char>& vertexData, std::vector<unsigned char>& indexData, void* userData, Vulkan::Mesh& result);
     bool createDescriptorPool(Context& context, EffectDescriptor& effect);
     bool createDescriptorSet(AppDescriptor& appDesc, Context& context, EffectDescriptor& effect);
 
@@ -2856,17 +2855,15 @@ bool Vulkan::createBuffer(Context & context, VkDeviceSize size, VkBufferUsageFla
     return true;
 }
 
-
-
-Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context, const void * srcData, VkDeviceSize bufferSize, BufferType type)
-{    
-    Vulkan::BufferDescriptorPtr vertexBufferDescriptor = createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | ((type == BufferType::Vertex) ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    if(vertexBufferDescriptor==nullptr)
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vertex buffer of size ") + std::to_string((int)bufferSize) + " bytes\n");
-        return Vulkan::BufferDescriptorPtr();
+Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBufferAndCopyData(Context& context, const void* srcData, VkDeviceSize bufferSize, BufferType type) {
+    Vulkan::BufferDescriptorPtr dstBuffer = createIndexOrVertexBuffer(context, bufferSize, type);
+    if (dstBuffer != nullptr) {
+        copyDataToIndexOrVertexBuffer(context, srcData, bufferSize, dstBuffer);
     }
-    
+    return dstBuffer;
+}
+
+void Vulkan::copyDataToIndexOrVertexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, Vulkan::BufferDescriptorPtr dstBuffer) {
     VkDeviceSize amountLeftToCopy = bufferSize;
     VkDeviceSize dstOffset = 0;
     while (amountLeftToCopy > 0)
@@ -2876,55 +2873,31 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context,
         stagingBuffer->copyFromAndFlush(context, 0, srcData, bufferSize, 0);
 
         Context::Queue& queue = getQueue(context, VK_QUEUE_TRANSFER_BIT);
-        vertexBufferDescriptor->copyFromAndFlush(context, context._commandPools[queue._familyIndex], queue._queue, stagingBuffer->getBuffer(0), bufferSize, 0, dstOffset);
+        dstBuffer->copyFromAndFlush(context, context._commandPools[queue._familyIndex], queue._queue, stagingBuffer->getBuffer(0), bufferSize, 0, dstOffset);
 
         amountLeftToCopy -= amountToCopy;
         dstOffset += amountToCopy;
     }
 
-    
+}
+
+
+Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBuffer(Context & context, VkDeviceSize bufferSize, BufferType type)
+{    
+    Vulkan::BufferDescriptorPtr vertexBufferDescriptor = createBuffer(context, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | ((type == BufferType::Vertex) ? VK_BUFFER_USAGE_VERTEX_BUFFER_BIT : VK_BUFFER_USAGE_INDEX_BUFFER_BIT), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if(vertexBufferDescriptor==nullptr)
+    {
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vertex buffer of size ") + std::to_string((int)bufferSize) + " bytes\n");
+        return Vulkan::BufferDescriptorPtr();
+    }
+
     return vertexBufferDescriptor;
+
+
+    
     
 }
 
-bool Vulkan::createIndexAndVertexBuffer(AppDescriptor & appDesc, Context & context, std::vector<unsigned char> & vertexData, std::vector<unsigned char> & indexData, void * userData, Vulkan::Mesh & result)
-{
-    BufferDescriptorPtr indexBuffer;
-    BufferDescriptorPtr vertexBuffer;
-
-    if(!indexData.empty())
-    {
-        // index buffer
-        const void * data = indexData.data();
-        const VkDeviceSize bufferSize =  indexData.size();
-        indexBuffer = createIndexOrVertexBuffer(context, data, bufferSize, BufferType::Index);
-        if (indexBuffer == nullptr)
-            return false;
-    }
-
-    if(!vertexData.empty())
-    {
-        // vertex buffer
-        const void * data = vertexData.data();
-        const VkDeviceSize bufferSize = vertexData.size();
-        vertexBuffer = createIndexOrVertexBuffer(context, data, bufferSize, BufferType::Vertex);
-        if (vertexBuffer==nullptr)
-            return false;
-    }
-
-    result.setIndexBuffer(indexBuffer);
-    result.setVertexBuffer(vertexBuffer);
-
-    if(!indexData.empty()) // this is an indexed mesh
-        result._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
-    else
-        result._numIndices = 0; // this mesh probably doesn't have any indices - but we have no way of knowing the number of vertices from here
-
-    result._userData = userData;
-    
-    return true;
-
-}
 
 bool Vulkan::createUniformBuffer(AppDescriptor & appDesc, Context & context, VkDeviceSize bufferSize, BufferDescriptor & result)
 {
@@ -3132,18 +3105,57 @@ bool Vulkan::initializeIndexAndVertexBuffers(AppDescriptor & appDesc,
     std::vector<unsigned char> & vertexData, 
     std::vector<unsigned char> & indexData, 
     void * userData, 
+    bool alwaysReallocate,
     Vulkan::Mesh & result)
 {
-    Vulkan::Mesh mesh;
-	if (!createIndexAndVertexBuffer(appDesc, context, vertexData, indexData, userData, mesh))
-	{
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create index and vertex buffer\n"));
-		return false;
-	}
+    if (!indexData.empty())
+    {
+        BufferDescriptorPtr indexBuffer = std::dynamic_pointer_cast<BufferDescriptor>(result.getIndexBuffer());
+        if (alwaysReallocate || indexBuffer == nullptr || indexBuffer->_size < indexData.size()) {
+            indexBuffer = createIndexOrVertexBuffer(context, indexData.size(), BufferType::Index);
+            result.setIndexBuffer(indexBuffer);
+        }
 
+        if (indexBuffer == nullptr) {
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create index buffer\n"));
+            return false;
+        }
 
-    result = mesh;
+        // index buffer
+        const void* data = indexData.data();
+        const VkDeviceSize bufferSize = indexData.size();
+
+        copyDataToIndexOrVertexBuffer(context, data, bufferSize, indexBuffer);
+    }
+
+    if (!vertexData.empty()) {
+        BufferDescriptorPtr vertexBuffer = std::dynamic_pointer_cast<BufferDescriptor>(result.getVertexBuffer());
+        if (alwaysReallocate || vertexBuffer == nullptr || vertexBuffer->_size < vertexData.size()) {
+            vertexBuffer = createIndexOrVertexBuffer(context, vertexData.size(), BufferType::Vertex);
+            result.setVertexBuffer(vertexBuffer);
+        }
+
+        if (vertexBuffer == nullptr) {
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create vertex buffer\n"));
+            return false;
+        }
+
+        // index buffer
+        const void* data = vertexData.data();
+        const VkDeviceSize bufferSize = vertexData.size();
+
+        copyDataToIndexOrVertexBuffer(context, data, bufferSize, vertexBuffer);
+    }
+
+    if (!indexData.empty()) // this is an indexed mesh
+        result._numIndices = (unsigned int)indexData.size() / sizeof(uint16_t);
+    else
+        result._numIndices = 0; // this mesh probably doesn't have any indices - but we have no way of knowing the number of vertices from here
+
+    result._userData = userData;
+
     return true;
+
 }
 
 namespace

@@ -1152,7 +1152,7 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = image;
-    barrier.subresourceRange.aspectMask = (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+    barrier.subresourceRange.aspectMask = (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL || oldLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         ? VK_IMAGE_ASPECT_DEPTH_BIT
         : VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.baseMipLevel = 0;
@@ -1187,71 +1187,30 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
     VkPipelineStageFlags sourceStage = 0;
     VkPipelineStageFlags destinationStage = 0;
 
-    switch (oldLayout)
-    {
-    case VK_IMAGE_LAYOUT_UNDEFINED:
-    {
-        switch (newLayout)
-        {
-        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-            srcAccessMask = 0;
-            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            break;
-        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-            srcAccessMask = 0;
-            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            break;
-        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-            srcAccessMask = 0;
-            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            break;
-        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-            srcAccessMask = 0;
-            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            break;
-        default:
-            return false;
-        }
-    }
-    break;
-    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-    {
-        switch (newLayout)
-        {
-        case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-            srcAccessMask = 0;
-            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            break;
-        case VK_IMAGE_LAYOUT_GENERAL:
-            srcAccessMask = 0;
-            dstAccessMask = 0;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            break;
-        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-            srcAccessMask = 0;
-            dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            break;
-        default:
-            return false;
-        }
-    }
-    break;
-    default:
+    struct LayoutMapping {
+        VkAccessFlags accessMask = 0;
+        VkPipelineStageFlags stage = 0;
+    };
+
+    static const std::map<VkImageLayout, LayoutMapping> dstMappings = {
+        {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT }},
+        {VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, {VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT }},
+        {VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, {VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT }},
+        {VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, {VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT }},
+        {VK_IMAGE_LAYOUT_GENERAL, {0, VK_PIPELINE_STAGE_TRANSFER_BIT }},
+        {VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, {VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT }},
+    };
+
+    srcAccessMask = 0;
+    sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    const auto it = dstMappings.find(newLayout);
+    if (it == dstMappings.end()) {
+        assert(0);
         return false;
     }
+
+    dstAccessMask = it->second.accessMask;
+    destinationStage = it->second.stage;
 
     return transitionImageLayout(context, image, oldLayout, newLayout, srcAccessMask, dstAccessMask, sourceStage, destinationStage, commandBuffer);
 }
@@ -1997,7 +1956,7 @@ bool Vulkan::createDepthBuffer(Context& context, uint32_t numSamples, VkExtent2D
         numSamples,
         depthFormat,
         requiredTiling,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         image))
         return false;

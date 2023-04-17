@@ -67,19 +67,18 @@ bool Vulkan::validationLayersEnabled = false;
 
 namespace Vulkan
 {
+    constexpr unsigned int MAX_STAGING_BUFFER_SIZE = 2048 * 2048 * 4;
+
     Vulkan::PersistentBufferPtr getStagingBuffer(Vulkan::Context& context, uint32_t size)
     {
         size = std::min(size, stagingBufferSize); // make sure the staging buffer has a minimum size
         static Vulkan::PersistentBufferPtr stagingBuffer;
-        if (stagingBuffer == nullptr || stagingBuffer->_registeredSize < size)
+        if (stagingBuffer == nullptr || (stagingBuffer->_registeredSize < size && stagingBuffer->_registeredSize <= MAX_STAGING_BUFFER_SIZE))
         {
             stagingBuffer = nullptr; // release memory
-            stagingBuffer = Vulkan::createPersistentBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, "StagingBuffer", 1);
-            if (stagingBuffer == nullptr)
-            {
-                int k = 0;
-                k = 1;
-            }
+            unsigned int newSize = std::min<unsigned int>(size, MAX_STAGING_BUFFER_SIZE);
+            stagingBuffer = Vulkan::createPersistentBuffer(context, newSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, "StagingBuffer", 1);
+            assert(stagingBuffer != nullptr);
 
         }
         return stagingBuffer;
@@ -815,7 +814,9 @@ bool Vulkan::PersistentBuffer::copyFromAndFlush(Vulkan::Context& context, unsign
     assert(successfullyCopied);
     const bool successfullyFlushed = flushData(context, frameIndex);
     assert(successfullyFlushed);
-    return successfullyCopied && successfullyFlushed;
+    const bool result = successfullyCopied && successfullyFlushed;
+    assert(result);
+    return result;
 }
 
 
@@ -2825,17 +2826,19 @@ Vulkan::BufferDescriptorPtr Vulkan::createIndexOrVertexBufferAndCopyData(Context
 void Vulkan::copyDataToIndexOrVertexBuffer(Context& context, const void* srcData, VkDeviceSize bufferSize, Vulkan::BufferDescriptorPtr dstBuffer) {
     VkDeviceSize amountLeftToCopy = bufferSize;
     VkDeviceSize dstOffset = 0;
+    const char* srcDataP = (const char*)(srcData);
     while (amountLeftToCopy > 0)
     {
         Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, bufferSize);
         VkDeviceSize amountToCopy = std::min<VkDeviceSize>(stagingBuffer->_registeredSize, amountLeftToCopy);
-        stagingBuffer->copyFromAndFlush(context, 0, srcData, bufferSize, 0);
+        stagingBuffer->copyFromAndFlush(context, 0, (const void *)srcDataP, amountToCopy, 0);
 
         Context::Queue& queue = getQueue(context, VK_QUEUE_TRANSFER_BIT);
-        dstBuffer->copyFromAndFlush(context, context._commandPools[queue._familyIndex], queue._queue, stagingBuffer->getBuffer(0), bufferSize, 0, dstOffset);
+        dstBuffer->copyFromAndFlush(context, context._commandPools[queue._familyIndex], queue._queue, stagingBuffer->getBuffer(0), amountToCopy, 0, dstOffset);
 
         amountLeftToCopy -= amountToCopy;
         dstOffset += amountToCopy;
+        srcDataP += amountToCopy;
     }
 
 }

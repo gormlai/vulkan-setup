@@ -69,7 +69,7 @@ namespace Vulkan
 {
     constexpr unsigned int MAX_STAGING_BUFFER_SIZE = 2048 * 2048 * 4;
 
-    Vulkan::PersistentBufferPtr getStagingBuffer(Vulkan::Context& context, uint32_t size)
+    Vulkan::PersistentBufferPtr getPersistentStagingBuffer(Vulkan::Context& context, uint32_t size)
     {
         size = std::min(size, stagingBufferSize); // make sure the staging buffer has a minimum size
         static Vulkan::PersistentBufferPtr stagingBuffer;
@@ -77,7 +77,7 @@ namespace Vulkan
         {
             stagingBuffer = nullptr; // release memory
             unsigned int newSize = std::min<unsigned int>(size, MAX_STAGING_BUFFER_SIZE);
-            stagingBuffer = Vulkan::createPersistentBuffer(context, newSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, "StagingBuffer", 1);
+            stagingBuffer = Vulkan::createPersistentBuffer(context, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, "StagingBuffer", 1);
             assert(stagingBuffer != nullptr);
 
         }
@@ -103,6 +103,24 @@ namespace Vulkan
 
 namespace
 {
+    bool createCommandBuffer(Vulkan::Context& context, VkCommandPool commandPool,  VkCommandBuffer * result)
+    {
+        VkCommandBufferAllocateInfo commandBufferAllocateInfo;
+        memset(&commandBufferAllocateInfo, 0, sizeof(VkCommandBufferAllocateInfo));
+        commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        commandBufferAllocateInfo.commandPool = commandPool;
+        commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        commandBufferAllocateInfo.commandBufferCount = 1;
+        const VkResult allocateCommandBuffersResult = vkAllocateCommandBuffers(context._device, &commandBufferAllocateInfo, result);
+        assert(allocateCommandBuffersResult == VK_SUCCESS);
+        if (allocateCommandBuffersResult != VK_SUCCESS)
+        {
+            g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create VkCommandbufferAllocateInfo\n"));
+            return false;
+        }
+
+        return true;
+    }
 
     bool createCommandBuffers(Vulkan::Context& context, VkCommandPool commandPool, unsigned int numBuffers, std::vector<VkCommandBuffer>* result)
     {
@@ -652,14 +670,16 @@ bool Vulkan::BufferDescriptor::copyFrom(Vulkan::Context & context, VkCommandPool
     }
     else
     {
-        // use a staging buffer to copy data
+//         use a staging buffer to copy data
         int64_t amountOfDataLeftToCopy = (int64_t)amount;
         int64_t currentDstOffset = (int64_t)dstOffset;
         int64_t srcOffset = 0;
         while (amountOfDataLeftToCopy > 0)
         {
-            Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, amount);
-            int64_t amountToCopy = std::min(amountOfDataLeftToCopy, (int64_t)stagingBuffer->_registeredSize);
+            // TODO - make this copy async, by creating a temporary buffer and then copy across, store a little struct with
+            // the temp staing buffer, the commadnbuffer and fence. Then each frame, check for completed buffers.
+            Vulkan::PersistentBufferPtr stagingBuffer = Vulkan::getPersistentStagingBuffer(context, amount);
+            const int64_t amountToCopy = std::min(amountOfDataLeftToCopy, (int64_t)stagingBuffer->_registeredSize);
 
             const char* cData = reinterpret_cast<const char*>(srcData)  + srcOffset;
             stagingBuffer->copyFromAndFlush(context, 0, cData, amountToCopy, 0);
@@ -1027,36 +1047,10 @@ bool Vulkan::createImage(Vulkan::Context & context,
     return true;
 }
 
-bool Vulkan::createImage(Vulkan::Context& context, 
-    const void* pixels, 
-    const unsigned int pixelSize, 
-    const unsigned int width, 
-    const unsigned int height, 
-    const unsigned int depth, 
-    const unsigned int samplesPrPixels,
-    VkFormat format,
-    Vulkan::ImageDescriptor & result, 
-    unsigned int mipMapLevels,
-    VkImageLayout finalLayout)
+bool Vulkan::updataImageData(Vulkan::Context& context, Vulkan::ImageDescriptor& result, const void* pixels, unsigned int mipMapLevels, const unsigned int& pixelSize, const unsigned int& width, const unsigned int& height, const unsigned int& depth, VkImageLayout finalLayout)
 {
-    if (!Vulkan::createImage(context,
-        width,
-        height,
-        depth,
-        mipMapLevels,
-        samplesPrPixels,
-        format,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        result))
-    {
-        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to create image\n"));
-        return false;
-    }
-
     if (!Vulkan::transitionImageLayoutAndSubmit(context, result._image,
-        VK_IMAGE_LAYOUT_UNDEFINED,
+        finalLayout,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL))
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - transitionImageLayout : VK_IMAGE_LAYOUT_UNDEFINED -> VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL\n"));
@@ -1067,7 +1061,7 @@ bool Vulkan::createImage(Vulkan::Context& context,
     {
         assert(mipMapLevels > 0);
         VkDeviceSize size = pixelSize * width * height * depth;
-        Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, size);
+        Vulkan::PersistentBufferPtr stagingBuffer = getPersistentStagingBuffer(context, size);
         Context::Queue& queue = getQueue(context, VK_QUEUE_TRANSFER_BIT, { 8,8,1 });
         for (int32_t depthLevel = 0; depthLevel < (int32_t)depth; depthLevel = depthLevel + queue._minGranularity.depth)
         {
@@ -1102,6 +1096,50 @@ bool Vulkan::createImage(Vulkan::Context& context,
     {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - transitionImageLayout : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> VK_IMAGE_LAYOUT_GENERAL\n"));
         return false;
+    }
+    return true;
+}
+
+bool Vulkan::createImage(Vulkan::Context& context,
+    const void* pixels, 
+    const unsigned int pixelSize, 
+    const unsigned int width, 
+    const unsigned int height, 
+    const unsigned int depth, 
+    const unsigned int samplesPrPixels,
+    VkFormat format,
+    Vulkan::ImageDescriptor & result, 
+    unsigned int mipMapLevels,
+    VkImageLayout finalLayout)
+{
+    if (!Vulkan::createImage(context,
+        width,
+        height,
+        depth,
+        mipMapLevels,
+        samplesPrPixels,
+        format,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        result))
+    {
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - Failed to create image\n"));
+        return false;
+    }
+
+    if (!Vulkan::transitionImageLayoutAndSubmit(context,
+        result._image,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        finalLayout))
+    {
+        g_logger->log(Vulkan::Logger::Level::Error, std::string("createImage - transitionImageLayout : VK_IMAGE_LAYOUT_UNDEFINED -> VK_IMAGE_LAYOUT_GENERAL\n"));
+        return false;
+    }
+
+    if (pixels != nullptr) {
+        const bool imageUpdateSucceeded = updataImageData(context, result, pixels, mipMapLevels, pixelSize, width, height, depth, finalLayout);
+        return imageUpdateSucceeded;
     }
 
     return true;
@@ -1218,12 +1256,11 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
 
 bool Vulkan::transitionImageLayoutAndSubmit(Vulkan::Context & context, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
-    std::vector<VkCommandBuffer> commandBuffers;
+    VkCommandBuffer commandBuffer;
     Context::Queue& queue = getQueue(context, VK_QUEUE_TRANSFER_BIT);
-    if (!createCommandBuffers(context, context._commandPools[queue._familyIndex], 1, &commandBuffers))
+    if (!::createCommandBuffer(context, context._commandPools[queue._familyIndex], &commandBuffer))
         return false;
 
-    VkCommandBuffer & commandBuffer = commandBuffers[0];
     VkCommandBufferBeginInfo beginInfo;
     memset(&beginInfo, 0, sizeof(beginInfo));
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1250,12 +1287,29 @@ bool Vulkan::transitionImageLayoutAndSubmit(Vulkan::Context & context, VkImage i
     const VkResult submitResult = vkQueueSubmit(queue._queue, 1, &submitInfo, fence);
     assert(submitResult == VK_SUCCESS);
 
-    const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
-    vkDestroyFence(context._device, fence, nullptr);
-
-    vkFreeCommandBuffers(context._device, context._commandPools[queue._familyIndex], 1, &commandBuffers[0]);
+    FenceCommandBufferPair pair{ fence, commandBuffer, context._commandPools[queue._familyIndex] };
+    context._fenceCommandBufferPairs.push_back(pair);
 
     return true;
+}
+
+void Vulkan::checkForFinishedPairCommandBufferBuffers(Context& context) {
+    while (!context._fenceCommandBufferPairs.empty()) {
+        for (int i = 0; i < context._fenceCommandBufferPairs.size(); ) {
+            FenceCommandBufferPair& pair = context._fenceCommandBufferPairs[i];
+            const VkResult waitForFencesResult = vkWaitForFences(context._device, 1, &pair._fence, VK_TRUE, 0);
+            if (waitForFencesResult == VK_SUCCESS) {
+                vkDestroyFence(context._device, pair._fence, nullptr);
+                vkFreeCommandBuffers(context._device, pair._pool, 1, &pair._buffer);
+                context._fenceCommandBufferPairs[i] = context._fenceCommandBufferPairs[context._fenceCommandBufferPairs.size() - 1];
+                context._fenceCommandBufferPairs.pop_back();
+            }
+            else {
+                i++;
+            }
+        }
+    }
+
 }
 
 
@@ -2829,7 +2883,7 @@ void Vulkan::copyDataToIndexOrVertexBuffer(Context& context, const void* srcData
     const char* srcDataP = (const char*)(srcData);
     while (amountLeftToCopy > 0)
     {
-        Vulkan::PersistentBufferPtr stagingBuffer = getStagingBuffer(context, bufferSize);
+        Vulkan::PersistentBufferPtr stagingBuffer = getPersistentStagingBuffer(context, bufferSize);
         VkDeviceSize amountToCopy = std::min<VkDeviceSize>(stagingBuffer->_registeredSize, amountLeftToCopy);
         stagingBuffer->copyFromAndFlush(context, 0, (const void *)srcDataP, amountToCopy, 0);
 
@@ -3158,16 +3212,19 @@ namespace
 
 bool Vulkan::setupAllocator(AppDescriptor& appDesc, Context& context)
 {
+    VmaVulkanFunctions vulkanFunctions = {};
+    vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+    vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
     static VmaAllocatorCreateInfo allocatorInfo = {};
-    static VkDeviceSize heapSizeLimit = 3 * 1024 * 1024 * 1024;
     allocatorInfo.physicalDevice = context._physicalDevice;
     allocatorInfo.device = context._device;
     allocatorInfo.instance = context._instance;
-    allocatorInfo.preferredLargeHeapBlockSize = 32 * 1024 * 1024;
+    allocatorInfo.preferredLargeHeapBlockSize = 0;
     allocatorInfo.flags = 0;
     allocatorInfo.vulkanApiVersion = 0;
-//    allocatorInfo.pHeapSizeLimit = &heapSizeLimit;
-//    allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_1;
+    allocatorInfo.pVulkanFunctions = &vulkanFunctions;
+    allocatorInfo.vulkanApiVersion = appDesc._requiredVulkanVersion;
 
     // this is for debug info only
     if (validationLayersEnabled)

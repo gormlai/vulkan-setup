@@ -529,6 +529,14 @@ namespace Vulkan
     };
     typedef std::shared_ptr<EffectDescriptor> EffectDescriptorPtr;
 
+    struct FenceCommandBufferPair
+    {
+        VkFence _fence;
+        VkCommandBuffer _buffer;
+        VkCommandPool _pool;
+
+    };
+
     struct Context
     {
         VkInstance _instance;
@@ -582,6 +590,8 @@ namespace Vulkan
         std::vector<VkSemaphore> _imageAvailableSemaphores;
         std::vector<VkFence> _fences;
         
+        std::vector<FenceCommandBufferPair> _fenceCommandBufferPairs;
+
         VkPipelineCache _pipelineCache;
         VkRenderPass _renderPass;
 
@@ -697,7 +707,9 @@ namespace Vulkan
         Vulkan::ImageDescriptor& resultImage);
 
 
-    bool createImage(Vulkan::Context& context, 
+    bool updataImageData(Vulkan::Context& context, Vulkan::ImageDescriptor& result, const void* pixels, unsigned int mipMapLevels, const unsigned int& pixelSize, const unsigned int& width, const unsigned int& height, const unsigned int& depth, VkImageLayout finalLayout);
+
+    bool createImage(Vulkan::Context& context,
         const void* pixels, 
         const unsigned int pixelSize, 
         const unsigned int width, 
@@ -744,6 +756,7 @@ namespace Vulkan
 
     std::vector<VkFence> createFences(VkDevice device, unsigned int count, VkFenceCreateFlags flags);
     VkFence createFence(VkDevice device, VkFenceCreateFlags flags);
+    void checkForFinishedPairCommandBufferBuffers(Context& context);
 
     inline unsigned int getNumInflightFrames(Context& context) {
         return context._numInflightFrames == 0 ? (unsigned int)context._swapChainImages.size() : context._numInflightFrames;
@@ -759,6 +772,8 @@ namespace Vulkan
     
     uint32_t maxAASamples(Context& context);
     uint32_t requestNumAASamples(Context& context, uint32_t count);
+    Vulkan::PersistentBufferPtr getPersistentStagingBuffer(Vulkan::Context& context, uint32_t size);
+
 
 }
 

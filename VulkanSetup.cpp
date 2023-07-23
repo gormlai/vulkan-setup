@@ -1837,7 +1837,7 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
   deviceCreateInfo.ppEnabledExtensionNames = &cRequiredDeviceExtensions[0];
   deviceCreateInfo.enabledExtensionCount = (uint32_t)cRequiredDeviceExtensions.size();
 
-  VkPhysicalDeviceVulkan11Features neededFeatures = { 0 };
+  VkPhysicalDeviceVulkan11Features neededFeatures = { };
   neededFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
   neededFeatures.shaderDrawParameters = 1;
   deviceCreateInfo.pNext = &neededFeatures;

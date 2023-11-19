@@ -1868,7 +1868,7 @@ bool Vulkan::createDevice(AppDescriptor & appDesc, Context & context)
           // assign the queue to all the relevant buckets
           for (unsigned int queueMask = 0; queueMask < 8; queueMask++)
           {
-              if (queue._flagBits & queueMask == queueMask)
+              if ((queue._flagBits & queueMask) == queueMask)
                   context._queues[queueMask].push_back(queue);
           }
       }

@@ -1426,7 +1426,7 @@ void Vulkan::areValidationLayersAvailable(const std::vector<const char*> & valid
             }
             if (!found)
             {
-                g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not find needed validation layer ") + neededLayer + "\n");
+                 g_logger->log(Vulkan::Logger::Level::Error, std::string("Could not find needed validation layer ") + neededLayer + "\n");
             }
         }
     }
@@ -1548,7 +1548,9 @@ bool Vulkan::createInstanceAndLoadExtensions(Vulkan::AppDescriptor & appDesc, Vu
     if (validationLayersEnabled)
     {
         static const std::vector<const char*> validationLayers = {
+#if defined(_FUGL_APPLE_)
            "MoltenVK",
+#endif
 //           "VK_LAYER_NV_optimus",
 //           "VK_LAYER_RENDERDOC_Capture",
 //           "GalaxyOverlayVkLayer",
@@ -1567,7 +1569,7 @@ bool Vulkan::createInstanceAndLoadExtensions(Vulkan::AppDescriptor & appDesc, Vu
 //            "VK_LAYER_LUNARG_monitor",
 //            "VK_LAYER_LUNARG_screenshot",
 //            "VK_LAYER_LUNARG_vktrace" ,
-            "VK_LAYER_LUNARG_standard_validation",
+//            "VK_LAYER_LUNARG_standard_validation",
 //            "VK_LAYER_AMD_switchable_graphics",
         };
         areValidationLayersAvailable(validationLayers, output);

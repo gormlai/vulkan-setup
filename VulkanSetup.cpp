@@ -1229,6 +1229,15 @@ bool Vulkan::transitionImageLayout(Vulkan::Context& context,
     struct LayoutMapping {
         VkAccessFlags accessMask = 0;
         VkPipelineStageFlags stage = 0;
+
+        LayoutMapping() {} 
+        LayoutMapping(const LayoutMapping & src) 
+        :accessMask(src.accessMask)
+        ,stage(src.stage) { }
+
+        LayoutMapping(VkAccessFlags aMask, VkPipelineStageFlags st) 
+            :accessMask(aMask)
+            ,stage(st) {}
     };
 
     static const std::map<VkImageLayout, LayoutMapping> dstMappings = {

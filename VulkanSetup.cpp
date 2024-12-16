@@ -472,6 +472,7 @@ bool Vulkan::EffectDescriptor::bindTexelBuffer(Vulkan::Context& context, Vulkan:
     {
         UniformAggregate& aggregate = uniform->_frames[frame];
         aggregate._bufferView = bufferView;
+        assert(bufferView != nullptr);
 
         VkDescriptorBufferInfo texelBufferInfo = {};
         texelBufferInfo.buffer = buffer;

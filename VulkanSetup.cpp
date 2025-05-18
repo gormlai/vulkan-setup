@@ -1655,7 +1655,7 @@ namespace
 bool Vulkan::enumeratePhysicalDevices(Vulkan::AppDescriptor & appDesc, Vulkan::Context & context)
 {
     uint32_t deviceCount = 0;
-    // first count the number of physical devices by passing in NULL as the last argument
+    // first count the number of physical posibleDevices by passing in NULL as the last argument
     VkResult countResult = vkEnumeratePhysicalDevices(context._instance, &deviceCount, NULL);
 	assert(countResult == VK_SUCCESS);
 	if (countResult != VK_SUCCESS) {
@@ -1668,8 +1668,9 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppDescriptor & appDesc, Vulkan::C
         return false;
     }
     
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    VkResult enumerateResult = vkEnumeratePhysicalDevices(context._instance, &deviceCount, &devices[0]);
+    std::vector<VkPhysicalDevice> posibleDevices(deviceCount);
+    std::vector<VkPhysicalDevice> devices;
+    VkResult enumerateResult = vkEnumeratePhysicalDevices(context._instance, &deviceCount, &posibleDevices[0]);
 	assert(enumerateResult == VK_SUCCESS);
 	if (enumerateResult != VK_SUCCESS) {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("vkEnumeratePhysicalDevices returned error code ") + std::to_string(countResult) + "\n");
@@ -1678,20 +1679,18 @@ bool Vulkan::enumeratePhysicalDevices(Vulkan::AppDescriptor & appDesc, Vulkan::C
     
     unsigned int deviceIndex = 0;
     for (; deviceIndex < deviceCount; deviceIndex++) {
-        VkPhysicalDevice device = devices[deviceIndex];
-        vkGetPhysicalDeviceProperties(device, &context._deviceProperties);
+        VkPhysicalDevice device = posibleDevices[deviceIndex];
+        VkPhysicalDeviceProperties deviceProperties = {0};
+        vkGetPhysicalDeviceProperties(device, &deviceProperties);
         
-        if (context._deviceProperties.apiVersion < appDesc._requiredVulkanVersion)
+        if (deviceProperties.apiVersion < appDesc._requiredVulkanVersion) {
             continue;
-        
-        break;
+        }
+
+        devices.push_back(device);
     }
-    
-    if (deviceIndex == deviceCount)
-        return false;
-    
+        
     appDesc._physicalDevices = devices;
-    logPhysicalDeviceProperties(context._deviceProperties);
     return true;
 }
 
@@ -1706,6 +1705,7 @@ bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, Context & Context) {
     {
         VkPhysicalDeviceProperties physicalProperties;
         vkGetPhysicalDeviceProperties(appDesc._physicalDevices[i], &physicalProperties);
+
         if (!foundDevice)
         {
             currentPhysicalDevice = i;
@@ -1723,6 +1723,7 @@ bool Vulkan::choosePhysicalDevice(AppDescriptor &appDesc, Context & Context) {
         return false;
     
     appDesc._chosenPhysicalDevice = currentPhysicalDevice;
+    Context._deviceProperties = currentPhysicalProperties;
     Context._physicalDevice = appDesc._physicalDevices[currentPhysicalDevice];
     std::string chosenPhysicalDeviceName(currentPhysicalProperties.deviceName);
     g_logger->log(Vulkan::Logger::Level::Info, std::string("Chosen Vulkan Physical Device = ") + chosenPhysicalDeviceName + ". Driver version = " + std::to_string(currentPhysicalProperties.driverVersion) + "\n");
@@ -3264,7 +3265,7 @@ bool Vulkan::createInstance(AppDescriptor& appDesc, Context& context, bool enabl
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Volk failed to initialize the Vulkan library\n"));
         return false;
     }
-
+ 
     if (!createInstanceAndLoadExtensions(appDesc, context)) {
         g_logger->log(Vulkan::Logger::Level::Error, std::string("Failed to create instance and load extensions\n"));
         return false;
